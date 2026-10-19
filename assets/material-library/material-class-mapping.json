@@ -1,0 +1,399 @@
+{
+  "scope": "Used by index-1m.html. Runtime recipes, weights and scales are in runtime/manifest.json. ID 20 uses the bedrock fallback; water is rendered independently.",
+  "classes": [
+    {
+      "class_id": 1,
+      "source_name": "Tuff breccia",
+      "texture_candidates": [
+        "rock_boulder_cracked"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Fractured-rock proxy, not a verified breccia scan; clast and matrix structure is not reproduced.",
+      "weights": [
+        1.0
+      ],
+      "scale_m": 18,
+      "name": "Tuff breccia"
+    },
+    {
+      "class_id": 2,
+      "source_name": "Sand and gravel",
+      "texture_candidates": [
+        "sandy_gravel"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Fine sand/gravel approximation; coarse clasts are underrepresented.",
+      "weights": [
+        1.0
+      ],
+      "scale_m": 8,
+      "name": "Sand and gravel"
+    },
+    {
+      "class_id": 3,
+      "source_name": "Tuff",
+      "texture_candidates": [
+        "rock_05"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Pitted-rock proxy, not a verified tuff scan.",
+      "weights": [
+        1.0
+      ],
+      "scale_m": 12,
+      "name": "Tuff"
+    },
+    {
+      "class_id": 4,
+      "source_name": "Sandy gravelly clay-like material",
+      "texture_candidates": [
+        "brown_mud_rocks_01",
+        "gravelly_sand"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Soil-dominant mixture with sand/gravel; weights describe appearance, not measured composition.",
+      "weights": [
+        0.72,
+        0.28
+      ],
+      "scale_m": 8,
+      "name": "Sandy gravelly clay-like material"
+    },
+    {
+      "class_id": 5,
+      "source_name": "Sand",
+      "texture_candidates": [
+        "coast_sand_01"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Sand-surface appearance; water uses a separate material.",
+      "weights": [
+        1.0
+      ],
+      "scale_m": 8,
+      "name": "Sand"
+    },
+    {
+      "class_id": 6,
+      "source_name": "Weathered mudstone",
+      "texture_candidates": [
+        "rock_face_03"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Broken-rock surface used as a weathered-mudstone approximation.",
+      "weights": [
+        1.0
+      ],
+      "scale_m": 16,
+      "name": "Weathered mudstone"
+    },
+    {
+      "class_id": 7,
+      "source_name": "Gravelly clay",
+      "texture_candidates": [
+        "brown_mud_rocks_01"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Stony-soil appearance; organic fragments in the source texture are not evidence of buried material.",
+      "weights": [
+        1.0
+      ],
+      "scale_m": 8,
+      "name": "Gravelly clay"
+    },
+    {
+      "class_id": 8,
+      "source_name": "Mudstone",
+      "texture_candidates": [
+        "rock_01"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Smooth fine-grained rock proxy, not a verified mudstone scan.",
+      "weights": [
+        1.0
+      ],
+      "scale_m": 12,
+      "name": "Mudstone"
+    },
+    {
+      "class_id": 9,
+      "source_name": "Silt",
+      "texture_candidates": [
+        "dense_sand",
+        "brown_mud_dry"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Fine-grained approximation from sand/soil sources, not a measured silt texture.",
+      "weights": [
+        0.8,
+        0.2
+      ],
+      "scale_m": 8,
+      "name": "Silt"
+    },
+    {
+      "class_id": 10,
+      "source_name": "Bedrock (unclassified)",
+      "texture_candidates": [
+        "rock_boulder_dry"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Generic bedrock appearance.",
+      "weights": [
+        1.0
+      ],
+      "scale_m": 18,
+      "name": "Bedrock (unclassified)"
+    },
+    {
+      "class_id": 11,
+      "source_name": "Marine siliceous mudstone",
+      "texture_candidates": [
+        "dry_riverbed_rock"
+      ],
+      "status": "runtime_illustrative",
+      "note": "A lithological category, not seawater; represented by a finely striated rock surface.",
+      "weights": [
+        1.0
+      ],
+      "scale_m": 16,
+      "name": "Marine siliceous mudstone"
+    },
+    {
+      "class_id": 12,
+      "source_name": "Rhyolite-dacite and volcaniclastic rock",
+      "texture_candidates": [
+        "rock_08"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Rough light-colored rock proxy; constituent subtypes are not distinguished.",
+      "weights": [
+        1.0
+      ],
+      "scale_m": 18,
+      "name": "Rhyolite-dacite and volcaniclastic rock"
+    },
+    {
+      "class_id": 13,
+      "source_name": "Sandstone-mudstone assemblage",
+      "texture_candidates": [
+        "rock_06"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Banded-rock proxy; texture bands are not evidence of measured stratigraphy.",
+      "weights": [
+        1.0
+      ],
+      "scale_m": 24,
+      "name": "Sandstone-mudstone assemblage"
+    },
+    {
+      "class_id": 14,
+      "source_name": "Andesite and volcaniclastic rock",
+      "texture_candidates": [
+        "dark_rock"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Dark blocky-rock proxy, not a verified andesite scan.",
+      "weights": [
+        1.0
+      ],
+      "scale_m": 18,
+      "name": "Andesite and volcaniclastic rock"
+    },
+    {
+      "class_id": 15,
+      "source_name": "Clay-bearing sand",
+      "texture_candidates": [
+        "gravelly_sand",
+        "brown_mud_03"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Sand-dominant mixture with mud; weights describe appearance, not measured composition.",
+      "weights": [
+        0.8,
+        0.2
+      ],
+      "scale_m": 8,
+      "name": "Clay-bearing sand"
+    },
+    {
+      "class_id": 16,
+      "source_name": "Tuffaceous clay",
+      "texture_candidates": [
+        "brown_mud_dry",
+        "rock_05"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Dry soil with a subtle rocky component; mineralogical structure is not reproduced.",
+      "weights": [
+        0.8,
+        0.2
+      ],
+      "scale_m": 8,
+      "name": "Tuffaceous clay"
+    },
+    {
+      "class_id": 17,
+      "source_name": "Dioritic rock",
+      "texture_candidates": [
+        "rock_surface"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Granular-rock proxy without a verified crystalline-grain texture.",
+      "weights": [
+        1.0
+      ],
+      "scale_m": 12,
+      "name": "Dioritic rock"
+    },
+    {
+      "class_id": 18,
+      "source_name": "Tuffaceous sandstone",
+      "texture_candidates": [
+        "rock_2"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Coarse sandy-rock proxy, not a verified tuffaceous-sandstone scan.",
+      "weights": [
+        1.0
+      ],
+      "scale_m": 12,
+      "name": "Tuffaceous sandstone"
+    },
+    {
+      "class_id": 19,
+      "source_name": "Carbonaceous shale",
+      "texture_candidates": [
+        "dark_rock_02"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Dark flaky layered-rock proxy, not a verified shale scan.",
+      "weights": [
+        1.0
+      ],
+      "scale_m": 18,
+      "name": "Carbonaceous shale"
+    },
+    {
+      "class_id": 21,
+      "source_name": "Topsoil",
+      "texture_candidates": [
+        "brown_mud"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Topsoil appearance with organic fragments.",
+      "weights": [
+        1.0
+      ],
+      "scale_m": 8,
+      "name": "Topsoil"
+    },
+    {
+      "class_id": 22,
+      "source_name": "Cohesive soil",
+      "texture_candidates": [
+        "brown_mud_03"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Moist cloddy-soil appearance; other moisture states are not represented.",
+      "weights": [
+        1.0
+      ],
+      "scale_m": 8,
+      "name": "Cohesive soil"
+    },
+    {
+      "class_id": 23,
+      "source_name": "Siliceous siltstone",
+      "texture_candidates": [
+        "dry_riverbed_rock",
+        "rock_01"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Composite appearance without a dedicated siliceous-siltstone texture.",
+      "weights": [
+        0.65,
+        0.35
+      ],
+      "scale_m": 14,
+      "name": "Siliceous siltstone"
+    },
+    {
+      "class_id": 24,
+      "source_name": "Diatomaceous siltstone",
+      "texture_candidates": [
+        "rock_01",
+        "rock_05"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Composite appearance that does not reproduce diatomaceous microstructure.",
+      "weights": [
+        0.7,
+        0.3
+      ],
+      "scale_m": 12,
+      "name": "Diatomaceous siltstone"
+    },
+    {
+      "class_id": 25,
+      "source_name": "Calcareous siltstone",
+      "texture_candidates": [
+        "rock_01",
+        "sandstone_cracks"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Composite appearance; a texture cannot establish calcareous cementation.",
+      "weights": [
+        0.7,
+        0.3
+      ],
+      "scale_m": 12,
+      "name": "Calcareous siltstone"
+    },
+    {
+      "class_id": 26,
+      "source_name": "Mixed surficial deposits",
+      "texture_candidates": [
+        "gravelly_sand"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Mixed sandy surface-deposit appearance.",
+      "weights": [
+        1.0
+      ],
+      "scale_m": 8,
+      "name": "Mixed surficial deposits"
+    },
+    {
+      "class_id": 27,
+      "source_name": "Conglomerate with sandstone",
+      "texture_candidates": [
+        "rock_boulder_cracked",
+        "sandy_gravel"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Visual approximation combining fractured rock and sand/gravel, not a scan of cemented conglomerate.",
+      "weights": [
+        0.65,
+        0.35
+      ],
+      "scale_m": 16,
+      "name": "Conglomerate with sandstone"
+    },
+    {
+      "class_id": 28,
+      "source_name": "Sandstone",
+      "texture_candidates": [
+        "sandstone_cracks"
+      ],
+      "status": "runtime_illustrative",
+      "note": "Sandy fractured-rock appearance.",
+      "weights": [
+        1.0
+      ],
+      "scale_m": 12,
+      "name": "Sandstone"
+    }
+  ]
+}

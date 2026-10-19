@@ -1,0 +1,48 @@
+{
+  "repository": "clydelhj/COMP5411",
+  "release": "assets-20261019",
+  "assets": [
+    {
+      "name": "noto-runtime-20261019.zip",
+      "group": "runtime",
+      "url": "https://github.com/clydelhj/COMP5411/releases/download/assets-20261019/noto-runtime-20261019.zip",
+      "sha256": "96beaaad200573e7cf57c409d4f679ba380d9534f1a5221b7bd6d99940c59850",
+      "bytes": 1519571987
+    },
+    {
+      "name": "noto-source-dem-20261019.zip",
+      "group": "sources",
+      "url": "https://github.com/clydelhj/COMP5411/releases/download/assets-20261019/noto-source-dem-20261019.zip",
+      "sha256": "f1a9da44b5b40f04939d54c8bfee6e02e972ee18371636da632e3a265eeef2c7",
+      "bytes": 1420082100
+    },
+    {
+      "name": "noto-source-materials-20261019.zip",
+      "group": "sources",
+      "url": "https://github.com/clydelhj/COMP5411/releases/download/assets-20261019/noto-source-materials-20261019.zip",
+      "sha256": "f15b4662762dcba8c7c82978b88ce23a8960894cca634c0711ef2f8fed46d7c8",
+      "bytes": 1731083657
+    },
+    {
+      "name": "noto-source-vegetation-20261019.zip",
+      "group": "sources",
+      "url": "https://github.com/clydelhj/COMP5411/releases/download/assets-20261019/noto-source-vegetation-20261019.zip",
+      "sha256": "ffab076addca10cb7bf401ffb48ef2464bc2326b629d9a42a3923fa0dc993f1a",
+      "bytes": 330314599
+    },
+    {
+      "name": "noto-source-gis-20261019.zip",
+      "group": "sources",
+      "url": "https://github.com/clydelhj/COMP5411/releases/download/assets-20261019/noto-source-gis-20261019.zip",
+      "sha256": "527031f5ba9f88dfa0697cc3367ced4f335da7198c91b8d597a27e99355d094b",
+      "bytes": 24946765
+    },
+    {
+      "name": "noto-source-geology-20261019.zip",
+      "group": "sources",
+      "url": "https://github.com/clydelhj/COMP5411/releases/download/assets-20261019/noto-source-geology-20261019.zip",
+      "sha256": "b41ee9a53b3a844476024f5ea6bcf831d75a4ac99dbbc7f5fff0b2acc09f1950",
+      "bytes": 5566472
+    }
+  ]
+}

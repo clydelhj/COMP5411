@@ -1,0 +1,1316 @@
+[
+  {
+    "id": "rock_boulder_dry",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_boulder_dry/rock_boulder_dry_diff_4k.jpg",
+    "size": 14349759,
+    "md5": "7a678cbefc5d377b11fa9784e5493bde",
+    "path": "assets/material-library/rock/rock_boulder_dry/rock_boulder_dry_diff_4k.jpg",
+    "relative": "rock/rock_boulder_dry/rock_boulder_dry_diff_4k.jpg"
+  },
+  {
+    "id": "rock_boulder_dry",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_boulder_dry/rock_boulder_dry_nor_gl_4k.jpg",
+    "size": 13596569,
+    "md5": "535242d10d5fdc139157c8d4165cef37",
+    "path": "assets/material-library/rock/rock_boulder_dry/rock_boulder_dry_nor_gl_4k.jpg",
+    "relative": "rock/rock_boulder_dry/rock_boulder_dry_nor_gl_4k.jpg"
+  },
+  {
+    "id": "rock_boulder_dry",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_boulder_dry/rock_boulder_dry_rough_4k.jpg",
+    "size": 11371523,
+    "md5": "000fcb86c9ce366103512c359414831a",
+    "path": "assets/material-library/rock/rock_boulder_dry/rock_boulder_dry_rough_4k.jpg",
+    "relative": "rock/rock_boulder_dry/rock_boulder_dry_rough_4k.jpg"
+  },
+  {
+    "id": "rock_boulder_dry",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_boulder_dry/rock_boulder_dry_ao_4k.jpg",
+    "size": 9026317,
+    "md5": "3944ecb9e05cca34e3eea7332a44778e",
+    "path": "assets/material-library/rock/rock_boulder_dry/rock_boulder_dry_ao_4k.jpg",
+    "relative": "rock/rock_boulder_dry/rock_boulder_dry_ao_4k.jpg"
+  },
+  {
+    "id": "rock_boulder_dry",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_boulder_dry/rock_boulder_dry_disp_4k.jpg",
+    "size": 2567374,
+    "md5": "1ff8279fd4742f5e0082bc68d5968761",
+    "path": "assets/material-library/rock/rock_boulder_dry/rock_boulder_dry_disp_4k.jpg",
+    "relative": "rock/rock_boulder_dry/rock_boulder_dry_disp_4k.jpg"
+  },
+  {
+    "id": "sandstone_cracks",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/sandstone_cracks/sandstone_cracks_diff_4k.jpg",
+    "size": 10806433,
+    "md5": "d4b60a31c9bb15e9d1b20dc8028b9b80",
+    "path": "assets/material-library/rock/sandstone_cracks/sandstone_cracks_diff_4k.jpg",
+    "relative": "rock/sandstone_cracks/sandstone_cracks_diff_4k.jpg"
+  },
+  {
+    "id": "sandstone_cracks",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/sandstone_cracks/sandstone_cracks_nor_gl_4k.jpg",
+    "size": 12983586,
+    "md5": "1f23869cfa91ec99508f004de82d0b84",
+    "path": "assets/material-library/rock/sandstone_cracks/sandstone_cracks_nor_gl_4k.jpg",
+    "relative": "rock/sandstone_cracks/sandstone_cracks_nor_gl_4k.jpg"
+  },
+  {
+    "id": "sandstone_cracks",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/sandstone_cracks/sandstone_cracks_rough_4k.jpg",
+    "size": 5924840,
+    "md5": "fca0a560113189fd194335b587dd5009",
+    "path": "assets/material-library/rock/sandstone_cracks/sandstone_cracks_rough_4k.jpg",
+    "relative": "rock/sandstone_cracks/sandstone_cracks_rough_4k.jpg"
+  },
+  {
+    "id": "sandstone_cracks",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/sandstone_cracks/sandstone_cracks_ao_4k.jpg",
+    "size": 9041665,
+    "md5": "fe124f7a4b65e701c547d360dec1b936",
+    "path": "assets/material-library/rock/sandstone_cracks/sandstone_cracks_ao_4k.jpg",
+    "relative": "rock/sandstone_cracks/sandstone_cracks_ao_4k.jpg"
+  },
+  {
+    "id": "sandstone_cracks",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/sandstone_cracks/sandstone_cracks_disp_4k.jpg",
+    "size": 1771188,
+    "md5": "1477bf926ba21be4512ecd5d3e2af5ff",
+    "path": "assets/material-library/rock/sandstone_cracks/sandstone_cracks_disp_4k.jpg",
+    "relative": "rock/sandstone_cracks/sandstone_cracks_disp_4k.jpg"
+  },
+  {
+    "id": "dark_rock",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/dark_rock/dark_rock_diff_4k.jpg",
+    "size": 8451552,
+    "md5": "92481acfc1f83a046bbc1dde3a1be575",
+    "path": "assets/material-library/rock/dark_rock/dark_rock_diff_4k.jpg",
+    "relative": "rock/dark_rock/dark_rock_diff_4k.jpg"
+  },
+  {
+    "id": "dark_rock",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/dark_rock/dark_rock_nor_gl_4k.jpg",
+    "size": 13884395,
+    "md5": "fd3e1f7b79dd3f295c6365386a6fc2a7",
+    "path": "assets/material-library/rock/dark_rock/dark_rock_nor_gl_4k.jpg",
+    "relative": "rock/dark_rock/dark_rock_nor_gl_4k.jpg"
+  },
+  {
+    "id": "dark_rock",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/dark_rock/dark_rock_rough_4k.jpg",
+    "size": 8913954,
+    "md5": "8ee22ef42152692c33e4ea508a4f0c99",
+    "path": "assets/material-library/rock/dark_rock/dark_rock_rough_4k.jpg",
+    "relative": "rock/dark_rock/dark_rock_rough_4k.jpg"
+  },
+  {
+    "id": "dark_rock",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/dark_rock/dark_rock_ao_4k.jpg",
+    "size": 8528710,
+    "md5": "ba0823494c824ec6d0b223606eacb439",
+    "path": "assets/material-library/rock/dark_rock/dark_rock_ao_4k.jpg",
+    "relative": "rock/dark_rock/dark_rock_ao_4k.jpg"
+  },
+  {
+    "id": "dark_rock",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/dark_rock/dark_rock_disp_4k.jpg",
+    "size": 1966822,
+    "md5": "741a8ff4170d50107cf0fd4700c8d2cf",
+    "path": "assets/material-library/rock/dark_rock/dark_rock_disp_4k.jpg",
+    "relative": "rock/dark_rock/dark_rock_disp_4k.jpg"
+  },
+  {
+    "id": "brown_mud_03",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/brown_mud_03/brown_mud_03_diff_4k.jpg",
+    "size": 8264154,
+    "md5": "04c29985725a1f4e69c63d2f3c565ff4",
+    "path": "assets/material-library/soil/brown_mud_03/brown_mud_03_diff_4k.jpg",
+    "relative": "soil/brown_mud_03/brown_mud_03_diff_4k.jpg"
+  },
+  {
+    "id": "brown_mud_03",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/brown_mud_03/brown_mud_03_nor_gl_4k.jpg",
+    "size": 10935905,
+    "md5": "f56e3fbdfe5709d9bb25a3fa6e5206b2",
+    "path": "assets/material-library/soil/brown_mud_03/brown_mud_03_nor_gl_4k.jpg",
+    "relative": "soil/brown_mud_03/brown_mud_03_nor_gl_4k.jpg"
+  },
+  {
+    "id": "brown_mud_03",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/brown_mud_03/brown_mud_03_rough_4k.jpg",
+    "size": 4465487,
+    "md5": "ac4add550c0f94184456bcff37823a5b",
+    "path": "assets/material-library/soil/brown_mud_03/brown_mud_03_rough_4k.jpg",
+    "relative": "soil/brown_mud_03/brown_mud_03_rough_4k.jpg"
+  },
+  {
+    "id": "brown_mud_03",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/brown_mud_03/brown_mud_03_ao_4k.jpg",
+    "size": 5703787,
+    "md5": "64ae6633d8ebcc96a181ea11556f7498",
+    "path": "assets/material-library/soil/brown_mud_03/brown_mud_03_ao_4k.jpg",
+    "relative": "soil/brown_mud_03/brown_mud_03_ao_4k.jpg"
+  },
+  {
+    "id": "brown_mud_03",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/brown_mud_03/brown_mud_03_disp_4k.jpg",
+    "size": 737128,
+    "md5": "eaf6862e235d2b544a3255d48420aab0",
+    "path": "assets/material-library/soil/brown_mud_03/brown_mud_03_disp_4k.jpg",
+    "relative": "soil/brown_mud_03/brown_mud_03_disp_4k.jpg"
+  },
+  {
+    "id": "sandy_gravel",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/sandy_gravel/sandy_gravel_diff_4k.jpg",
+    "size": 14884948,
+    "md5": "7363cb36b97254aa38b2686ed2d9f130",
+    "path": "assets/material-library/soil/sandy_gravel/sandy_gravel_diff_4k.jpg",
+    "relative": "soil/sandy_gravel/sandy_gravel_diff_4k.jpg"
+  },
+  {
+    "id": "sandy_gravel",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/sandy_gravel/sandy_gravel_nor_gl_4k.jpg",
+    "size": 19673774,
+    "md5": "db7704ef1a322635635fa255de3fc399",
+    "path": "assets/material-library/soil/sandy_gravel/sandy_gravel_nor_gl_4k.jpg",
+    "relative": "soil/sandy_gravel/sandy_gravel_nor_gl_4k.jpg"
+  },
+  {
+    "id": "sandy_gravel",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/sandy_gravel/sandy_gravel_rough_4k.jpg",
+    "size": 6877049,
+    "md5": "8a6a6f9a12321353639663d7f17a4fb4",
+    "path": "assets/material-library/soil/sandy_gravel/sandy_gravel_rough_4k.jpg",
+    "relative": "soil/sandy_gravel/sandy_gravel_rough_4k.jpg"
+  },
+  {
+    "id": "sandy_gravel",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/sandy_gravel/sandy_gravel_ao_4k.jpg",
+    "size": 13762071,
+    "md5": "862edb10cef57307901c3d948d59db3b",
+    "path": "assets/material-library/soil/sandy_gravel/sandy_gravel_ao_4k.jpg",
+    "relative": "soil/sandy_gravel/sandy_gravel_ao_4k.jpg"
+  },
+  {
+    "id": "sandy_gravel",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/sandy_gravel/sandy_gravel_disp_4k.jpg",
+    "size": 7018156,
+    "md5": "6e6ea886b124ae81d546d68711b0ea12",
+    "path": "assets/material-library/soil/sandy_gravel/sandy_gravel_disp_4k.jpg",
+    "relative": "soil/sandy_gravel/sandy_gravel_disp_4k.jpg"
+  },
+  {
+    "id": "coast_sand_01",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/coast_sand_01/coast_sand_01_diff_4k.jpg",
+    "size": 10814554,
+    "md5": "c4fcd9ecc7ce8cb98a152c6cc4583674",
+    "path": "assets/material-library/coast/coast_sand_01/coast_sand_01_diff_4k.jpg",
+    "relative": "coast/coast_sand_01/coast_sand_01_diff_4k.jpg"
+  },
+  {
+    "id": "coast_sand_01",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/coast_sand_01/coast_sand_01_nor_gl_4k.jpg",
+    "size": 17348986,
+    "md5": "c9f45e914f4d4a8c55e71772805afbc0",
+    "path": "assets/material-library/coast/coast_sand_01/coast_sand_01_nor_gl_4k.jpg",
+    "relative": "coast/coast_sand_01/coast_sand_01_nor_gl_4k.jpg"
+  },
+  {
+    "id": "coast_sand_01",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/coast_sand_01/coast_sand_01_rough_4k.jpg",
+    "size": 4217770,
+    "md5": "3c44f7f02c1687481c3d91ac83e1c769",
+    "path": "assets/material-library/coast/coast_sand_01/coast_sand_01_rough_4k.jpg",
+    "relative": "coast/coast_sand_01/coast_sand_01_rough_4k.jpg"
+  },
+  {
+    "id": "coast_sand_01",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/coast_sand_01/coast_sand_01_ao_4k.jpg",
+    "size": 10584241,
+    "md5": "ae19985ca852e718c7d093156142e575",
+    "path": "assets/material-library/coast/coast_sand_01/coast_sand_01_ao_4k.jpg",
+    "relative": "coast/coast_sand_01/coast_sand_01_ao_4k.jpg"
+  },
+  {
+    "id": "coast_sand_01",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/coast_sand_01/coast_sand_01_disp_4k.jpg",
+    "size": 3365631,
+    "md5": "24c07ac144cfa17823f81c4e9c2da207",
+    "path": "assets/material-library/coast/coast_sand_01/coast_sand_01_disp_4k.jpg",
+    "relative": "coast/coast_sand_01/coast_sand_01_disp_4k.jpg"
+  },
+  {
+    "id": "grass_ground",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/grass_ground/grass_ground_diff_4k.jpg",
+    "size": 15545899,
+    "md5": "2c7e91c41c1664a67ff3cbb74dd8ed5b",
+    "path": "assets/material-library/grass/grass_ground/grass_ground_diff_4k.jpg",
+    "relative": "grass/grass_ground/grass_ground_diff_4k.jpg"
+  },
+  {
+    "id": "grass_ground",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/grass_ground/grass_ground_nor_gl_4k.jpg",
+    "size": 24470903,
+    "md5": "bb888911342e2ca1486cb5b908b21798",
+    "path": "assets/material-library/grass/grass_ground/grass_ground_nor_gl_4k.jpg",
+    "relative": "grass/grass_ground/grass_ground_nor_gl_4k.jpg"
+  },
+  {
+    "id": "grass_ground",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/grass_ground/grass_ground_rough_4k.jpg",
+    "size": 6828480,
+    "md5": "a446fae41198754dfe1dea94ecf8c251",
+    "path": "assets/material-library/grass/grass_ground/grass_ground_rough_4k.jpg",
+    "relative": "grass/grass_ground/grass_ground_rough_4k.jpg"
+  },
+  {
+    "id": "grass_ground",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/grass_ground/grass_ground_ao_4k.jpg",
+    "size": 15672231,
+    "md5": "0c026352b218ffa4a5c1657b453ff7c0",
+    "path": "assets/material-library/grass/grass_ground/grass_ground_ao_4k.jpg",
+    "relative": "grass/grass_ground/grass_ground_ao_4k.jpg"
+  },
+  {
+    "id": "grass_ground",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/grass_ground/grass_ground_disp_4k.jpg",
+    "size": 8743494,
+    "md5": "d62cc679c3e85378e2e23427da1fd94f",
+    "path": "assets/material-library/grass/grass_ground/grass_ground_disp_4k.jpg",
+    "relative": "grass/grass_ground/grass_ground_disp_4k.jpg"
+  },
+  {
+    "id": "sparse_grass",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/sparse_grass/sparse_grass_diff_4k.jpg",
+    "size": 13803613,
+    "md5": "569f9a6a0cf566c88d281bc81f832e97",
+    "path": "assets/material-library/grass/sparse_grass/sparse_grass_diff_4k.jpg",
+    "relative": "grass/sparse_grass/sparse_grass_diff_4k.jpg"
+  },
+  {
+    "id": "sparse_grass",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/sparse_grass/sparse_grass_nor_gl_4k.jpg",
+    "size": 21700368,
+    "md5": "593823ffcf6fad3ee04e20111168d9dd",
+    "path": "assets/material-library/grass/sparse_grass/sparse_grass_nor_gl_4k.jpg",
+    "relative": "grass/sparse_grass/sparse_grass_nor_gl_4k.jpg"
+  },
+  {
+    "id": "sparse_grass",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/sparse_grass/sparse_grass_rough_4k.jpg",
+    "size": 6181831,
+    "md5": "32bf8656b6fc80cf7bbb98cd37282a63",
+    "path": "assets/material-library/grass/sparse_grass/sparse_grass_rough_4k.jpg",
+    "relative": "grass/sparse_grass/sparse_grass_rough_4k.jpg"
+  },
+  {
+    "id": "sparse_grass",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/sparse_grass/sparse_grass_ao_4k.jpg",
+    "size": 13903651,
+    "md5": "db43e020bac18092dfe02162e501049b",
+    "path": "assets/material-library/grass/sparse_grass/sparse_grass_ao_4k.jpg",
+    "relative": "grass/sparse_grass/sparse_grass_ao_4k.jpg"
+  },
+  {
+    "id": "sparse_grass",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/sparse_grass/sparse_grass_disp_4k.jpg",
+    "size": 7042665,
+    "md5": "c0c2592a77ca879315e268ceb32aafad",
+    "path": "assets/material-library/grass/sparse_grass/sparse_grass_disp_4k.jpg",
+    "relative": "grass/sparse_grass/sparse_grass_disp_4k.jpg"
+  },
+  {
+    "id": "aerial_grass_rock",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/aerial_grass_rock/aerial_grass_rock_diff_4k.jpg",
+    "size": 9067116,
+    "md5": "dc4dbd56d49f3278d1fcde8e58159a84",
+    "path": "assets/material-library/grass/aerial_grass_rock/aerial_grass_rock_diff_4k.jpg",
+    "relative": "grass/aerial_grass_rock/aerial_grass_rock_diff_4k.jpg"
+  },
+  {
+    "id": "aerial_grass_rock",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/aerial_grass_rock/aerial_grass_rock_nor_gl_4k.jpg",
+    "size": 16425331,
+    "md5": "06db3e600acd612587f31573b02875d5",
+    "path": "assets/material-library/grass/aerial_grass_rock/aerial_grass_rock_nor_gl_4k.jpg",
+    "relative": "grass/aerial_grass_rock/aerial_grass_rock_nor_gl_4k.jpg"
+  },
+  {
+    "id": "aerial_grass_rock",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/aerial_grass_rock/aerial_grass_rock_rough_4k.jpg",
+    "size": 5311238,
+    "md5": "5e97d52f1278ba5389ebccc268cf86ab",
+    "path": "assets/material-library/grass/aerial_grass_rock/aerial_grass_rock_rough_4k.jpg",
+    "relative": "grass/aerial_grass_rock/aerial_grass_rock_rough_4k.jpg"
+  },
+  {
+    "id": "aerial_grass_rock",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/aerial_grass_rock/aerial_grass_rock_ao_4k.jpg",
+    "size": 9478903,
+    "md5": "98fa895c9885632b671c927d9a7efd14",
+    "path": "assets/material-library/grass/aerial_grass_rock/aerial_grass_rock_ao_4k.jpg",
+    "relative": "grass/aerial_grass_rock/aerial_grass_rock_ao_4k.jpg"
+  },
+  {
+    "id": "aerial_grass_rock",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/aerial_grass_rock/aerial_grass_rock_disp_4k.jpg",
+    "size": 1528355,
+    "md5": "8d8734171639458ebe4318dbe430caea",
+    "path": "assets/material-library/grass/aerial_grass_rock/aerial_grass_rock_disp_4k.jpg",
+    "relative": "grass/aerial_grass_rock/aerial_grass_rock_disp_4k.jpg"
+  },
+  {
+    "id": "forrest_ground_01",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/forrest_ground_01/forrest_ground_01_diff_4k.jpg",
+    "size": 10044373,
+    "md5": "79a4c855c08b3057578e13aa3c312002",
+    "path": "assets/material-library/forest/forrest_ground_01/forrest_ground_01_diff_4k.jpg",
+    "relative": "forest/forrest_ground_01/forrest_ground_01_diff_4k.jpg"
+  },
+  {
+    "id": "forrest_ground_01",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/forrest_ground_01/forrest_ground_01_nor_gl_4k.jpg",
+    "size": 18677077,
+    "md5": "ac2e9710ca849102112e3a556a5adfe4",
+    "path": "assets/material-library/forest/forrest_ground_01/forrest_ground_01_nor_gl_4k.jpg",
+    "relative": "forest/forrest_ground_01/forrest_ground_01_nor_gl_4k.jpg"
+  },
+  {
+    "id": "forrest_ground_01",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/forrest_ground_01/forrest_ground_01_rough_4k.jpg",
+    "size": 2997796,
+    "md5": "b7ee63bd80164d62ea16e88d12a451c9",
+    "path": "assets/material-library/forest/forrest_ground_01/forrest_ground_01_rough_4k.jpg",
+    "relative": "forest/forrest_ground_01/forrest_ground_01_rough_4k.jpg"
+  },
+  {
+    "id": "forrest_ground_01",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/forrest_ground_01/forrest_ground_01_ao_4k.jpg",
+    "size": 9150409,
+    "md5": "52e65132546f6aa4e9408a7af8897116",
+    "path": "assets/material-library/forest/forrest_ground_01/forrest_ground_01_ao_4k.jpg",
+    "relative": "forest/forrest_ground_01/forrest_ground_01_ao_4k.jpg"
+  },
+  {
+    "id": "forrest_ground_01",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/forrest_ground_01/forrest_ground_01_disp_4k.jpg",
+    "size": 2999702,
+    "md5": "ea692b13ab49cb59d9b678f9ced5404b",
+    "path": "assets/material-library/forest/forrest_ground_01/forrest_ground_01_disp_4k.jpg",
+    "relative": "forest/forrest_ground_01/forrest_ground_01_disp_4k.jpg"
+  },
+  {
+    "id": "leaves_forest_ground",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/leaves_forest_ground/leaves_forest_ground_diff_4k.jpg",
+    "size": 15519094,
+    "md5": "72607dc2c0b66eb762c42b8016c0c512",
+    "path": "assets/material-library/forest/leaves_forest_ground/leaves_forest_ground_diff_4k.jpg",
+    "relative": "forest/leaves_forest_ground/leaves_forest_ground_diff_4k.jpg"
+  },
+  {
+    "id": "leaves_forest_ground",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/leaves_forest_ground/leaves_forest_ground_nor_gl_4k.jpg",
+    "size": 20104029,
+    "md5": "f2174acea705ec7d7afab6c607532a0c",
+    "path": "assets/material-library/forest/leaves_forest_ground/leaves_forest_ground_nor_gl_4k.jpg",
+    "relative": "forest/leaves_forest_ground/leaves_forest_ground_nor_gl_4k.jpg"
+  },
+  {
+    "id": "leaves_forest_ground",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/leaves_forest_ground/leaves_forest_ground_rough_4k.jpg",
+    "size": 7838766,
+    "md5": "6fb7dbdcc3e0a56b405f26e98c9ccbf2",
+    "path": "assets/material-library/forest/leaves_forest_ground/leaves_forest_ground_rough_4k.jpg",
+    "relative": "forest/leaves_forest_ground/leaves_forest_ground_rough_4k.jpg"
+  },
+  {
+    "id": "leaves_forest_ground",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/leaves_forest_ground/leaves_forest_ground_ao_4k.jpg",
+    "size": 12308870,
+    "md5": "63678cebb6ade579e4a9cac657363187",
+    "path": "assets/material-library/forest/leaves_forest_ground/leaves_forest_ground_ao_4k.jpg",
+    "relative": "forest/leaves_forest_ground/leaves_forest_ground_ao_4k.jpg"
+  },
+  {
+    "id": "leaves_forest_ground",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/leaves_forest_ground/leaves_forest_ground_disp_4k.jpg",
+    "size": 4751097,
+    "md5": "86dea70f44b1d37df3885a833b33bca7",
+    "path": "assets/material-library/forest/leaves_forest_ground/leaves_forest_ground_disp_4k.jpg",
+    "relative": "forest/leaves_forest_ground/leaves_forest_ground_disp_4k.jpg"
+  },
+  {
+    "id": "japanese_cedar_bark",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/japanese_cedar_bark/japanese_cedar_bark_diff_4k.jpg",
+    "size": 22174540,
+    "md5": "44f1471c9f0d5d1a99dad9ebcd3312ed",
+    "path": "assets/material-library/bark/japanese_cedar_bark/japanese_cedar_bark_diff_4k.jpg",
+    "relative": "bark/japanese_cedar_bark/japanese_cedar_bark_diff_4k.jpg"
+  },
+  {
+    "id": "japanese_cedar_bark",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/japanese_cedar_bark/japanese_cedar_bark_nor_gl_4k.jpg",
+    "size": 28996438,
+    "md5": "bf36b9a81228e5e54f31848e5a7ec092",
+    "path": "assets/material-library/bark/japanese_cedar_bark/japanese_cedar_bark_nor_gl_4k.jpg",
+    "relative": "bark/japanese_cedar_bark/japanese_cedar_bark_nor_gl_4k.jpg"
+  },
+  {
+    "id": "japanese_cedar_bark",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/japanese_cedar_bark/japanese_cedar_bark_rough_4k.jpg",
+    "size": 7022528,
+    "md5": "95181d4e0a45c5ba5a116f26dca79c38",
+    "path": "assets/material-library/bark/japanese_cedar_bark/japanese_cedar_bark_rough_4k.jpg",
+    "relative": "bark/japanese_cedar_bark/japanese_cedar_bark_rough_4k.jpg"
+  },
+  {
+    "id": "japanese_cedar_bark",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/japanese_cedar_bark/japanese_cedar_bark_ao_4k.jpg",
+    "size": 16031307,
+    "md5": "17f0904ee4bff960d5657e36b90f28a2",
+    "path": "assets/material-library/bark/japanese_cedar_bark/japanese_cedar_bark_ao_4k.jpg",
+    "relative": "bark/japanese_cedar_bark/japanese_cedar_bark_ao_4k.jpg"
+  },
+  {
+    "id": "japanese_cedar_bark",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/japanese_cedar_bark/japanese_cedar_bark_disp_4k.jpg",
+    "size": 6414143,
+    "md5": "3c73be1860cb00807aeef3a133260266",
+    "path": "assets/material-library/bark/japanese_cedar_bark/japanese_cedar_bark_disp_4k.jpg",
+    "relative": "bark/japanese_cedar_bark/japanese_cedar_bark_disp_4k.jpg"
+  },
+  {
+    "id": "pine_bark",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/pine_bark/pine_bark_diff_4k.jpg",
+    "size": 11772992,
+    "md5": "4a9aac215ce5740f54b784780a45e5c9",
+    "path": "assets/material-library/bark/pine_bark/pine_bark_diff_4k.jpg",
+    "relative": "bark/pine_bark/pine_bark_diff_4k.jpg"
+  },
+  {
+    "id": "pine_bark",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/pine_bark/pine_bark_nor_gl_4k.jpg",
+    "size": 18446130,
+    "md5": "0a0336d38e01c57f8f2c02c3ced3ec53",
+    "path": "assets/material-library/bark/pine_bark/pine_bark_nor_gl_4k.jpg",
+    "relative": "bark/pine_bark/pine_bark_nor_gl_4k.jpg"
+  },
+  {
+    "id": "pine_bark",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/pine_bark/pine_bark_rough_4k.jpg",
+    "size": 7920751,
+    "md5": "9b93fb603dd6e13e3e28130e538e02b5",
+    "path": "assets/material-library/bark/pine_bark/pine_bark_rough_4k.jpg",
+    "relative": "bark/pine_bark/pine_bark_rough_4k.jpg"
+  },
+  {
+    "id": "pine_bark",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/pine_bark/pine_bark_ao_4k.jpg",
+    "size": 10844041,
+    "md5": "093bc0bf2c682de5bc6d38d09b8d193d",
+    "path": "assets/material-library/bark/pine_bark/pine_bark_ao_4k.jpg",
+    "relative": "bark/pine_bark/pine_bark_ao_4k.jpg"
+  },
+  {
+    "id": "pine_bark",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/pine_bark/pine_bark_disp_4k.jpg",
+    "size": 3736491,
+    "md5": "49ccecf0759bcccf7bc338088168bfa5",
+    "path": "assets/material-library/bark/pine_bark/pine_bark_disp_4k.jpg",
+    "relative": "bark/pine_bark/pine_bark_disp_4k.jpg"
+  },
+  {
+    "id": "LeafSet001",
+    "channel": "archive",
+    "url": "https://ambientcg.com/get?file=LeafSet001_4K-PNG.zip",
+    "size": 182636993,
+    "md5": null,
+    "path": "assets/material-library/foliage/LeafSet001/LeafSet001_4K-PNG.zip",
+    "relative": "foliage/LeafSet001/LeafSet001_4K-PNG.zip"
+  },
+  {
+    "id": "rock_01",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_01/rock_01_diff_4k.jpg",
+    "size": 11989566,
+    "md5": "34970cbd9fb6430672a6e14801f4d0e9",
+    "path": "assets/material-library/rock/rock_01/rock_01_diff_4k.jpg",
+    "relative": "rock/rock_01/rock_01_diff_4k.jpg"
+  },
+  {
+    "id": "rock_01",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_01/rock_01_nor_gl_4k.jpg",
+    "size": 9104864,
+    "md5": "5ea0a3cf55cd993cc5858c49d49468a3",
+    "path": "assets/material-library/rock/rock_01/rock_01_nor_gl_4k.jpg",
+    "relative": "rock/rock_01/rock_01_nor_gl_4k.jpg"
+  },
+  {
+    "id": "rock_01",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_01/rock_01_rough_4k.jpg",
+    "size": 6555215,
+    "md5": "c94ac06a24b24738d0d19dca7ac7b82f",
+    "path": "assets/material-library/rock/rock_01/rock_01_rough_4k.jpg",
+    "relative": "rock/rock_01/rock_01_rough_4k.jpg"
+  },
+  {
+    "id": "rock_01",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_01/rock_01_ao_4k.jpg",
+    "size": 8723694,
+    "md5": "2101fd14c3b058e35a7d46a7e2c32d61",
+    "path": "assets/material-library/rock/rock_01/rock_01_ao_4k.jpg",
+    "relative": "rock/rock_01/rock_01_ao_4k.jpg"
+  },
+  {
+    "id": "rock_01",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_01/rock_01_disp_4k.jpg",
+    "size": 2174258,
+    "md5": "cb1eb006edda2c876680ed01d7c98e4b",
+    "path": "assets/material-library/rock/rock_01/rock_01_disp_4k.jpg",
+    "relative": "rock/rock_01/rock_01_disp_4k.jpg"
+  },
+  {
+    "id": "rock_05",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_05/rock_05_diff_4k.jpg",
+    "size": 10739079,
+    "md5": "62981d45a24f43572a4618f21dfa10e1",
+    "path": "assets/material-library/rock/rock_05/rock_05_diff_4k.jpg",
+    "relative": "rock/rock_05/rock_05_diff_4k.jpg"
+  },
+  {
+    "id": "rock_05",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_05/rock_05_nor_gl_4k.jpg",
+    "size": 8995380,
+    "md5": "86e73ce4c1b2c96d80faa26192f8e3d0",
+    "path": "assets/material-library/rock/rock_05/rock_05_nor_gl_4k.jpg",
+    "relative": "rock/rock_05/rock_05_nor_gl_4k.jpg"
+  },
+  {
+    "id": "rock_05",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_05/rock_05_rough_4k.jpg",
+    "size": 4659095,
+    "md5": "40d73d317d21b5949a647bd117a20326",
+    "path": "assets/material-library/rock/rock_05/rock_05_rough_4k.jpg",
+    "relative": "rock/rock_05/rock_05_rough_4k.jpg"
+  },
+  {
+    "id": "rock_05",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_05/rock_05_ao_4k.jpg",
+    "size": 7510678,
+    "md5": "dbdfdb2a5757d408730d7a565fab9a18",
+    "path": "assets/material-library/rock/rock_05/rock_05_ao_4k.jpg",
+    "relative": "rock/rock_05/rock_05_ao_4k.jpg"
+  },
+  {
+    "id": "rock_05",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_05/rock_05_disp_4k.jpg",
+    "size": 1162905,
+    "md5": "3a58018d5f90359ce9b138fb2f1cbbfe",
+    "path": "assets/material-library/rock/rock_05/rock_05_disp_4k.jpg",
+    "relative": "rock/rock_05/rock_05_disp_4k.jpg"
+  },
+  {
+    "id": "rock_06",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_06/rock_06_diff_4k.jpg",
+    "size": 10966416,
+    "md5": "e3e01caeb9ca2005f66963c5dd2d2580",
+    "path": "assets/material-library/rock/rock_06/rock_06_diff_4k.jpg",
+    "relative": "rock/rock_06/rock_06_diff_4k.jpg"
+  },
+  {
+    "id": "rock_06",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_06/rock_06_nor_gl_4k.jpg",
+    "size": 8451680,
+    "md5": "5ff8a861335db1776d166b3abc987459",
+    "path": "assets/material-library/rock/rock_06/rock_06_nor_gl_4k.jpg",
+    "relative": "rock/rock_06/rock_06_nor_gl_4k.jpg"
+  },
+  {
+    "id": "rock_06",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_06/rock_06_rough_4k.jpg",
+    "size": 3099755,
+    "md5": "a4b3bdabdfa38000ccf3c8415d0d6e4a",
+    "path": "assets/material-library/rock/rock_06/rock_06_rough_4k.jpg",
+    "relative": "rock/rock_06/rock_06_rough_4k.jpg"
+  },
+  {
+    "id": "rock_06",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_06/rock_06_ao_4k.jpg",
+    "size": 5134444,
+    "md5": "5cb01ae12968124c9defbed3b6ea800b",
+    "path": "assets/material-library/rock/rock_06/rock_06_ao_4k.jpg",
+    "relative": "rock/rock_06/rock_06_ao_4k.jpg"
+  },
+  {
+    "id": "rock_06",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_06/rock_06_disp_4k.jpg",
+    "size": 812529,
+    "md5": "7b7c6cd3bf58de646928d94ac92f46ee",
+    "path": "assets/material-library/rock/rock_06/rock_06_disp_4k.jpg",
+    "relative": "rock/rock_06/rock_06_disp_4k.jpg"
+  },
+  {
+    "id": "rock_08",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_08/rock_08_diff_4k.jpg",
+    "size": 9919017,
+    "md5": "db91c7200ff9980ff90230164d4f388d",
+    "path": "assets/material-library/rock/rock_08/rock_08_diff_4k.jpg",
+    "relative": "rock/rock_08/rock_08_diff_4k.jpg"
+  },
+  {
+    "id": "rock_08",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_08/rock_08_nor_gl_4k.jpg",
+    "size": 9987580,
+    "md5": "abf99378f22b75dca20995662a6cb4a9",
+    "path": "assets/material-library/rock/rock_08/rock_08_nor_gl_4k.jpg",
+    "relative": "rock/rock_08/rock_08_nor_gl_4k.jpg"
+  },
+  {
+    "id": "rock_08",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_08/rock_08_rough_4k.jpg",
+    "size": 4608131,
+    "md5": "9b1a0ed36f5c8ecff7c4d99cbe881af0",
+    "path": "assets/material-library/rock/rock_08/rock_08_rough_4k.jpg",
+    "relative": "rock/rock_08/rock_08_rough_4k.jpg"
+  },
+  {
+    "id": "rock_08",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_08/rock_08_ao_4k.jpg",
+    "size": 8052644,
+    "md5": "a04d56ef094fd4bf77c08269c1c7d506",
+    "path": "assets/material-library/rock/rock_08/rock_08_ao_4k.jpg",
+    "relative": "rock/rock_08/rock_08_ao_4k.jpg"
+  },
+  {
+    "id": "rock_08",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_08/rock_08_disp_4k.jpg",
+    "size": 1453131,
+    "md5": "84f84d0cd53b7f53ea10f88d698b2a91",
+    "path": "assets/material-library/rock/rock_08/rock_08_disp_4k.jpg",
+    "relative": "rock/rock_08/rock_08_disp_4k.jpg"
+  },
+  {
+    "id": "rock_2",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_2/rock_2_diff_4k.jpg",
+    "size": 12360756,
+    "md5": "beeadfb27435e84eee4d1b7e4b3cb3ae",
+    "path": "assets/material-library/rock/rock_2/rock_2_diff_4k.jpg",
+    "relative": "rock/rock_2/rock_2_diff_4k.jpg"
+  },
+  {
+    "id": "rock_2",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_2/rock_2_nor_gl_4k.jpg",
+    "size": 11059893,
+    "md5": "92119ebec2a5bb45666a8ac81f47b9a1",
+    "path": "assets/material-library/rock/rock_2/rock_2_nor_gl_4k.jpg",
+    "relative": "rock/rock_2/rock_2_nor_gl_4k.jpg"
+  },
+  {
+    "id": "rock_2",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_2/rock_2_rough_4k.jpg",
+    "size": 4021852,
+    "md5": "69a46427286026e4d9c3dea3a3b70472",
+    "path": "assets/material-library/rock/rock_2/rock_2_rough_4k.jpg",
+    "relative": "rock/rock_2/rock_2_rough_4k.jpg"
+  },
+  {
+    "id": "rock_2",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_2/rock_2_ao_4k.jpg",
+    "size": 7826596,
+    "md5": "b41787cb33657a1ef524406ab6a82bb6",
+    "path": "assets/material-library/rock/rock_2/rock_2_ao_4k.jpg",
+    "relative": "rock/rock_2/rock_2_ao_4k.jpg"
+  },
+  {
+    "id": "rock_2",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_2/rock_2_disp_4k.jpg",
+    "size": 1663503,
+    "md5": "f4b5ab54a11513e60ace97e48ba9dca4",
+    "path": "assets/material-library/rock/rock_2/rock_2_disp_4k.jpg",
+    "relative": "rock/rock_2/rock_2_disp_4k.jpg"
+  },
+  {
+    "id": "rock_surface",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_surface/rock_surface_diff_4k.jpg",
+    "size": 14580727,
+    "md5": "39360c0578b4130d94d2ca6611ec77d8",
+    "path": "assets/material-library/rock/rock_surface/rock_surface_diff_4k.jpg",
+    "relative": "rock/rock_surface/rock_surface_diff_4k.jpg"
+  },
+  {
+    "id": "rock_surface",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_surface/rock_surface_nor_gl_4k.jpg",
+    "size": 17555698,
+    "md5": "8d2b4aa689cea8ff6b6b55195b7b7927",
+    "path": "assets/material-library/rock/rock_surface/rock_surface_nor_gl_4k.jpg",
+    "relative": "rock/rock_surface/rock_surface_nor_gl_4k.jpg"
+  },
+  {
+    "id": "rock_surface",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_surface/rock_surface_rough_4k.jpg",
+    "size": 8169310,
+    "md5": "6a50ca42cfaa0c434a1a2bdbc9292ba2",
+    "path": "assets/material-library/rock/rock_surface/rock_surface_rough_4k.jpg",
+    "relative": "rock/rock_surface/rock_surface_rough_4k.jpg"
+  },
+  {
+    "id": "rock_surface",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_surface/rock_surface_ao_4k.jpg",
+    "size": 10374639,
+    "md5": "7ffcb4e06e5009c98b535134c03db4aa",
+    "path": "assets/material-library/rock/rock_surface/rock_surface_ao_4k.jpg",
+    "relative": "rock/rock_surface/rock_surface_ao_4k.jpg"
+  },
+  {
+    "id": "rock_surface",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_surface/rock_surface_disp_4k.jpg",
+    "size": 3752242,
+    "md5": "c6d654f34f110a21bcd3d6ae97e10780",
+    "path": "assets/material-library/rock/rock_surface/rock_surface_disp_4k.jpg",
+    "relative": "rock/rock_surface/rock_surface_disp_4k.jpg"
+  },
+  {
+    "id": "dry_riverbed_rock",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/dry_riverbed_rock/dry_riverbed_rock_diff_4k.jpg",
+    "size": 16375595,
+    "md5": "0cdc2e39a69b1ed0d3f06305880f9eaa",
+    "path": "assets/material-library/rock/dry_riverbed_rock/dry_riverbed_rock_diff_4k.jpg",
+    "relative": "rock/dry_riverbed_rock/dry_riverbed_rock_diff_4k.jpg"
+  },
+  {
+    "id": "dry_riverbed_rock",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/dry_riverbed_rock/dry_riverbed_rock_nor_gl_4k.jpg",
+    "size": 14409782,
+    "md5": "d91a5c9a1b1257517b676ef937a0845f",
+    "path": "assets/material-library/rock/dry_riverbed_rock/dry_riverbed_rock_nor_gl_4k.jpg",
+    "relative": "rock/dry_riverbed_rock/dry_riverbed_rock_nor_gl_4k.jpg"
+  },
+  {
+    "id": "dry_riverbed_rock",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/dry_riverbed_rock/dry_riverbed_rock_rough_4k.jpg",
+    "size": 9496582,
+    "md5": "5a241303bfe71e439954a96e5e98f11d",
+    "path": "assets/material-library/rock/dry_riverbed_rock/dry_riverbed_rock_rough_4k.jpg",
+    "relative": "rock/dry_riverbed_rock/dry_riverbed_rock_rough_4k.jpg"
+  },
+  {
+    "id": "dry_riverbed_rock",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/dry_riverbed_rock/dry_riverbed_rock_ao_4k.jpg",
+    "size": 9289147,
+    "md5": "afaa3826c5a5122c06b43ba83a04d2b3",
+    "path": "assets/material-library/rock/dry_riverbed_rock/dry_riverbed_rock_ao_4k.jpg",
+    "relative": "rock/dry_riverbed_rock/dry_riverbed_rock_ao_4k.jpg"
+  },
+  {
+    "id": "dry_riverbed_rock",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/dry_riverbed_rock/dry_riverbed_rock_disp_4k.jpg",
+    "size": 2456831,
+    "md5": "5cfe6b22aa34ef9fb448dcf587d89f57",
+    "path": "assets/material-library/rock/dry_riverbed_rock/dry_riverbed_rock_disp_4k.jpg",
+    "relative": "rock/dry_riverbed_rock/dry_riverbed_rock_disp_4k.jpg"
+  },
+  {
+    "id": "dark_rock_02",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/dark_rock_02/dark_rock_02_diff_4k.jpg",
+    "size": 9601413,
+    "md5": "2e9156b7acb8025dd63d010fc56db4c7",
+    "path": "assets/material-library/rock/dark_rock_02/dark_rock_02_diff_4k.jpg",
+    "relative": "rock/dark_rock_02/dark_rock_02_diff_4k.jpg"
+  },
+  {
+    "id": "dark_rock_02",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/dark_rock_02/dark_rock_02_nor_gl_4k.jpg",
+    "size": 14212058,
+    "md5": "e85ce61e5c17421c3117f08103edf335",
+    "path": "assets/material-library/rock/dark_rock_02/dark_rock_02_nor_gl_4k.jpg",
+    "relative": "rock/dark_rock_02/dark_rock_02_nor_gl_4k.jpg"
+  },
+  {
+    "id": "dark_rock_02",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/dark_rock_02/dark_rock_02_rough_4k.jpg",
+    "size": 7846459,
+    "md5": "12e2a5e1bd96869e36aaf50d1955e735",
+    "path": "assets/material-library/rock/dark_rock_02/dark_rock_02_rough_4k.jpg",
+    "relative": "rock/dark_rock_02/dark_rock_02_rough_4k.jpg"
+  },
+  {
+    "id": "dark_rock_02",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/dark_rock_02/dark_rock_02_ao_4k.jpg",
+    "size": 8473392,
+    "md5": "a7e94273935cfe95641759621357c339",
+    "path": "assets/material-library/rock/dark_rock_02/dark_rock_02_ao_4k.jpg",
+    "relative": "rock/dark_rock_02/dark_rock_02_ao_4k.jpg"
+  },
+  {
+    "id": "dark_rock_02",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/dark_rock_02/dark_rock_02_disp_4k.jpg",
+    "size": 1707220,
+    "md5": "76051f8ec3377eefa93bf18378c8cc14",
+    "path": "assets/material-library/rock/dark_rock_02/dark_rock_02_disp_4k.jpg",
+    "relative": "rock/dark_rock_02/dark_rock_02_disp_4k.jpg"
+  },
+  {
+    "id": "cliff_side",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/cliff_side/cliff_side_diff_4k.jpg",
+    "size": 12787052,
+    "md5": "e2bc41b9fc4d1811da6d1d45c9e5d316",
+    "path": "assets/material-library/rock/cliff_side/cliff_side_diff_4k.jpg",
+    "relative": "rock/cliff_side/cliff_side_diff_4k.jpg"
+  },
+  {
+    "id": "cliff_side",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/cliff_side/cliff_side_nor_gl_4k.jpg",
+    "size": 12813550,
+    "md5": "9585eddc6e29c5fe89aae4c06f782209",
+    "path": "assets/material-library/rock/cliff_side/cliff_side_nor_gl_4k.jpg",
+    "relative": "rock/cliff_side/cliff_side_nor_gl_4k.jpg"
+  },
+  {
+    "id": "cliff_side",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/cliff_side/cliff_side_rough_4k.jpg",
+    "size": 7228817,
+    "md5": "3ddc8805f2295c6c2dbbe57a920346ac",
+    "path": "assets/material-library/rock/cliff_side/cliff_side_rough_4k.jpg",
+    "relative": "rock/cliff_side/cliff_side_rough_4k.jpg"
+  },
+  {
+    "id": "cliff_side",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/cliff_side/cliff_side_ao_4k.jpg",
+    "size": 3686976,
+    "md5": "8ac9d1d3f07935fb47e1834ea70b49a8",
+    "path": "assets/material-library/rock/cliff_side/cliff_side_ao_4k.jpg",
+    "relative": "rock/cliff_side/cliff_side_ao_4k.jpg"
+  },
+  {
+    "id": "cliff_side",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/cliff_side/cliff_side_disp_4k.jpg",
+    "size": 1832955,
+    "md5": "6344c216f58a7b130b9e068c33060c31",
+    "path": "assets/material-library/rock/cliff_side/cliff_side_disp_4k.jpg",
+    "relative": "rock/cliff_side/cliff_side_disp_4k.jpg"
+  },
+  {
+    "id": "rock_boulder_cracked",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_boulder_cracked/rock_boulder_cracked_diff_4k.jpg",
+    "size": 15067334,
+    "md5": "d3c84525c8766208ec469880f0904084",
+    "path": "assets/material-library/rock/rock_boulder_cracked/rock_boulder_cracked_diff_4k.jpg",
+    "relative": "rock/rock_boulder_cracked/rock_boulder_cracked_diff_4k.jpg"
+  },
+  {
+    "id": "rock_boulder_cracked",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_boulder_cracked/rock_boulder_cracked_nor_gl_4k.jpg",
+    "size": 17094508,
+    "md5": "9a8eacb2c2e1ae79960bd91f312f8d8b",
+    "path": "assets/material-library/rock/rock_boulder_cracked/rock_boulder_cracked_nor_gl_4k.jpg",
+    "relative": "rock/rock_boulder_cracked/rock_boulder_cracked_nor_gl_4k.jpg"
+  },
+  {
+    "id": "rock_boulder_cracked",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_boulder_cracked/rock_boulder_cracked_rough_4k.jpg",
+    "size": 6583310,
+    "md5": "517ae8ce7b8c07e1d624d8689c80d077",
+    "path": "assets/material-library/rock/rock_boulder_cracked/rock_boulder_cracked_rough_4k.jpg",
+    "relative": "rock/rock_boulder_cracked/rock_boulder_cracked_rough_4k.jpg"
+  },
+  {
+    "id": "rock_boulder_cracked",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_boulder_cracked/rock_boulder_cracked_ao_4k.jpg",
+    "size": 8369879,
+    "md5": "980221e616d92344c9283718247b5518",
+    "path": "assets/material-library/rock/rock_boulder_cracked/rock_boulder_cracked_ao_4k.jpg",
+    "relative": "rock/rock_boulder_cracked/rock_boulder_cracked_ao_4k.jpg"
+  },
+  {
+    "id": "rock_boulder_cracked",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_boulder_cracked/rock_boulder_cracked_disp_4k.jpg",
+    "size": 1883364,
+    "md5": "53687e0fca193c3af658808dfe278e11",
+    "path": "assets/material-library/rock/rock_boulder_cracked/rock_boulder_cracked_disp_4k.jpg",
+    "relative": "rock/rock_boulder_cracked/rock_boulder_cracked_disp_4k.jpg"
+  },
+  {
+    "id": "rock_face_03",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_face_03/rock_face_03_diff_4k.jpg",
+    "size": 15319503,
+    "md5": "50105980b509029b9040f43b1f6ddc71",
+    "path": "assets/material-library/rock/rock_face_03/rock_face_03_diff_4k.jpg",
+    "relative": "rock/rock_face_03/rock_face_03_diff_4k.jpg"
+  },
+  {
+    "id": "rock_face_03",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_face_03/rock_face_03_nor_gl_4k.jpg",
+    "size": 16283883,
+    "md5": "2408a373765c41a7a3762933ea67f5b0",
+    "path": "assets/material-library/rock/rock_face_03/rock_face_03_nor_gl_4k.jpg",
+    "relative": "rock/rock_face_03/rock_face_03_nor_gl_4k.jpg"
+  },
+  {
+    "id": "rock_face_03",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_face_03/rock_face_03_rough_4k.jpg",
+    "size": 10380943,
+    "md5": "d3c9ecf45bb2fb122272b8015eb3e74d",
+    "path": "assets/material-library/rock/rock_face_03/rock_face_03_rough_4k.jpg",
+    "relative": "rock/rock_face_03/rock_face_03_rough_4k.jpg"
+  },
+  {
+    "id": "rock_face_03",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_face_03/rock_face_03_ao_4k.jpg",
+    "size": 9638961,
+    "md5": "5b3bc23ab01c82d638d5b2b3d044af7b",
+    "path": "assets/material-library/rock/rock_face_03/rock_face_03_ao_4k.jpg",
+    "relative": "rock/rock_face_03/rock_face_03_ao_4k.jpg"
+  },
+  {
+    "id": "rock_face_03",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_face_03/rock_face_03_disp_4k.jpg",
+    "size": 2365155,
+    "md5": "00b989230994ee1b893cc30bf4859943",
+    "path": "assets/material-library/rock/rock_face_03/rock_face_03_disp_4k.jpg",
+    "relative": "rock/rock_face_03/rock_face_03_disp_4k.jpg"
+  },
+  {
+    "id": "brown_mud_dry",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/brown_mud_dry/brown_mud_dry_diff_4k.jpg",
+    "size": 11945038,
+    "md5": "38e71eb35e2ab4100f7e9f3cd4e16e66",
+    "path": "assets/material-library/soil/brown_mud_dry/brown_mud_dry_diff_4k.jpg",
+    "relative": "soil/brown_mud_dry/brown_mud_dry_diff_4k.jpg"
+  },
+  {
+    "id": "brown_mud_dry",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/brown_mud_dry/brown_mud_dry_nor_gl_4k.jpg",
+    "size": 13584018,
+    "md5": "21fe49d99239246bbdd90833845b249b",
+    "path": "assets/material-library/soil/brown_mud_dry/brown_mud_dry_nor_gl_4k.jpg",
+    "relative": "soil/brown_mud_dry/brown_mud_dry_nor_gl_4k.jpg"
+  },
+  {
+    "id": "brown_mud_dry",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/brown_mud_dry/brown_mud_dry_rough_4k.jpg",
+    "size": 5385390,
+    "md5": "834328a52a3810a9f06548f0ce4da8f4",
+    "path": "assets/material-library/soil/brown_mud_dry/brown_mud_dry_rough_4k.jpg",
+    "relative": "soil/brown_mud_dry/brown_mud_dry_rough_4k.jpg"
+  },
+  {
+    "id": "brown_mud_dry",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/brown_mud_dry/brown_mud_dry_ao_4k.jpg",
+    "size": 8225641,
+    "md5": "c88fb56ae6149de3db7a092ff7336aea",
+    "path": "assets/material-library/soil/brown_mud_dry/brown_mud_dry_ao_4k.jpg",
+    "relative": "soil/brown_mud_dry/brown_mud_dry_ao_4k.jpg"
+  },
+  {
+    "id": "brown_mud_dry",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/brown_mud_dry/brown_mud_dry_disp_4k.jpg",
+    "size": 1819692,
+    "md5": "fc633d7e3081e90d5c4be90df7f77c73",
+    "path": "assets/material-library/soil/brown_mud_dry/brown_mud_dry_disp_4k.jpg",
+    "relative": "soil/brown_mud_dry/brown_mud_dry_disp_4k.jpg"
+  },
+  {
+    "id": "brown_mud_rocks_01",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/brown_mud_rocks_01/brown_mud_rocks_01_diff_4k.jpg",
+    "size": 9905590,
+    "md5": "ef2d880e0ab367249daea48aa4238063",
+    "path": "assets/material-library/soil/brown_mud_rocks_01/brown_mud_rocks_01_diff_4k.jpg",
+    "relative": "soil/brown_mud_rocks_01/brown_mud_rocks_01_diff_4k.jpg"
+  },
+  {
+    "id": "brown_mud_rocks_01",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/brown_mud_rocks_01/brown_mud_rocks_01_nor_gl_4k.jpg",
+    "size": 12956197,
+    "md5": "7052120e309425aa403eb3c228a6d619",
+    "path": "assets/material-library/soil/brown_mud_rocks_01/brown_mud_rocks_01_nor_gl_4k.jpg",
+    "relative": "soil/brown_mud_rocks_01/brown_mud_rocks_01_nor_gl_4k.jpg"
+  },
+  {
+    "id": "brown_mud_rocks_01",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/brown_mud_rocks_01/brown_mud_rocks_01_rough_4k.jpg",
+    "size": 9073826,
+    "md5": "86f04e4e30e7f83125c4559063de3df1",
+    "path": "assets/material-library/soil/brown_mud_rocks_01/brown_mud_rocks_01_rough_4k.jpg",
+    "relative": "soil/brown_mud_rocks_01/brown_mud_rocks_01_rough_4k.jpg"
+  },
+  {
+    "id": "brown_mud_rocks_01",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/brown_mud_rocks_01/brown_mud_rocks_01_ao_4k.jpg",
+    "size": 5011272,
+    "md5": "28103677888afc6febb72390b2734df3",
+    "path": "assets/material-library/soil/brown_mud_rocks_01/brown_mud_rocks_01_ao_4k.jpg",
+    "relative": "soil/brown_mud_rocks_01/brown_mud_rocks_01_ao_4k.jpg"
+  },
+  {
+    "id": "brown_mud_rocks_01",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/brown_mud_rocks_01/brown_mud_rocks_01_disp_4k.jpg",
+    "size": 1630045,
+    "md5": "9dd5a24bbc1fd9fdef7e0f8ca420a6aa",
+    "path": "assets/material-library/soil/brown_mud_rocks_01/brown_mud_rocks_01_disp_4k.jpg",
+    "relative": "soil/brown_mud_rocks_01/brown_mud_rocks_01_disp_4k.jpg"
+  },
+  {
+    "id": "brown_mud",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/brown_mud/brown_mud_diff_4k.jpg",
+    "size": 8099872,
+    "md5": "2432f0d0dc17cced282be0af72072f61",
+    "path": "assets/material-library/soil/brown_mud/brown_mud_diff_4k.jpg",
+    "relative": "soil/brown_mud/brown_mud_diff_4k.jpg"
+  },
+  {
+    "id": "brown_mud",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/brown_mud/brown_mud_nor_gl_4k.jpg",
+    "size": 9152621,
+    "md5": "e313d1856f9ce239b027a55a2bb6f133",
+    "path": "assets/material-library/soil/brown_mud/brown_mud_nor_gl_4k.jpg",
+    "relative": "soil/brown_mud/brown_mud_nor_gl_4k.jpg"
+  },
+  {
+    "id": "brown_mud",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/brown_mud/brown_mud_rough_4k.jpg",
+    "size": 5884362,
+    "md5": "f5fbd9ca293ecc970bc62538b070a78b",
+    "path": "assets/material-library/soil/brown_mud/brown_mud_rough_4k.jpg",
+    "relative": "soil/brown_mud/brown_mud_rough_4k.jpg"
+  },
+  {
+    "id": "brown_mud",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/brown_mud/brown_mud_ao_4k.jpg",
+    "size": 6858659,
+    "md5": "0603da5ae78179a9fb57575af4641c03",
+    "path": "assets/material-library/soil/brown_mud/brown_mud_ao_4k.jpg",
+    "relative": "soil/brown_mud/brown_mud_ao_4k.jpg"
+  },
+  {
+    "id": "brown_mud",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/brown_mud/brown_mud_disp_4k.jpg",
+    "size": 1961236,
+    "md5": "270d0ccc2c6000cfe129e985c7ace67a",
+    "path": "assets/material-library/soil/brown_mud/brown_mud_disp_4k.jpg",
+    "relative": "soil/brown_mud/brown_mud_disp_4k.jpg"
+  },
+  {
+    "id": "dense_sand",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/dense_sand/dense_sand_diff_4k.jpg",
+    "size": 11025744,
+    "md5": "bd0af91d9d3ebd6f38498fc7f0310a68",
+    "path": "assets/material-library/soil/dense_sand/dense_sand_diff_4k.jpg",
+    "relative": "soil/dense_sand/dense_sand_diff_4k.jpg"
+  },
+  {
+    "id": "dense_sand",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/dense_sand/dense_sand_nor_gl_4k.jpg",
+    "size": 15491372,
+    "md5": "dddf1b073a9c3fa4c0a1a591dff8d2b8",
+    "path": "assets/material-library/soil/dense_sand/dense_sand_nor_gl_4k.jpg",
+    "relative": "soil/dense_sand/dense_sand_nor_gl_4k.jpg"
+  },
+  {
+    "id": "dense_sand",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/dense_sand/dense_sand_rough_4k.jpg",
+    "size": 7379562,
+    "md5": "1dc2b07d5be170d8b300c6ff38a53feb",
+    "path": "assets/material-library/soil/dense_sand/dense_sand_rough_4k.jpg",
+    "relative": "soil/dense_sand/dense_sand_rough_4k.jpg"
+  },
+  {
+    "id": "dense_sand",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/dense_sand/dense_sand_ao_4k.jpg",
+    "size": 9047631,
+    "md5": "8ac69c766461f96db53703c83082dadb",
+    "path": "assets/material-library/soil/dense_sand/dense_sand_ao_4k.jpg",
+    "relative": "soil/dense_sand/dense_sand_ao_4k.jpg"
+  },
+  {
+    "id": "dense_sand",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/dense_sand/dense_sand_disp_4k.jpg",
+    "size": 2615905,
+    "md5": "8e7c3278049704bc45718b86d16ec7d9",
+    "path": "assets/material-library/soil/dense_sand/dense_sand_disp_4k.jpg",
+    "relative": "soil/dense_sand/dense_sand_disp_4k.jpg"
+  },
+  {
+    "id": "gravelly_sand",
+    "channel": "Diffuse",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/gravelly_sand/gravelly_sand_diff_4k.jpg",
+    "size": 17471864,
+    "md5": "56d8d8ab93b40651f9ccab7c52b01582",
+    "path": "assets/material-library/soil/gravelly_sand/gravelly_sand_diff_4k.jpg",
+    "relative": "soil/gravelly_sand/gravelly_sand_diff_4k.jpg"
+  },
+  {
+    "id": "gravelly_sand",
+    "channel": "nor_gl",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/gravelly_sand/gravelly_sand_nor_gl_4k.jpg",
+    "size": 23414234,
+    "md5": "7fce0541857f6df5b0ddf599e7ca393a",
+    "path": "assets/material-library/soil/gravelly_sand/gravelly_sand_nor_gl_4k.jpg",
+    "relative": "soil/gravelly_sand/gravelly_sand_nor_gl_4k.jpg"
+  },
+  {
+    "id": "gravelly_sand",
+    "channel": "Rough",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/gravelly_sand/gravelly_sand_rough_4k.jpg",
+    "size": 7825969,
+    "md5": "10b2170aaf14b307be317cc802aafeb6",
+    "path": "assets/material-library/soil/gravelly_sand/gravelly_sand_rough_4k.jpg",
+    "relative": "soil/gravelly_sand/gravelly_sand_rough_4k.jpg"
+  },
+  {
+    "id": "gravelly_sand",
+    "channel": "AO",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/gravelly_sand/gravelly_sand_ao_4k.jpg",
+    "size": 13100296,
+    "md5": "41238bb27b7c0413c806d34d494921ec",
+    "path": "assets/material-library/soil/gravelly_sand/gravelly_sand_ao_4k.jpg",
+    "relative": "soil/gravelly_sand/gravelly_sand_ao_4k.jpg"
+  },
+  {
+    "id": "gravelly_sand",
+    "channel": "Displacement",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/gravelly_sand/gravelly_sand_disp_4k.jpg",
+    "size": 3888104,
+    "md5": "c6f8f031087e3ea4d75d508a4d471fc1",
+    "path": "assets/material-library/soil/gravelly_sand/gravelly_sand_disp_4k.jpg",
+    "relative": "soil/gravelly_sand/gravelly_sand_disp_4k.jpg"
+  }
+]

@@ -1,0 +1,183 @@
+{
+  "date": "2026-10-18",
+  "scope": "Existing targeted checks; not a new full validation run.",
+  "synthetic_geometry_cases": 48,
+  "installed_checks": {
+    "variant": "installed",
+    "errors": [],
+    "views": [],
+    "defaults": {
+      "sleep": "30",
+      "resolution": 5
+    },
+    "coast5": {
+      "segments": 285,
+      "tested": 82,
+      "maxCurveError": 0.028723542112857103,
+      "maxEdge": 3.4576040364553884
+    },
+    "edges5": {
+      "land": {
+        "checks": 2028,
+        "maxGap": 0,
+        "worst": null
+      },
+      "water": {
+        "checks": 2298,
+        "maxGap": 0,
+        "worst": null
+      }
+    },
+    "motionDelta": 0.6527999999999967,
+    "light": {
+      "enabled": true,
+      "hasHit": true,
+      "target": [
+        6059.2938218933505,
+        20.086953964060314,
+        -9908.924843417004
+      ],
+      "radiusM": 28.39758846276801
+    },
+    "coast128": {
+      "segments": 189,
+      "tested": 76,
+      "maxCurveError": 0.028659153264015913,
+      "maxEdge": 3.9326099426945462
+    },
+    "edges128": {
+      "land": {
+        "checks": 2847,
+        "maxGap": 3.814697265625e-06,
+        "worst": {
+          "a": [
+            6171.5,
+            97.75,
+            -9775.5
+          ],
+          "b": [
+            6171.5,
+            54.06999969482422,
+            -9903.5
+          ],
+          "m": [
+            6171.5,
+            75.91000366210938,
+            -9839.5
+          ],
+          "time": 0,
+          "t": 0.5,
+          "distances": [
+            -266.1875,
+            -164.3125,
+            -214.3125
+          ]
+        }
+      },
+      "water": {
+        "checks": 3360,
+        "maxGap": 0,
+        "worst": null
+      }
+    },
+    "coastScale10": {
+      "segments": 189,
+      "tested": 76,
+      "maxCurveError": 0.028659153264015913,
+      "maxEdge": 3.9326099426945462
+    },
+    "idle": true
+  },
+  "wave_implementation_agreement": {
+    "cases": 192,
+    "maxError": 3.7058854935989594e-05,
+    "maxAmplitude": 0.9837931394577026
+  },
+  "idle_30_seconds": {
+    "start": 728,
+    "end": 5036,
+    "frozen": 5036,
+    "waterTime": 34.035568000001334,
+    "surfRebuilds": 7
+  },
+  "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti Laptop GPU (0x00002F58) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "startup_and_prewarm_seconds_single_run": 26.939,
+  "gpu_draw_measurements": [
+    {
+      "view": "regional",
+      "base_grid_m": 32,
+      "canvas": [
+        2000,
+        1125
+      ],
+      "draw": {
+        "draw": {
+          "mean": 0.6650000002235175,
+          "p95": 0.8000000007450581
+        },
+        "submit": {
+          "mean": 0.6600000001490116,
+          "p95": 0.8000000007450581
+        },
+        "gpu": {
+          "mean": 14.948881599999998,
+          "p95": 15.523936
+        },
+        "triangles": 8460764,
+        "calls": 63,
+        "glError": 0
+      }
+    },
+    {
+      "view": "land",
+      "base_grid_m": 16,
+      "canvas": [
+        2000,
+        1125
+      ],
+      "draw": {
+        "draw": {
+          "mean": 1.165000000037253,
+          "p95": 1.7000000029802322
+        },
+        "submit": {
+          "mean": 1.165000000037253,
+          "p95": 1.7000000029802322
+        },
+        "gpu": {
+          "mean": 26.829891200000002,
+          "p95": 26.965056
+        },
+        "triangles": 9087447,
+        "calls": 105,
+        "glError": 0
+      }
+    },
+    {
+      "view": "coast",
+      "base_grid_m": 5,
+      "canvas": [
+        2000,
+        1125
+      ],
+      "draw": {
+        "draw": {
+          "mean": 0.7900000000372529,
+          "p95": 1
+        },
+        "submit": {
+          "mean": 0.7900000000372529,
+          "p95": 1
+        },
+        "gpu": {
+          "mean": 5.0296704000000005,
+          "p95": 5.055776
+        },
+        "triangles": 5203758,
+        "calls": 52,
+        "glError": 0
+      }
+    }
+  ],
+  "limits": "GPU draw timing is not end-to-end FPS. Numerical agreement is not physical accuracy."
+}

@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!-- Document metadata and page styles. -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Noto Peninsula · Post-earthquake 1 m · COMP 5411</title>
+    <link rel="stylesheet" href="./src/styles.css">
+
+    <!-- Load ordinary scripts in dependency order; file pages use embedded images and HTTP uses same-origin files. -->
+    <!-- Third-party runtime. -->
+    <script src="./vendor/three-libraries.js" defer></script>
+    <!-- Post-event 1 m DEM manifest, including display levels sampled from native nodes. -->
+    <script src="./data/terrain-1m/manifest.js" defer></script>
+    <!-- Shared geometry, strata and materials; configuration precedes loaders and factories. -->
+    <script src="./src/model-volume.js" defer></script>
+    <script src="./data/strata-data.js" defer></script>
+    <script src="./data/material-texture-config.js" defer></script>
+    <script src="./src/material-textures.js" defer></script>
+    <script src="./src/rock-materials.js" defer></script>
+    <!-- Shared water textures, shoreline distance, water animation, sunlight and weather. -->
+    <script src="./src/water-materials.js" defer></script>
+    <script src="./data/shoreline-data.js" defer></script>
+    <script src="./src/water-motion.js" defer></script>
+    <script src="./src/environment.js" defer></script>
+    <script src="./src/scene-effects.js" defer></script>
+    <script src="./src/tile-geometry.js" defer></script>
+    <script src="./src/coastal-geometry.js" defer></script>
+    <!-- Real vegetation classification and shared instance models; ordinary scripts support offline file access. -->
+    <script src="./data/vegetation-data.js" defer></script>
+    <script src="./assets/vegetation/runtime/vegetation-models.js" defer></script>
+    <script src="./assets/vegetation/runtime/grass-ground.js" defer></script>
+    <script src="./src/ground-grass.js" defer></script>
+    <script src="./src/vegetation.js" defer></script>
+    <script src="./src/terrain-lod.js" defer></script>
+    <script src="./src/terrain.js" defer></script>
+  </head>
+
+  <body>
+    <!-- Three.js mounts the terrain canvas here. -->
+    <main id="viewport" aria-label="Interactive 3D terrain"></main>
+
+    <!-- Project title and authors. -->
+    <section class="panel">
+      <div class="eyebrow">COMP 5411 Course Project</div>
+      <h1>Noto Peninsula</h1>
+      <p class="model-extent">37.33–37.54° N · 137.00–137.38° E</p>
+      <p class="author">TAN Jiming, jiming.tan@connect.ust.hk</p>
+      <p class="author">LEE Hyunjin, hleebg@connect.ust.hk</p>
+    </section>
+
+    <section class="time-control" aria-label="Time of day">
+      <div class="time-heading">
+        <label for="scene-time">Time · GMT+9</label>
+        <output id="scene-time-value" for="scene-time">12:00</output>
+      </div>
+      <input id="scene-time" type="range" min="0" max="1439" step="1" value="720" aria-valuetext="12:00 GMT+9">
+      <div class="time-ticks" aria-hidden="true"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
+    </section>
+
+    <!-- Vertical exaggeration: 1:k multiplies height by k without changing horizontal coordinates. -->
+    <div class="scale-control">
+      <div class="scale-heading">
+        <label for="vertical-scale">Vertical scale</label>
+        <output id="scale-value" for="vertical-scale">1:5</output>
+      </div>
+      <input
+        id="vertical-scale"
+        type="range"
+        min="1"
+        max="10"
+        step="0.1"
+        value="5"
+        aria-valuetext="5 times vertical exaggeration"
+      >
+      <div id="grid-resolution" aria-live="polite">Source 1 m · Loading grid…</div>
+    </div>
+
+    <!-- Right-side navigation controls; zoom is enabled after terrain becomes ready. -->
+    <nav class="view-tools" aria-label="View controls">
+      <button type="button" data-zoom="1" aria-label="Zoom in" title="Zoom in" disabled>+</button>
+      <button type="button" data-zoom="-1" aria-label="Zoom out" title="Zoom out" disabled>−</button>
+      <button type="button" id="flashlight-button" aria-label="Toggle flashlight" aria-pressed="false" title="Flashlight · move the pointer to aim" disabled>
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 10 5 5-6 6-5-5zM9 10l1-5 9 9-5 1M13 3l2-2M18 6l3-1M21 10h2"/><path d="m7 15 2 2"/></svg>
+      </button>
+      <button type="button" id="settings-button" aria-label="Terrain settings" aria-haspopup="dialog" aria-controls="terrain-settings" title="Terrain settings">⚙</button>
+      <button type="button" id="help-button" aria-label="Keyboard shortcuts" aria-haspopup="dialog" aria-controls="controls-help" title="Keyboard shortcuts">?</button>
+    </nav>
+
+    <!-- Native dialogs manage focus and Escape; opening help pauses terrain keyboard navigation. -->
+    <dialog id="controls-help" aria-labelledby="help-title">
+      <div class="help-heading">
+        <h2 id="help-title">Keyboard shortcuts</h2>
+        <button type="button" id="help-close" aria-label="Close help" title="Close">×</button>
+      </div>
+      <p>Hold a key for continuous movement.</p>
+      <table class="shortcut-table">
+        <thead><tr><th scope="col">Keys</th><th scope="col">Action</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>W</kbd> / <kbd>↑</kbd> / <kbd>Page Up</kbd></td><td>Move forward</td></tr>
+          <tr><td><kbd>S</kbd> / <kbd>↓</kbd> / <kbd>Page Down</kbd></td><td>Move backward</td></tr>
+          <tr><td><kbd>A</kbd> / <kbd>←</kbd></td><td>Move left</td></tr>
+          <tr><td><kbd>D</kbd> / <kbd>→</kbd></td><td>Move right</td></tr>
+          <tr><td><kbd>Q</kbd> / <kbd>E</kbd></td><td>Turn left / right</td></tr>
+          <tr><td><kbd>R</kbd> / <kbd>F</kbd></td><td>Move up / down</td></tr>
+        </tbody>
+      </table>
+      <p class="mouse-help">Drag to rotate · Right drag to pan · Scroll to zoom</p>
+      <p class="mouse-help">Press <kbd>Esc</kbd> or × to close.</p>
+    </dialog>
+
+    <!-- Highest terrain detail; automatic LOD may use a coarser grid but cannot exceed this limit. -->
+    <dialog id="terrain-settings" aria-labelledby="settings-title">
+      <div class="help-heading">
+        <h2 id="settings-title">Terrain settings</h2>
+        <button type="button" id="settings-close" aria-label="Close settings" title="Close">×</button>
+      </div>
+      <fieldset class="environment-settings">
+        <legend>Date and weather</legend>
+        <div class="date-time-fields">
+          <div>
+            <label for="scene-date">Date</label>
+            <input id="scene-date" type="date" min="2000-01-01" max="2100-12-31" required>
+          </div>
+        </div>
+        <label for="scene-weather">Weather</label>
+        <select id="scene-weather">
+          <option value="clear">Clear</option>
+          <option value="cloudy">Cloudy</option>
+          <option value="rainy">Rainy</option>
+        </select>
+        <p id="sun-position" aria-live="polite"></p>
+      </fieldset>
+      <label for="maximum-resolution">Maximum terrain resolution</label>
+      <select id="maximum-resolution" aria-describedby="resolution-description" disabled>
+        <option>Loading…</option>
+      </select>
+      <p id="resolution-description">Default: 5 m. Select 1 m for finer detail. Nearby terrain receives detail first; distant patches use coarser grids. Performance limits may reduce detail locally.</p>
+      <label for="window-resolution">Window render resolution</label>
+      <select id="window-resolution" disabled>
+        <option value="auto" selected>Auto (dynamic)</option>
+        <option value="0.5">50%</option>
+        <option value="0.75">75%</option>
+        <option value="1">100%</option>
+        <option value="1.5">150%</option>
+        <option value="2">200%</option>
+      </select>
+      <p id="window-resolution-current" aria-live="polite"></p>
+      <label for="vegetation-detail">3D vegetation detail</label>
+      <select id="vegetation-detail" disabled>
+        <option value="auto" selected>Auto (dynamic)</option>
+        <option value="high">High</option>
+        <option value="medium">Medium</option>
+        <option value="low">Low</option>
+        <option value="off">Off</option>
+      </select>
+      <p>Plant positions and density stay fixed. Distant plants use simpler models, then fade out; ground cover remains visible.</p>
+      <label for="idle-sleep-delay">Sleep after inactivity</label>
+      <select id="idle-sleep-delay" aria-describedby="sleep-description" disabled>
+        <option value="0">Immediately</option>
+        <option value="15">15 seconds</option>
+        <option value="30" selected>30 seconds</option>
+        <option value="60">1 minute</option>
+        <option value="300">5 minutes</option>
+        <option value="never">Never</option>
+      </select>
+      <p id="sleep-description">Waves, foam, rain and foliage animate until sleep, then freeze. Interact to wake. Choose Never for continuous animation.</p>
+    </dialog>
+
+    <!-- Hidden after loading; displayed again when rendering fails. -->
+    <div id="status" role="status">Loading terrain…</div>
+  </body>
+</html>

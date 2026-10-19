@@ -1,0 +1,14 @@
+# Large runtime and original inputs are installed from the pinned Release.
+/data/
+/source-data/
+/noto_terrain_materials_package/
+/assets/material-library/*/
+/assets/vegetation/runtime/
+/assets/vegetation/source/
+/gis/vegetation/*
+!/gis/vegetation/README.md
+/.asset-cache/
+/rebuilt/
+__pycache__/
+*.py[cod]
+*.log

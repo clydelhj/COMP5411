@@ -1,0 +1,302 @@
+[
+  {
+    "id": "rock_boulder_dry",
+    "name": "Rock Boulder Dry",
+    "category": "rock",
+    "usage": "Dry weathered rock",
+    "source": "https://polyhaven.com/a/rock_boulder_dry",
+    "license": "CC0",
+    "authors": "Dimitrios Savva, Rico Cilliers",
+    "folder": "rock/rock_boulder_dry"
+  },
+  {
+    "id": "sandstone_cracks",
+    "name": "Sandstone Cracks",
+    "category": "rock",
+    "usage": "Sandstone grains and fine cracks",
+    "source": "https://polyhaven.com/a/sandstone_cracks",
+    "license": "CC0",
+    "authors": "Rob Tuytel",
+    "folder": "rock/sandstone_cracks"
+  },
+  {
+    "id": "dark_rock",
+    "name": "Dark Rock",
+    "category": "rock",
+    "usage": "Dark-rock visual proxy",
+    "source": "https://polyhaven.com/a/dark_rock",
+    "license": "CC0",
+    "authors": "Amal Kumar",
+    "folder": "rock/dark_rock"
+  },
+  {
+    "id": "brown_mud_03",
+    "name": "Brown Mud 03",
+    "category": "soil",
+    "usage": "Brown topsoil and mud",
+    "source": "https://polyhaven.com/a/brown_mud_03",
+    "license": "CC0",
+    "authors": "Rob Tuytel",
+    "folder": "soil/brown_mud_03"
+  },
+  {
+    "id": "sandy_gravel",
+    "name": "Sandy Gravel",
+    "category": "soil",
+    "usage": "Mixed sand/gravel ground",
+    "source": "https://polyhaven.com/a/sandy_gravel",
+    "license": "CC0",
+    "authors": "Charlotte Baglioni",
+    "folder": "soil/sandy_gravel"
+  },
+  {
+    "id": "coast_sand_01",
+    "name": "Coast Sand 01",
+    "category": "coast",
+    "usage": "Coastal sand",
+    "source": "https://polyhaven.com/a/coast_sand_01",
+    "license": "CC0",
+    "authors": "Rob Tuytel",
+    "folder": "coast/coast_sand_01"
+  },
+  {
+    "id": "grass_ground",
+    "name": "Grass Ground",
+    "category": "grass",
+    "usage": "Grass ground",
+    "source": "https://polyhaven.com/a/grass_ground",
+    "license": "CC0",
+    "authors": "Charlotte Baglioni",
+    "folder": "grass/grass_ground"
+  },
+  {
+    "id": "sparse_grass",
+    "name": "Sparse Grass",
+    "category": "grass",
+    "usage": "Sparse grass and bare-soil transition",
+    "source": "https://polyhaven.com/a/sparse_grass",
+    "license": "CC0",
+    "authors": "Amal Kumar",
+    "folder": "grass/sparse_grass"
+  },
+  {
+    "id": "aerial_grass_rock",
+    "name": "Aerial Grass Rock",
+    "category": "grass",
+    "usage": "Grassy rocky slope",
+    "source": "https://polyhaven.com/a/aerial_grass_rock",
+    "license": "CC0",
+    "authors": "Rob Tuytel",
+    "folder": "grass/aerial_grass_rock"
+  },
+  {
+    "id": "forrest_ground_01",
+    "name": "Forest Ground 01",
+    "category": "forest",
+    "usage": "Forest litter and dry grass",
+    "source": "https://polyhaven.com/a/forrest_ground_01",
+    "license": "CC0",
+    "authors": "Rob Tuytel",
+    "folder": "forest/forrest_ground_01"
+  },
+  {
+    "id": "leaves_forest_ground",
+    "name": "Leaves Forest Ground",
+    "category": "forest",
+    "usage": "Forest leaf litter",
+    "source": "https://polyhaven.com/a/leaves_forest_ground",
+    "license": "CC0",
+    "authors": "Dario Barresi, Dimitrios Savva",
+    "folder": "forest/leaves_forest_ground"
+  },
+  {
+    "id": "japanese_cedar_bark",
+    "name": "Japanese Cedar Bark",
+    "category": "bark",
+    "usage": "Japanese cedar bark visual proxy",
+    "source": "https://polyhaven.com/a/japanese_cedar_bark",
+    "license": "CC0",
+    "authors": "Charlotte Baglioni",
+    "folder": "bark/japanese_cedar_bark"
+  },
+  {
+    "id": "pine_bark",
+    "name": "Pine Bark",
+    "category": "bark",
+    "usage": "Pine bark visual proxy",
+    "source": "https://polyhaven.com/a/pine_bark",
+    "license": "CC0",
+    "authors": "Dimitrios Savva",
+    "folder": "bark/pine_bark"
+  },
+  {
+    "id": "LeafSet001",
+    "name": "Leaf Set 001",
+    "category": "foliage",
+    "usage": "Leaf-card atlas with an opacity mask",
+    "source": "https://ambientcg.com/view?id=LeafSet001",
+    "license": "CC0",
+    "authors": "ambientCG",
+    "folder": "foliage/LeafSet001"
+  },
+  {
+    "id": "rock_01",
+    "name": "Rock 01",
+    "category": "rock",
+    "usage": "Smooth fine-grained gray rock; mudstone proxy",
+    "source": "https://polyhaven.com/a/rock_01",
+    "license": "CC0",
+    "authors": "Rob Tuytel",
+    "folder": "rock/rock_01"
+  },
+  {
+    "id": "rock_05",
+    "name": "Rock 05",
+    "category": "rock",
+    "usage": "Pitted weathered rock; tuff proxy",
+    "source": "https://polyhaven.com/a/rock_05",
+    "license": "CC0",
+    "authors": "Rob Tuytel",
+    "folder": "rock/rock_05"
+  },
+  {
+    "id": "rock_06",
+    "name": "Rock 06",
+    "category": "rock",
+    "usage": "Banded rock; sandstone/mudstone proxy",
+    "source": "https://polyhaven.com/a/rock_06",
+    "license": "CC0",
+    "authors": "Rob Tuytel",
+    "folder": "rock/rock_06"
+  },
+  {
+    "id": "rock_08",
+    "name": "Rock 08",
+    "category": "rock",
+    "usage": "Rough light blocky rock; volcaniclastic proxy",
+    "source": "https://polyhaven.com/a/rock_08",
+    "license": "CC0",
+    "authors": "Rob Tuytel",
+    "folder": "rock/rock_08"
+  },
+  {
+    "id": "rock_2",
+    "name": "Rock 2",
+    "category": "rock",
+    "usage": "Coarse sandy rock; tuffaceous-sandstone proxy",
+    "source": "https://polyhaven.com/a/rock_2",
+    "license": "CC0",
+    "authors": "Rob Tuytel",
+    "folder": "rock/rock_2"
+  },
+  {
+    "id": "rock_surface",
+    "name": "Rock Surface",
+    "category": "rock",
+    "usage": "Eroded granular rock; crystalline-rock proxy",
+    "source": "https://polyhaven.com/a/rock_surface",
+    "license": "CC0",
+    "authors": "Amal Kumar",
+    "folder": "rock/rock_surface"
+  },
+  {
+    "id": "dry_riverbed_rock",
+    "name": "Dry Riverbed Rock",
+    "category": "rock",
+    "usage": "Fine striations and cracks; siliceous-mudstone proxy",
+    "source": "https://polyhaven.com/a/dry_riverbed_rock",
+    "license": "CC0",
+    "authors": "Amal Kumar",
+    "folder": "rock/dry_riverbed_rock"
+  },
+  {
+    "id": "dark_rock_02",
+    "name": "Dark Rock 02",
+    "category": "rock",
+    "usage": "Dark flaky layered rock; carbonaceous-shale proxy",
+    "source": "https://polyhaven.com/a/dark_rock_02",
+    "license": "CC0",
+    "authors": "Amal Kumar",
+    "folder": "rock/dark_rock_02"
+  },
+  {
+    "id": "cliff_side",
+    "name": "Cliff Side",
+    "category": "rock",
+    "usage": "Sedimentary cliff; layered-rock proxy",
+    "source": "https://polyhaven.com/a/cliff_side",
+    "license": "CC0",
+    "authors": "James Ray Cock, Jenelle van Heerden, Dario Barresi",
+    "folder": "rock/cliff_side"
+  },
+  {
+    "id": "rock_boulder_cracked",
+    "name": "Rock Boulder Cracked",
+    "category": "rock",
+    "usage": "Large fractured blocks; tuff-breccia proxy",
+    "source": "https://polyhaven.com/a/rock_boulder_cracked",
+    "license": "CC0",
+    "authors": "Dario Barresi, Dimitrios Savva",
+    "folder": "rock/rock_boulder_cracked"
+  },
+  {
+    "id": "rock_face_03",
+    "name": "Rock Face 03",
+    "category": "rock",
+    "usage": "Eroded broken rock; weathered-mudstone proxy",
+    "source": "https://polyhaven.com/a/rock_face_03",
+    "license": "CC0",
+    "authors": "Dario Barresi, Rico Cilliers",
+    "folder": "rock/rock_face_03"
+  },
+  {
+    "id": "brown_mud_dry",
+    "name": "Brown Mud Dry",
+    "category": "soil",
+    "usage": "Dry crumbly soil",
+    "source": "https://polyhaven.com/a/brown_mud_dry",
+    "license": "CC0",
+    "authors": "Rob Tuytel",
+    "folder": "soil/brown_mud_dry"
+  },
+  {
+    "id": "brown_mud_rocks_01",
+    "name": "Brown Mud Rocks 01",
+    "category": "soil",
+    "usage": "Stony clay and mixed colluvial-soil appearance",
+    "source": "https://polyhaven.com/a/brown_mud_rocks_01",
+    "license": "CC0",
+    "authors": "Rob Tuytel",
+    "folder": "soil/brown_mud_rocks_01"
+  },
+  {
+    "id": "brown_mud",
+    "name": "Brown Mud",
+    "category": "soil",
+    "usage": "Bare topsoil with plant debris",
+    "source": "https://polyhaven.com/a/brown_mud",
+    "license": "CC0",
+    "authors": "Rob Tuytel",
+    "folder": "soil/brown_mud"
+  },
+  {
+    "id": "dense_sand",
+    "name": "Dense Sand",
+    "category": "soil",
+    "usage": "Dense sand and fine-soil appearance",
+    "source": "https://polyhaven.com/a/dense_sand",
+    "license": "CC0",
+    "authors": "Dimitrios Savva",
+    "folder": "soil/dense_sand"
+  },
+  {
+    "id": "gravelly_sand",
+    "name": "Gravelly Sand",
+    "category": "soil",
+    "usage": "Gravelly sand and sandy-soil appearance",
+    "source": "https://polyhaven.com/a/gravelly_sand",
+    "license": "CC0",
+    "authors": "Dario Barresi",
+    "folder": "soil/gravelly_sand"
+  }
+]
