@@ -1,0 +1,81 @@
+Noto Peninsula Progress Video Script
+COMP5411 | Group 12 | LEE Hyunjin, TAN Jiming | 20 October 2026
+
+Use: Read the narration only. Screen directions are not spoken.
+Target: 3:50 total, with a 70-second recap and 115 seconds of actual demo footage.
+Rehearse with a timer and check the entire exported video; planned timings are not measured duration.
+
+COURSE REQUIREMENTS
+Submit one progress.mp4 per group to the Canvas assignment named Project progress video.
+Deadline: Sunday, 25 October 2026, 23:59.
+Hard duration limit: 3:30 to 4:00. Begin with a 60-90 second project recap.
+Prioritize the current demo and explain completed and planned programming work.
+Record MP4 at Full HD 1920x1080 with the speaker's face in a corner during narration.
+Do not artificially accelerate voice narration with software.
+Keep the project title, group ID, and member names on the opening slide for at least 3 seconds.
+
+1. Project Progress
+0:00 to 0:12 | 12 s | Slide 1
+
+Hello, we are Group Twelve. Our project is Noto Peninsula, an interactive three-dimensional landscape built with Three.js. This is our current progress.
+
+Screen direction: Show the cover for twelve seconds. Keep the project title, group number and both names visible. Narrate with face camera enabled.
+
+2. Project Scope and Data
+0:12 to 0:42 | 30 s | Slide 2
+
+We aim to make a real landscape explorable in a web browser, while showing how geometry, materials, and lighting work together. The scene covers roughly thirty-three by twenty-three kilometres. It combines a one-metre elevation dataset, regional geological categories, and a twenty-twenty-four vegetation map. The geological field and individual plants are visualization approximations, rather than detailed subsurface or tree surveys.
+
+Screen direction: Explain the goal and source scales. Point to the contour map and current viewer image. Do not describe the geological field as one-metre survey data.
+
+3. Current Graphics Pipeline
+0:42 to 1:10 | 28 s | Slide 3
+
+Our current pipeline converts elevation samples into tiled triangle meshes, then combines them with geological shaders and vegetation instances. Three.js provides the rendering infrastructure. Project-specific modules handle local terrain detail, material blending, coastal animation, and interaction. The main features from our proposal are now integrated: textured terrain, moving water, sunlight, shadows, and adaptive detail. Next, I will demonstrate their current behavior.
+
+Screen direction: Finish the opening recap at 1:10, then switch from slides to the running viewer. Slides 4 through 6 contain real stills for orientation and backup, not a substitute for the live demo.
+
+4. Terrain Geometry and Materials
+1:10 to 1:50 | 40 s | Slide 4
+
+Here is the current viewer. I can orbit, pan, and move from the regional view toward the surface. Nearby patches receive finer geometry, while distant patches remain coarser. Adjacent levels share compatible boundaries, and the previous coverage stays visible while new patches load. The surface uses category-based PBR materials with triplanar mapping and blended transitions. Randomized texture sampling, mipmaps, and anisotropic filtering reduce repetition and moire at shallow viewing angles. The five-metre setting is a display limit, not the source resolution.
+
+Screen direction: Record 40 seconds of the actual viewer: regional orbit, approach a textured slope, then a small low-angle turn. Show Near grid changing with distance. Keep the finest permitted spacing at 5 m; avoid waiting for 1 m tiles during the recording.
+
+5. Vegetation and Ground Contact
+1:50 to 2:20 | 30 s | Slide 5
+
+Vegetation follows the real land-cover classes, using fixed, seeded locations. Instancing shares geometry across many plants, and distance changes their representation without randomly thinning the forest. Tree variants differ in crown shape and size. Their trunk origins are aligned before placement, so roots follow the displayed terrain. I can also control grass and trees independently, while preserving their positions when they are shown again.
+
+Screen direction: Record a prepared forest/grass view. Move close enough to show ground contact and blades. Briefly toggle Show trees off/on, then Show grass off/on. Close settings between demonstrations so animation can resume.
+
+6. Coastal Water and Lighting
+2:20 to 3:05 | 45 s | Slide 6
+
+At the coast, Gerstner waves displace the water geometry, with normals that match the animated surface. A shared shoreline-distance field controls wave attenuation, breaking crests, foam, and wetness. Land and water use the same display contour to maintain contact across terrain detail levels. I can change the time to alter sunlight and shadows, switch to rainy weather, and use the pointer flashlight at night. Water, rain, spray, and foliage share one animation clock. These are controllable visual effects, not a fluid or weather simulation.
+
+Screen direction: Record 18 seconds of moving coast water, about 8 seconds changing time toward sunset, about 8 seconds of rain, then 11 seconds of the prepared night/flashlight view. Cuts between prepared views are acceptable; do not speed up narration. Keep face camera visible.
+
+7. Implementation and Checks
+3:05 to 3:25 | 20 s | Slide 7
+
+The code separates geometry, material shaders, plants, and environment modules. Targeted checks cover mixed-detail seams, plant attachment, and idle rendering. One scheduler prevents repeated placement during animation-only frames. Wider device and long-session testing still remains.
+
+Screen direction: Return to slide 7. Use the short source excerpt to explain that unchanged vegetation does not rerun placement. Distinguish completed targeted checks from remaining broad performance acceptance.
+
+8. Remaining Work
+3:25 to 3:50 | 25 s | Slide 8
+
+Next, we will test longer navigation routes, missing-input fallback, and memory behavior across devices. We will refine vegetation transitions, shorelines, and difficult lighting conditions. We will also prepare the final demonstration and document implementation, AI assistance, and external libraries. Our next focus is validation and visual refinement. Thank you.
+
+Screen direction: Show the remaining-work table and finish around 3:50. Check the exported video duration rather than relying on this planned timing.
+
+RECORDING PREPARATION
+Suggested operation: Warm up the planned views before recording. Set Sleep to Never for recording, close the settings dialog to resume animation, and restore the 30-second sleep setting afterwards.
+Slides 4-6 provide still-image cues and backup; record the actual running demo for the main video section.
+Cuts between prepared shots are acceptable. Keep narration at natural speed and check the exported runtime. If needed, revise the script or re-record.
+
+OFFICIAL SOURCES
+Progress assignment: https://course.cse.ust.hk/comp5411/#assignment-A3
+Recording details: https://course.cse.ust.hk/comp5411/#assignment-A1
+Canvas course: https://canvas.ust.hk/courses/72137

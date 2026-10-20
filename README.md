@@ -73,6 +73,8 @@ The renderer requests `powerPreference: "high-performance"`. The browser, operat
 
 See [CODE_GUIDE.md](CODE_GUIDE.md) for the current implementation, [HANDOFF.md](HANDOFF.md) for the maintenance baseline and [REBUILD.md](REBUILD.md) for offline generators. The [progress report](docs/COMP5411_Progress_Report_EN.md) is dated October 18, 2026; its measured results and implementation snapshot precede the current October 20 baseline.
 
+The [progress presentation](docs/COMP5411_Project_Progress.pptx) and [timed narration](docs/COMP5411_Progress_Video_Script_EN.txt) describe the October 20 viewer. The recording plan targets 3:50, including a 70-second recap and 115 seconds of actual application footage. Slides 4–6 provide still-image cues; demonstrate animation and interaction in the running viewer when recording the video.
+
 ## Data interpretation and licensing
 
 Local coordinates use metres: X east, Y up and Z south. Mean sea level is 0 m and the closed model base is −100 m. The base is a visualization boundary, not measured bathymetry. Vertical exaggeration changes display height without modifying the source DEM.
