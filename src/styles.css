@@ -311,6 +311,39 @@ kbd {
   outline-offset: 2px;
 }
 
+.vegetation-visibility {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  margin: 20px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.vegetation-visibility legend {
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: #52696f;
+}
+
+#terrain-settings .vegetation-visibility label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.vegetation-visibility input {
+  margin: 0;
+  accent-color: #426f76;
+}
+
+.vegetation-visibility input:focus-visible {
+  outline: 2px solid #426f76;
+  outline-offset: 3px;
+}
+
 
 /* Use the existing scrollable settings dialog for environment controls without resizing the title panel. */
 .environment-settings {

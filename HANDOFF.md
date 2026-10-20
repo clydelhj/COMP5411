@@ -1,6 +1,6 @@
 # Maintenance handoff
 
-Baseline date: October 19, 2026. Project: **Noto Peninsula: An Interactive 3D Landscape**, COMP5411 Group 12, LEE Hyunjin and TAN Jiming.
+Baseline date: October 20, 2026. Project: **Noto Peninsula: An Interactive 3D Landscape**, COMP5411 Group 12, LEE Hyunjin and TAN Jiming.
 
 ## Entry and documentation
 
@@ -19,7 +19,7 @@ Keep runtime paths relative to the root. Asset distribution instructions govern 
 - Local distance-adaptive terrain patches, asynchronous loading, retained coverage, mixed-detail stitching, bounded caches and camera safety.
 - Continuous coastline clipping independent of display spacing, closed exposed walls and a −100 m model bottom.
 - Geological PBR categories with triplanar projection, continuous boundary blending and randomized texture sampling.
-- Real-classification-driven representative plants, deterministic locations and tree-shape variants; soil grass texture and nearby instanced blades.
+- Real-classification-driven representative plants, deterministic locations and tree-shape variants; soil grass texture and nearby instanced blades, with independent grass/tree visibility settings.
 - Geometric waves, nearshore crests, foam/wetness and GPU spray with a shared clock.
 - GMT+9 date/time, clear/cloudy/rainy presets, day/night lights, local shadows, GPU rain and pointer flashlight.
 - Performance-based terrain/canvas/plant budgets and default 30-second idle animation followed by sleep.
@@ -29,6 +29,10 @@ Keep runtime paths relative to the root. Asset distribution instructions govern 
 The English interface shows title, one-line two-decimal latitude/longitude bounds and one author per line. The time slider is at the upper right and the vertical-scale slider is at the bottom. Vertical exaggeration defaults to 1:5 and ranges from 1:1 to 1:10. It changes display height, not source elevation or natural plant dimensions. Model coordinates are metres: X east, Y up, Z south.
 
 The terrain setting limits the finest permitted spacing, default 5 m, with 1–8 m and 16/32/64/128 m choices. It is not a resolution lock. `Near grid` reports the finest visible land patch. Window render resolution and plant detail default to Auto; their manual modes remain under user control. Settings are session-only.
+
+`Show grass` and `Show trees` both default to enabled. Grass visibility includes ground-cover shading, blades and herb/fern models; tree visibility applies to every mesh/card detail level. Vegetation detail Off hides all 3D plants without overriding the ground-cover visibility setting.
+
+Forest broadleaf trees use 12–22 m heights and conifers 18–30 m; orchard and other low woody forms use 4–8 m and 6–11 m. Preserve deterministic placement and crown variation. Each shape aligns all mesh levels to the root derived from the bottom 0.1 m of its near-detail trunk, then bakes its cards from that alignment. Root placement uses the active displayed surface with 0.12 m embedding. Do not attach trees by the crown-centered source origin or multiply natural plant dimensions by terrain exaggeration.
 
 `terrain-lod.js` selects complete, nonoverlapping nested display patches with up to 128 cells per edge, using a doubling sequence from the selected detail limit. Near terrain receives priority; far terrain can be coarser. Selection has split/merge hysteresis, a view buffer and a camera neighborhood. Keep the previous complete set visible until the replacement and its seam constraints are ready. Input tile levels and display patch levels have distinct roles; do not combine nonaligned source-file rectangles as display leaves.
 
@@ -58,6 +62,6 @@ Asset terms differ: CC0 material/model assets do not make the complete project C
 | Week 9: adaptive detail | Local LOD, caches, GPU/frame feedback and sleep | Sustained performance/memory evaluation |
 | Week 10: final integration | Targeted integration checks available | Final demo, report and comprehensive acceptance |
 
-October 19 targeted checks covered all 12 detail limits for selection coverage, overlap, budget and fallback; representative mixed-detail land/water seams; five small camera turns retaining 5 m without new builds; grass surface attachment; idle wake-up feedback; sleep; and file/HTTP entries. October 18 scene checks covered geometric coast contact, CPU/GPU wave agreement, time/weather, pointer light and the default 30-second freeze. These checks do not guarantee fixed frame rate or finest detail in every view on every device.
+October 20 targeted checks covered tree attachment at representative detail limits and 1/5/10 height scales, grass/tree visibility combinations, sleep and file/HTTP entries. October 19 checks covered all 12 detail limits for selection coverage, overlap, budget and fallback; representative mixed-detail land/water seams; five small camera turns retaining 5 m without new builds; grass surface attachment; and idle wake-up feedback. October 18 scene checks covered geometric coast contact, CPU/GPU wave agreement, time/weather, pointer light and the default 30-second freeze. These checks do not guarantee fixed frame rate or finest detail in every view on every device.
 
 An unavailable fine input remains in the terrain manifest. Do not restore or read quarantined content or change security settings as part of ordinary maintenance. Affected display patches must use available coarser source data. Full fine-source coverage, long-duration performance and final submission materials remain open.

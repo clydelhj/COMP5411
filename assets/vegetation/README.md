@@ -23,7 +23,11 @@ Branches use weighted normal/UV mesh simplification. Leaves use stable whole-com
 
 Each tree has four display shapes: source, narrow crown, broad crown and offset crown. Horizontal deformation depends on normalized height; UVs/indices and root/Y positions remain unchanged, while normals use the inverse-transpose Jacobian. These are variants of one source tree, not four scanned species. Deformed `relativeError` is null; `sourceLodRelativeError` describes the source LOD only.
 
-Side and overhead cards are baked per shape into shared WebGL render targets at startup. Stable spatial seeds control height, heading and subtle color variation. Positions use a 12 m grid for every distance tier; detail changes without random thinning. Plants fade at 1200-1500 m and stop drawing beyond 1500 m. Auto/high/medium/low/off controls 3D geometry; ground cover is independent.
+All tree shapes use a trunk-based root origin. The near-detail trunk supplies the minimum Y and the mean X/Z of vertices in its bottom 0.1 m band. The same translation applies to all materials and mesh detail levels; side and overhead cards are then baked from these aligned prototypes into shared WebGL render targets. At placement time, roots follow the displayed terrain and embed by 0.12 m, while original plant locations stay fixed.
+
+Stable spatial seeds control height, crown width, heading and subtle color variation. Forest broadleaf trees are 12–22 m tall, conifers 18–30 m, orchard trees 4–8 m and other low woody forms 6–11 m. Natural dimensions stay independent of terrain exaggeration. Positions use a 12 m grid for every distance tier; detail changes without random thinning. Plants fade at 1200-1500 m and stop drawing beyond 1500 m.
+
+`Show grass` and `Show trees` are independent, default-enabled settings. Grass visibility controls ground-cover shading, instanced blades and herb/fern models. Tree visibility controls all near/middle meshes and distant cards. Auto/high/medium/low/off controls 3D geometry; Off hides all 3D plants while ground-cover shading follows `Show grass`.
 
 Nearby foliage/herbs have subtle wind motion. Idle frames advance only the wind clock, not placement. Immediate/15 s/30 s/1 min/5 min/Never sleep settings apply; modal and hidden-page states pause the current pose. Resume steps are bounded, distant cards stay static, and no visible animated plants means no independent wind draw loop.
 

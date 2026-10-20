@@ -727,11 +727,12 @@
         shader.fragmentShader = shader.fragmentShader.replace('void main() {', 'uniform sampler2D uNotoGroundCover;\nvoid main() {');
       }
       if (mode === 0 && shared.grass) {
+        shader.uniforms.uGrassVisibility = shared.grassVisibility ?? { value: 1 };
         shader.uniforms.uGrassMask = { value: shared.grass.mask };
         shader.uniforms.uGrassColor = { value: shared.grass.color };
         shader.uniforms.uGrassNormal = { value: shared.grass.normal };
         shader.fragmentShader = shader.fragmentShader.replace('void main() {',
-          'uniform sampler2D uGrassMask;\nuniform sampler2D uGrassColor;\nuniform sampler2D uGrassNormal;\nvoid main() {');
+          'uniform float uGrassVisibility;\nuniform sampler2D uGrassMask;\nuniform sampler2D uGrassColor;\nuniform sampler2D uGrassNormal;\nvoid main() {');
       }
       shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>\n${VERTEX_DECLARATIONS}`);
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\n  vNotoObjectPosition = position;\n  vNotoObjectNormal = normalize( normal );\n  vNotoViewBasisX = normalMatrix * vec3( 1.0, 0.0, 0.0 );\n  vNotoViewBasisY = normalMatrix * vec3( 0.0, 1.0, 0.0 );\n  vNotoViewBasisZ = normalMatrix * vec3( 0.0, 0.0, 1.0 );`);
@@ -760,10 +761,10 @@
           vec3 faceNormal = normalize(vNotoObjectNormal);
           // Fade cover across original slopes of 35 to 60 degrees; vertical exaggeration does not change rock-exposure rules.
           float slopeCoverage = smoothstep(0.5, 0.819152, abs(faceNormal.y));
-          diffuseColor.rgb = mix(diffuseColor.rgb, cover.rgb * grain * clamp(dot(notoSurfaceColor,vec3(0.299,0.587,0.114))*2.0,0.65,1.25), cover.a * slopeCoverage);
+          diffuseColor.rgb = mix(diffuseColor.rgb, cover.rgb * grain * clamp(dot(notoSurfaceColor,vec3(0.299,0.587,0.114))*2.0,0.65,1.25), cover.a * slopeCoverage ${shared.grass ? '* uGrassVisibility' : ''});
           ${shared.grass ? `
             // Grass covers only land tops; explicit gradients and mipmaps stabilize minification at grazing views.
-            float grassCoverage = texture2D(uGrassMask, coverUV).r * slopeCoverage
+            float grassCoverage = uGrassVisibility * texture2D(uGrassMask, coverUV).r * slopeCoverage
               * smoothstep(1.5, 3.0, vNotoObjectPosition.y);
             if (grassCoverage > 0.001) {
             vec2 grassUV = vNotoObjectPosition.xz / 3.5;

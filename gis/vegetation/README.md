@@ -20,15 +20,17 @@ The publisher's recommended citation is retained in `source/README_2024JPN_v26.0
 
 | Source class | Representation | Interpretation |
 | --- | --- | --- |
-| 18/19 deciduous broadleaf, 21 evergreen broadleaf | Broadleaf instances | tree_small_02 is Burkea africana, used as a generic form rather than a native Noto species |
-| 20, 22-27 conifers, including cedar/cypress/pine | Conifer instances | fir_tree_01 tree A is a generic proxy, not a verified model of each mapped species |
-| 8/9 orchards | Short broadleaf trees | Display heights 3-6 m; no measured varieties or planting rows |
-| 28 bamboo and other woody categories | Short generic woody instances | Coverage follows the real class; current geometry is not an exact bamboo model |
+| 18/19 deciduous broadleaf, 21 evergreen broadleaf | Broadleaf instances, 12–22 m tall | tree_small_02 is Burkea africana, used as a generic form rather than a native Noto species |
+| 20, 22-27 conifers, including cedar/cypress/pine | Conifer instances, 18–30 m tall | fir_tree_01 tree A is a generic proxy, not a verified model of each mapped species |
+| 8/9 orchards | Short broadleaf trees, 4–8 m tall | Illustrative heights; no measured varieties or planting rows |
+| 28 bamboo and other woody categories | Short generic woody instances, 6–11 m tall | Coverage follows the real class; current geometry is not an exact bamboo model |
 | 5/6/7/10, 12-17 crops, grassland and wetland herbs | Ground cover and nearby grass | Five grass variants; no claim about particular crop or wetland species |
 | Nearby forest understory | Fern instances | Four visual variants; the source map has no separate fern survey layer |
 | 0/1/2/4/11/30 missing, water, built-up, solar, greenhouse, reef/tidal-flat | No plants or vegetation tint | Existing rock/soil/water remains visible; buildings are not modeled |
 | 3 bare ground | Low grass on soil-family surfaces; exposed rock retains geological materials | Visual ground-cover extension; no trees and no alteration to the source map |
 
 Source patches constrain coverage. Stable seeds generate representative positions, shapes, headings and sizes. Spacing stays 12 m while detail changes with distance; 3D drawing stops beyond 1500 m. These are not surveyed individual plants. Cover fades inside vegetation boundaries. Original slopes of 35-60 degrees progressively expose rock; slopes at or above 60 degrees use geological material alone. These display rules do not alter GIS classes or DEM elevations.
+
+Trees use a shared trunk-root origin across mesh/card detail levels and sample the active displayed ground at their fixed locations, with 0.12 m root embedding. Their height and crown dimensions do not scale with terrain exaggeration. The default-enabled `Show grass` and `Show trees` settings independently control ground cover/herbs and all tree representations. Vegetation detail Off hides all 3D plants; ground-cover shading still follows `Show grass`.
 
 See `../../REBUILD.md` for offline rebuilding. CRS, transforms, dimensions and category data can be checked with rasterio/GDAL; no native QGIS UI acceptance is claimed.

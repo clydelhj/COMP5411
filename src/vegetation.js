@@ -16,6 +16,10 @@
   const COVER_BLEND_M = 192;
   // DRAW_DISTANCE_M: drawing cutoff in metres; viewing distance never changes point spacing.
   const DRAW_DISTANCE_M = 1500;
+  // TREE_HEIGHT_M: representative forest display heights, in metres.
+  const TREE_HEIGHT_M = { broadleaf: [12, 22], conifer: [18, 30] };
+  // ROOT_EMBED_M: slight ground penetration, in metres, to avoid contact gaps.
+  const ROOT_EMBED_M = 0.12;
   // LIMITS: representative-tree/herb budgets per detail tier; automatic mode uses measured performance.
   const LIMITS = {
     nearTrees: 24,
@@ -290,6 +294,8 @@
       const variantBounds = Array.from({
         length: variants
       }, () => new THREE.Box3());
+      const trunkGeometry = Array(variants).fill(null);
+      const tree = ['broadleaf', 'conifer'].includes(model.key);
       for (const part of model.parts) {
         for (const packed of part.levels) {
           const geometry = new THREE.BufferGeometry();
@@ -298,7 +304,6 @@
           }
           geometry.setIndex(new THREE.BufferAttribute(await unpack(packed.index, Uint32Array), 1));
           geometry.computeBoundingBox();
-          const tree = ['broadleaf', 'conifer'].includes(model.key);
           const limit = tree ? packed.level === 'near' ? LIMITS.nearTrees : LIMITS.middleTrees : LIMITS.herbs;
           const mesh = new THREE.InstancedMesh(geometry, materials[part.material], limit);
           mesh.count = 0;
@@ -325,6 +330,7 @@
             limit
           });
           if (packed.level === 'near') {
+            if (/trunk/i.test(model.materials[part.material].name)) trunkGeometry[part.variant] = geometry;
             variantBounds[part.variant].union(geometry.boundingBox);
             {
               const copy = new THREE.Mesh(geometry, materials[part.material].clone());
@@ -334,6 +340,27 @@
               prototypes[part.variant].add(copy);
             }
           }
+        }
+      }
+      if (tree) for (let variant = 0; variant < variants; variant++) {
+        // Source assets are crown-centered. Use the trunk base as the shared origin for every material and LOD.
+        const trunk = trunkGeometry[variant] ?? prototypes[variant].children[0].geometry;
+        const vertices = trunk.attributes.position.array;
+        const baseY = trunk.boundingBox.min.y;
+        let rootX = 0, rootZ = 0, count = 0;
+        for (let i = 0; i < vertices.length; i += 3) if (vertices[i + 1] <= baseY + 0.1) {
+          rootX += vertices[i];
+          rootZ += vertices[i + 2];
+          count++;
+        }
+        rootX /= count;
+        rootZ /= count;
+        variantBounds[variant].makeEmpty();
+        for (const pool of pools) if (pool.key === model.key && pool.variant === variant) {
+          const geometry = pool.mesh.geometry;
+          geometry.translate(-rootX, -baseY, -rootZ);
+          geometry.computeBoundingBox();
+          if (pool.level === 'near') variantBounds[variant].union(geometry.boundingBox);
         }
       }
       const bounds = variantBounds[0],
@@ -395,11 +422,12 @@
       world.add(light);
       const height = overhead ? span : d.y * 1.04;
       const view = new THREE.OrthographicCamera(-span / 2, span / 2, height / 2, -height / 2, 0.01, d.y * 5 + span * 5);
-      const target = new THREE.Vector3(0, d.y / 2, 0);
+      const centerY = bounds.min.y + d.y / 2;
+      const target = new THREE.Vector3(0, centerY, 0);
       if (overhead) {
         view.position.set(0, d.y * 3, 0);
         view.up.set(0, 0, -1);
-      } else view.position.set(0, d.y / 2, span * 3);
+      } else view.position.set(0, centerY, span * 3);
       view.lookAt(target);
       const output = new THREE.WebGLRenderTarget(512, 512);
       const oldTarget = renderer.getRenderTarget();
@@ -428,7 +456,8 @@
         geometry.translate(0, dimensions.y * 0.65, 0);
         return geometry;
       }
-      geometry.translate(0, dimensions.y / 2, 0);
+      // Match the bake camera center and padding so distant roots stay aligned.
+      geometry.translate(0, bounds.min.y + dimensions.y / 2, 0);
       const second = geometry.clone();
       second.rotateY(Math.PI / 2);
       const merged = new THREE.BufferGeometry();
@@ -491,6 +520,8 @@
     }
     let detailMode = 'auto',
       automaticTier = 0;
+    let grassVisible = true,
+      treesVisible = true;
     function update(now, verticalScale) {
       /*
        * Update plant instances using the frustum, view distance and quality budget; existing draw
@@ -512,9 +543,9 @@
       projection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
       frustum.setFromProjectionMatrix(projection);
       const candidates = [];
-      group.visible = detailMode !== 'off';
+      group.visible = detailMode !== 'off' && (grassVisible || treesVisible);
       const tier = detailMode === 'auto' ? automaticTier : detailMode === 'high' ? 0 : detailMode === 'medium' ? 1 : 2;
-      groundGrass.update(verticalScale, tier, group.visible);
+      groundGrass.update(verticalScale, tier, group.visible && grassVisible);
       if (!group.visible) {
         pools.forEach(pool => {
           pool.mesh.count = 0;
@@ -529,7 +560,7 @@
         };
         return false;
       }
-      for (const chunk of chunks) {
+      if (treesVisible) for (const chunk of chunks) {
         box.min.set(chunk.x, -10, chunk.z);
         box.max.set(Math.min(chunk.x + CHUNK_M, data.width / 2), 500 * verticalScale + 35, Math.min(chunk.z + CHUNK_M, data.height / 2));
         if (!frustum.intersectsBox(box)) continue;
@@ -548,16 +579,16 @@
             if (!TREE_CLASSES.has(category)) continue;
             const y = sampleHeight(x, z);
             if (y === null || !Number.isFinite(y)) continue;
-            position.set(x, y, z);
-            position.y += 12;
+            const key = CONIFER_CLASSES.has(category) ? 'conifer' : 'broadleaf';
+            const range = TREE_HEIGHT_M[key];
+            let plantHeight = range[0] + seed * (range[1] - range[0]);
+            if (category === 8 || category === 9) plantHeight = 4 + seed * 4;
+            if (category === 28) plantHeight = 6 + seed * 5;
+            position.set(x, y + plantHeight / 2, z);
             if (!frustum.containsPoint(position)) continue;
-            position.y -= 12;
+            position.y = y;
             const distance = camera.position.distanceTo(position);
             if (distance > DRAW_DISTANCE_M) continue;
-            const key = CONIFER_CLASSES.has(category) ? 'conifer' : 'broadleaf';
-            let plantHeight = key === 'conifer' ? 12 + seed * 10 : 8 + seed * 8;
-            if (category === 8 || category === 9) plantHeight = 3 + seed * 3;
-            if (category === 28) plantHeight = 5 + seed * 4;
             candidates.push({
               x,
               y,
@@ -606,7 +637,7 @@
       const i0 = Math.floor((camera.position.x - radius) / step),
         j0 = Math.floor((camera.position.z - radius) / step);
       const herbs = [];
-      for (let j = j0; j <= j0 + 2 * radius / step; j++) for (let i = i0; i <= i0 + 2 * radius / step; i++) {
+      if (grassVisible) for (let j = j0; j <= j0 + 2 * radius / step; j++) for (let i = i0; i <= i0 + 2 * radius / step; i++) {
         const seed = seedAt(i, j, 7);
         const x = (i + seed) * step,
           z = (j + seedAt(i, j, 8)) * step;
@@ -661,7 +692,7 @@
        * independent of terrain exaggeration. Use a stable heading and place the root on the current
        * displayed surface.
        */
-      position.set(point.x, point.y, point.z);
+      position.set(point.x, point.y - (TREE_CLASSES.has(point.category) && ['broadleaf', 'conifer'].includes(point.key) ? ROOT_EMBED_M : 0), point.z);
       quaternion.setFromAxisAngle(axis, point.seed * Math.PI * 2);
       scale.set(sx, sy, sz);
       matrix.compose(position, quaternion, scale);
@@ -679,6 +710,14 @@
       animate,
       hasAnimation,
       markDirty() {
+        dirty = true;
+      },
+      setVisibility({ grass = grassVisible, trees = treesVisible }) {
+        /* Toggle herbs and trees independently, preserving detail mode and seeded positions.
+         * Update the existing instance pools on the next requested frame; no separate loop.
+         */
+        grassVisible = Boolean(grass);
+        treesVisible = Boolean(trees);
         dirty = true;
       },
       setDetail(mode) {
@@ -712,6 +751,9 @@
         ...state,
         detailMode,
         automaticTier,
+        grassVisible,
+        treesVisible,
+        treeHeightRangesM: TREE_HEIGHT_M,
         groundGrass: groundGrass.getState(),
         spacingM: BASE_SPACING_M,
         drawDistanceM: DRAW_DISTANCE_M,

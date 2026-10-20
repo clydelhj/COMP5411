@@ -1,6 +1,6 @@
 # Code guide
 
-Current runtime baseline: October 19, 2026. All paths below are relative to the directory containing `index-1m.html`.
+Current runtime baseline: October 20, 2026. All paths below are relative to the directory containing `index-1m.html`.
 
 ## Structure
 
@@ -103,6 +103,10 @@ Real 2024 vegetation classes control forest/herb cover. Soil-family bare-ground 
 
 Trees use a stable 12 m placement grid and four broadleaf/four conifer shape variants derived from shared source assets. Near/middle meshes and distant cards share deterministic shape, size and orientation choices. Instances fade over 1200–1500 m. Geometry budgets can switch representation without randomly thinning the forest. Nearby herb/fern models and grass have separate bounded pools.
 
+Forest broadleaf height ranges from 12–22 m and conifer height from 18–30 m; orchard and low woody forms use 4–8 m and 6–11 m respectively. Height and crown-width variation follow stable instance seeds. To keep the trunk attached, each shape derives one root origin from its near-detail trunk: the minimum Y and the mean X/Z of vertices in the bottom 0.1 m band. Every material and mesh detail level shares this translation, and cards are baked from the aligned prototype. Placement samples the active displayed surface at the original plant location and embeds the root by 0.12 m. Plant size stays in natural metres as terrain exaggeration changes.
+
+The independent `Show grass` and `Show trees` settings default to enabled. Grass visibility gates instanced blades, herb/fern models and ground-cover shading; tree visibility gates all tree mesh/card levels. The vegetation detail setting still determines geometry quality, and Off hides all 3D plants. Visibility changes reuse the shared resources and request an update through the main scheduler.
+
 Water combines three Gerstner components with wavelengths of 512/192/72 m, matching normals, four-scale scrolling detail, a sky-gradient reflection approximation, shore crests, foam and wetness. Wave amplitude remains in physical metres when terrain height is exaggerated. Coarse-grid filtering suppresses undersampled geometric waves; small ripples continue through normals. Nearshore GPU spray has a bounded particle pool. These effects are parameterized visual animation, not fluid simulation.
 
 The environment uses a NOAA-style solar approximation at the model center, selected date and fixed GMT+9 time. Clear/cloudy/rainy presets affect sky, fog, lights, waves and rain. Local PCF shadows follow the view and reuse their map when possible. The pointer flashlight ray-tests the displayed height field instead of traversing every terrain triangle. Rain, spray and wind use GPU animation and the shared scene clock.
@@ -132,4 +136,4 @@ Use two-space indentation for JavaScript/HTML/CSS and four spaces for Python. Ex
 
 See [REBUILD.md](REBUILD.md) for source locations, dependencies and portable rebuild commands. `scripts/build_grass_ground.py` adds the current grass texture payload from the retained `grass_ground` source images. Ordinary source changes should be checked in the browser without regenerating unrelated datasets.
 
-The dated [progress report](docs/COMP5411_Progress_Report_EN.md) preserves October 18 measurements. Its uniform-visible-LOD description is historical; this guide describes the current local selection. Targeted October 19 checks covered all 12 detail limits, selection coverage/budget/fallback, mixed land/water edges, stable small camera turns, grass attachment, sleep and file/HTTP loading. Full device coverage, long navigation sessions and final presentation acceptance remain incomplete.
+The dated [progress report](docs/COMP5411_Progress_Report_EN.md) preserves October 18 measurements. Its uniform-visible-LOD description is historical; this guide describes the current local selection. Targeted October 19 checks covered all 12 detail limits, selection coverage/budget/fallback, mixed land/water edges, stable small camera turns, grass attachment, sleep and file/HTTP loading. October 20 checks covered tree attachment across representative detail limits and 1/5/10 height scales, independent grass/tree visibility combinations, sleep and both entry modes. Full device coverage, long navigation sessions and final presentation acceptance remain incomplete.

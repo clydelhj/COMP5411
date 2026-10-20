@@ -1,4 +1,4 @@
-// Native DEM viewer: every visible tile uses a common display level.
+// Native DEM viewer: allocate display detail to local patches by viewing distance.
 // Resident regional meshes maintain coverage while more detailed tiles load.
 (async function startTerrainViewer() {
   'use strict';
@@ -16,6 +16,8 @@
   const resolutionSelect = document.querySelector('#maximum-resolution');
   const windowResolutionSelect = document.querySelector('#window-resolution');
   const vegetationDetailSelect = document.querySelector('#vegetation-detail');
+  const grassVisibilityCheckbox = document.querySelector('#show-grass');
+  const treeVisibilityCheckbox = document.querySelector('#show-trees');
   const idleSleepSelect = document.querySelector('#idle-sleep-delay');
   const windowResolutionLabel = document.querySelector('#window-resolution-current');
   let navigationReady = false;
@@ -47,6 +49,7 @@
     });
     // Once ready, sleep controls remain available even if a later tile fails.
     resolutionSelect.disabled = windowResolutionSelect.disabled = vegetationDetailSelect.disabled = true;
+    grassVisibilityCheckbox.disabled = treeVisibilityCheckbox.disabled = true;
     status.hidden = false;
     status.className = 'error';
     status.textContent = `Unable to load terrain: ${error.message}`;
@@ -151,6 +154,7 @@
     // The material configuration separates asset loading from the rock-material factory.
     const materialFactory = await window.NotoRockMaterials.prepare(THREE, strata, window.NOTO_MATERIAL_CONFIG, vegetationData.groundCover);
     materialFactory.shared.grass = vegetationData.grass;
+    materialFactory.shared.grassVisibility = { value: grassVisibilityCheckbox.checked ? 1 : 0 };
 
     // 2. Scene and shared water resources; physical coordinates remain unchanged.
     const renderer = new THREE.WebGLRenderer({
@@ -216,6 +220,20 @@
       vegetation?.setDetail(vegetationDetailSelect.value);
       wakeRendering();
     });
+    function applyVegetationVisibility() {
+      const visibility = {
+        grass: grassVisibilityCheckbox.checked,
+        trees: treeVisibilityCheckbox.checked
+      };
+      materialFactory.shared.grassVisibility.value = visibility.grass ? 1 : 0;
+      vegetation?.setVisibility(visibility);
+    }
+    for (const checkbox of [grassVisibilityCheckbox, treeVisibilityCheckbox]) {
+      checkbox.addEventListener('change', () => {
+        applyVegetationVisibility();
+        wakeRendering();
+      });
+    }
     idleSleepSelect.addEventListener('change', () => {
       const value = idleSleepSelect.value;
       if (!['0', '15', '30', '60', '300', 'never'].includes(value)) return;
@@ -638,6 +656,7 @@
       resolutionSelect.disabled = false;
       windowResolutionSelect.disabled = false;
       vegetationDetailSelect.disabled = false;
+      grassVisibilityCheckbox.disabled = treeVisibilityCheckbox.disabled = false;
       idleSleepSelect.disabled = false;
       flashlight.ready();
       zoomButtons.forEach(button => {
@@ -1361,6 +1380,7 @@
       data: vegetationData,
       sampleHeight: surfaceHeight
     });
+    applyVegetationVisibility();
     vegetation.setDetail(vegetationDetailSelect.value);
     vegetation.setLighting(environment.getState().cardBrightness);
     // Read-only diagnostic snapshot.

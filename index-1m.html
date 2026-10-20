@@ -146,6 +146,11 @@
         <option value="2">200%</option>
       </select>
       <p id="window-resolution-current" aria-live="polite"></p>
+      <fieldset class="vegetation-visibility">
+        <legend>Vegetation visibility</legend>
+        <label for="show-grass"><input id="show-grass" type="checkbox" checked disabled> Show grass</label>
+        <label for="show-trees"><input id="show-trees" type="checkbox" checked disabled> Show trees</label>
+      </fieldset>
       <label for="vegetation-detail">3D vegetation detail</label>
       <select id="vegetation-detail" disabled>
         <option value="auto" selected>Auto (dynamic)</option>
@@ -154,7 +159,7 @@
         <option value="low">Low</option>
         <option value="off">Off</option>
       </select>
-      <p>Plant positions and density stay fixed. Distant plants use simpler models, then fade out; ground cover remains visible.</p>
+      <p>Plant positions stay fixed as detail changes. Off hides all 3D plants; Show grass also controls ground cover.</p>
       <label for="idle-sleep-delay">Sleep after inactivity</label>
       <select id="idle-sleep-delay" aria-describedby="sleep-description" disabled>
         <option value="0">Immediately</option>

@@ -47,6 +47,10 @@ The finest permitted terrain spacing defaults to **5 m**. Settings offer 1–8 m
 
 Window render resolution and 3D vegetation detail default to Auto. Manual settings remain under user control. Tree locations and shape variants are deterministic; distance changes representation, with a fade over 1200–1500 m. Soil ground also has blended grass texture and nearby instanced grass blades. Grass positions stay fixed when geometric detail changes.
 
+`Show grass` and `Show trees` are independent settings, both enabled by default. `Show grass` controls grass blades, herb/fern models and ground-cover shading; `Show trees` controls every tree detail level. Setting vegetation detail to Off hides all 3D plants, while ground-cover shading still follows `Show grass`.
+
+Forest broadleaf trees are 12–22 m tall and conifers 18–30 m; orchard trees are 4–8 m and other low woody forms 6–11 m. Crown width varies with each stable shape and size seed. Tree roots follow the displayed terrain at every detail level and height scale; their natural dimensions are not exaggerated with the terrain.
+
 After the last interaction, visible waves, rain and vegetation wind continue for **30 seconds** by default, then freeze. Settings offer immediate sleep, 15/30 seconds, 1/5 minutes or Never. Dialogs and hidden pages pause idle animation. Ordinary animation frames do not rebuild terrain or redistribute vegetation.
 
 The renderer requests `powerPreference: "high-performance"`. The browser, operating system and driver select the actual device; JavaScript cannot force a GPU number.
@@ -67,7 +71,7 @@ The renderer requests `powerPreference: "high-performance"`. The browser, operat
 | `CODE_GUIDE.md`, `HANDOFF.md` | Current architecture and maintenance baseline |
 | `REBUILD.md` | Offline rebuilding dependencies and commands |
 
-See [CODE_GUIDE.md](CODE_GUIDE.md) for the current implementation, [HANDOFF.md](HANDOFF.md) for the maintenance baseline and [REBUILD.md](REBUILD.md) for offline generators. The [progress report](docs/COMP5411_Progress_Report_EN.md) is dated October 18, 2026; its measured results and implementation snapshot precede the October 19 grass and local LOD updates.
+See [CODE_GUIDE.md](CODE_GUIDE.md) for the current implementation, [HANDOFF.md](HANDOFF.md) for the maintenance baseline and [REBUILD.md](REBUILD.md) for offline generators. The [progress report](docs/COMP5411_Progress_Report_EN.md) is dated October 18, 2026; its measured results and implementation snapshot precede the current October 20 baseline.
 
 ## Data interpretation and licensing
 
