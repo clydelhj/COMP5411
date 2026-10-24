@@ -522,49 +522,107 @@
       automaticTier = 0;
     let grassVisible = true,
       treesVisible = true;
+    // Finish camera snapshots instead of restarting on every pointer movement. Geometry and
+    // settings invalidation cancel stale work; a newer camera view follows the completed pass.
+    const PLACEMENT_BUDGET_MS = 3;
+    let placementJob = null,
+      invalidation = 0,
+      lastPlacementMs = 0;
+    const poolIndex = new Map();
+    for (const pool of pools) {
+      const key = `${pool.key}/${pool.level}/${pool.variant}`;
+      if (!poolIndex.has(key)) poolIndex.set(key, []);
+      poolIndex.get(key).push(pool);
+    }
+    function* sortByDistance(points) {
+      // Bottom-up merge sort yields inside merge runs, avoiding a single blocking Array.sort.
+      let input = points,
+        output = new Array(points.length),
+        work = 0;
+      for (let width = 1; width < points.length; width *= 2) {
+        for (let left = 0; left < points.length; left += width * 2) {
+          const middle = Math.min(left + width, points.length);
+          const right = Math.min(left + width * 2, points.length);
+          let a = left, b = middle;
+          for (let index = left; index < right; index++) {
+            output[index] = b >= right || a < middle && input[a].distance <= input[b].distance ? input[a++] : input[b++];
+            if ((++work & 255) === 0) yield;
+          }
+        }
+        [input, output] = [output, input];
+      }
+      return input;
+    }
+    function cancelPlacement() {
+      placementJob?.iterator.return();
+      placementJob = null;
+    }
     function update(now, verticalScale) {
-      /*
-       * Update plant instances using the frustum, view distance and quality budget; existing draw
-       * frames also advance wind. Placement checks run at most every 250 ms unless dirty. Query
-       * real classes and displayed land while preserving seeded positions and ground clearance.
-       * Return whether an actual instance update occurred; wind does not request another frame.
+      /* Spend a small CPU slice preparing a complete replacement. Displayed attributes remain
+       * intact until commit, and true keeps the existing scene scheduler alive while work waits.
        */
       animate(now);
-      const changed = camera.position.distanceToSquared(lastCamera) > 4 || lastScale !== verticalScale || camera.quaternion.angleTo(lastRotation) > 0.002;
-      if (!dirty && !changed) return false;
-      if (!dirty && now - lastUpdate < 250) return true;
-      lastUpdate = now;
-      lastCamera.copy(camera.position);
-      lastRotation.copy(camera.quaternion);
-      lastScale = verticalScale;
-      dirty = false;
-      placementRevision++;
-      camera.updateMatrixWorld();
-      projection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-      frustum.setFromProjectionMatrix(projection);
-      const candidates = [];
       group.visible = detailMode !== 'off' && (grassVisible || treesVisible);
-      const tier = detailMode === 'auto' ? automaticTier : detailMode === 'high' ? 0 : detailMode === 'medium' ? 1 : 2;
-      groundGrass.update(verticalScale, tier, group.visible && grassVisible);
+      if (placementJob && (placementJob.invalidation !== invalidation || lastScale !== verticalScale)) cancelPlacement();
       if (!group.visible) {
-        pools.forEach(pool => {
-          pool.mesh.count = 0;
-        });
-        state = {
-          ...state,
-          nearTrees: 0,
-          middleTrees: 0,
-          farTrees: 0,
-          herbs: 0,
-          sampleInstances: []
-        };
+        cancelPlacement();
+        if (state.nearTrees + state.middleTrees + state.farTrees + state.herbs + groundGrass.getState().tufts) {
+          pools.forEach(pool => { pool.mesh.count = 0; });
+          groundGrass.hide();
+          state = { ...state, nearTrees: 0, middleTrees: 0, farTrees: 0, herbs: 0, sampleInstances: [] };
+          placementRevision++;
+        }
+        dirty = false;
         return false;
       }
+      const changed = camera.position.distanceToSquared(lastCamera) > 4 || lastScale !== verticalScale || camera.quaternion.angleTo(lastRotation) > 0.002;
+      if (!placementJob) {
+        if (!dirty && !changed) return false;
+        if (!dirty && now - lastUpdate < 250) return true;
+        lastUpdate = now;
+        lastCamera.copy(camera.position);
+        lastRotation.copy(camera.quaternion);
+        lastScale = verticalScale;
+        dirty = false;
+        camera.updateMatrixWorld();
+        projection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+        frustum.setFromProjectionMatrix(projection);
+        const view = {
+          position: camera.position.clone(),
+          frustum: frustum.clone(),
+          verticalScale,
+          grassVisible,
+          treesVisible,
+          tier: detailMode === 'auto' ? automaticTier : detailMode === 'high' ? 0 : detailMode === 'medium' ? 1 : 2
+        };
+        placementJob = { iterator: preparePlacement(view), invalidation, elapsed: 0 };
+      }
+      const began = performance.now(), deadline = began + PLACEMENT_BUDGET_MS;
+      let next;
+      do {
+        next = placementJob.iterator.next();
+      } while (!next.done && performance.now() < deadline);
+      placementJob.elapsed += performance.now() - began;
+      if (!next.done) return true;
+      lastPlacementMs = placementJob.elapsed;
+      commitPlacement(next.value);
+      placementJob = null;
+      // Complete this snapshot before requesting another, even during continuous movement.
+      return camera.position.distanceToSquared(lastCamera) > 4 || camera.quaternion.angleTo(lastRotation) > 0.002;
+    }
+    function* preparePlacement(view) {
+      const candidates = [];
+      const buffers = new Map();
+      const { verticalScale, tier, grassVisible, treesVisible } = view;
+      const viewPosition = view.position;
+      const viewFrustum = view.frustum;
+      let checked = 0;
       if (treesVisible) for (const chunk of chunks) {
+        if ((++checked & 31) === 0) yield;
         box.min.set(chunk.x, -10, chunk.z);
         box.max.set(Math.min(chunk.x + CHUNK_M, data.width / 2), 500 * verticalScale + 35, Math.min(chunk.z + CHUNK_M, data.height / 2));
-        if (!frustum.intersectsBox(box)) continue;
-        if (box.distanceToPoint(camera.position) > DRAW_DISTANCE_M) continue;
+        if (!viewFrustum.intersectsBox(box)) continue;
+        if (box.distanceToPoint(viewPosition) > DRAW_DISTANCE_M) continue;
         // All distance tiers use the same 12 m point grid. Change geometric detail, never thin the coordinates.
         const i0 = Math.ceil((chunk.x + data.width / 2) / BASE_SPACING_M);
         const j0 = Math.ceil((chunk.z + data.height / 2) / BASE_SPACING_M);
@@ -572,6 +630,7 @@
         const j1 = Math.ceil((box.max.z + data.height / 2) / BASE_SPACING_M);
         for (let j = j0; j < j1; j++) {
           for (let i = i0; i < i1; i++) {
+            if ((++checked & 31) === 0) yield;
             const seed = seedAt(i, j);
             const x = -data.width / 2 + (i + 0.25 + seed * 0.5) * BASE_SPACING_M;
             const z = -data.height / 2 + (j + 0.25 + seedAt(i, j, 1) * 0.5) * BASE_SPACING_M;
@@ -585,9 +644,9 @@
             if (category === 8 || category === 9) plantHeight = 4 + seed * 4;
             if (category === 28) plantHeight = 6 + seed * 5;
             position.set(x, y + plantHeight / 2, z);
-            if (!frustum.containsPoint(position)) continue;
+            if (!viewFrustum.containsPoint(position)) continue;
             position.y = y;
-            const distance = camera.position.distanceTo(position);
+            const distance = viewPosition.distanceTo(position);
             if (distance > DRAW_DISTANCE_M) continue;
             candidates.push({
               x,
@@ -604,10 +663,7 @@
           }
         }
       }
-      candidates.sort((a, b) => a.distance - b.distance);
-      pools.forEach(pool => {
-        pool.mesh.count = 0;
-      });
+      const sortedCandidates = yield* sortByDistance(candidates);
       const counts = {
         nearTrees: 0,
         middleTrees: 0,
@@ -617,14 +673,15 @@
       const samples = [];
       const nearDistance = tier === 0 ? 90 : 0;
       const middleDistance = tier === 0 ? 650 : tier === 1 ? 300 : 0;
-      for (const point of candidates) {
+      for (const point of sortedCandidates) {
+        if ((++checked & 31) === 0) yield;
         const level = point.distance < nearDistance && counts.nearTrees < LIMITS.nearTrees ? 'near' : point.distance < middleDistance && counts.middleTrees < LIMITS.middleTrees ? 'middle' : 'far';
         if (level === 'far' && counts.farTrees >= LIMITS.farTrees) continue;
         const library = libraries.get(point.key);
         const variant = Math.floor(seedAt(point.i, point.j, 2) * library.variants);
         point.variant = variant;
         const s = point.plantHeight / library.variantDimensions[variant].y;
-        addInstance(point, level, variant, s, s, s);
+        stageInstance(buffers, point, level, variant, s, s, s);
         counts[level === 'near' ? 'nearTrees' : level === 'middle' ? 'middleTrees' : 'farTrees']++;
         if (samples.length < 32) samples.push({
           ...point,
@@ -634,10 +691,11 @@
       // Nearby herbs combine grass tufts and slightly longer-range ferns; both obey the same source coverage and land mask.
       const radius = 65,
         step = 3;
-      const i0 = Math.floor((camera.position.x - radius) / step),
-        j0 = Math.floor((camera.position.z - radius) / step);
+      const i0 = Math.floor((viewPosition.x - radius) / step),
+        j0 = Math.floor((viewPosition.z - radius) / step);
       const herbs = [];
       if (grassVisible) for (let j = j0; j <= j0 + 2 * radius / step; j++) for (let i = i0; i <= i0 + 2 * radius / step; i++) {
+        if ((++checked & 31) === 0) yield;
         const seed = seedAt(i, j, 7);
         const x = (i + seed) * step,
           z = (j + seedAt(i, j, 8)) * step;
@@ -647,8 +705,8 @@
         const y = sampleHeight(x, z);
         if (y === null || !Number.isFinite(y)) continue;
         position.set(x, y + 0.3, z);
-        const distance = camera.position.distanceTo(position);
-        if (distance > radius || !frustum.containsPoint(position)) continue;
+        const distance = viewPosition.distanceTo(position);
+        if (distance > radius || !viewFrustum.containsPoint(position)) continue;
         herbs.push({
           x,
           y,
@@ -659,57 +717,89 @@
           distance
         });
       }
-      herbs.sort((a, b) => a.distance - b.distance);
-      for (const point of herbs.slice(0, LIMITS.herbs)) {
+      const sortedHerbs = yield* sortByDistance(herbs);
+      for (const point of sortedHerbs.slice(0, LIMITS.herbs)) {
+        if ((++checked & 31) === 0) yield;
         const library = libraries.get(point.key);
         const variant = Math.floor(point.seed * library.variants);
         const s = (point.key === 'grass' ? 1.1 : 1.4) + point.seed * 0.8;
         const herbLevel = tier === 0 ? 'near' : 'middle';
-        addInstance(point, herbLevel, variant, s, s, s);
+        stageInstance(buffers, point, herbLevel, variant, s, s, s);
         counts.herbs++;
         if (samples.length < 32) samples.push({
           ...point,
           level: herbLevel
         });
       }
-      pools.forEach(pool => {
-        pool.mesh.instanceMatrix.needsUpdate = true;
-        if (pool.mesh.instanceColor) pool.mesh.instanceColor.needsUpdate = true;
-      });
-      state = {
-        ...state,
-        ...counts,
-        sampleInstances: samples,
-        groundCover: true
-      };
-      return false;
+      const grass = yield* groundGrass.prepareUpdate(verticalScale, tier, grassVisible, view);
+      return { buffers, counts, samples, grass };
     }
     const plantColor = new THREE.Color();
-    function addInstance(point, level, variant, sx, sy, sz) {
-      /*
-       * Write all component meshes of one plant with the same instance transform. point gives
-       * position/category; level and variant choose geometry; sx/sy/sz are natural-size multipliers
-       * independent of terrain exaggeration. Use a stable heading and place the root on the current
-       * displayed surface.
+    function stageInstance(buffers, point, level, variant, sx, sy, sz) {
+      /* Stage matched component pools only. Reuse their scratch storage, growing lazily rather
+       * than duplicating every far-tree pool at its maximum 60,000-instance capacity.
        */
       position.set(point.x, point.y - (TREE_CLASSES.has(point.category) && ['broadleaf', 'conifer'].includes(point.key) ? ROOT_EMBED_M : 0), point.z);
       quaternion.setFromAxisAngle(axis, point.seed * Math.PI * 2);
       scale.set(sx, sy, sz);
       matrix.compose(position, quaternion, scale);
-      for (const pool of pools) {
-        if (pool.key !== point.key || pool.level !== level || pool.variant !== variant || pool.mesh.count >= pool.limit) continue;
-        if (!pool.mesh.instanceColor) pool.mesh.material.needsUpdate = true;
-        const tone = point.seed;
-        plantColor.setRGB(0.88 + tone * 0.12, 0.9 + tone * 0.1, 0.84 + tone * 0.16);
-        pool.mesh.setColorAt(pool.mesh.count, plantColor);
-        pool.mesh.setMatrixAt(pool.mesh.count++, matrix);
+      for (const pool of poolIndex.get(`${point.key}/${level}/${variant}`) ?? []) {
+        let buffer = buffers.get(pool);
+        if (!buffer) {
+          buffer = pool.scratch ??= {
+            count: 0,
+            capacity: Math.min(256, pool.limit),
+            matrices: new Float32Array(Math.min(256, pool.limit) * 16),
+            colors: new Float32Array(Math.min(256, pool.limit) * 3)
+          };
+          buffer.count = 0;
+          buffers.set(pool, buffer);
+        }
+        if (buffer.count >= pool.limit) continue;
+        if (buffer.count >= buffer.capacity) {
+          buffer.capacity = Math.min(pool.limit, buffer.capacity * 2);
+          for (const [key, size] of [['matrices', 16], ['colors', 3]]) {
+            const next = new Float32Array(buffer.capacity * size);
+            next.set(buffer[key]);
+            buffer[key] = next;
+          }
+        }
+        const n = buffer.count++, tone = point.seed;
+        buffer.matrices.set(matrix.elements, n * 16);
+        buffer.colors[n * 3] = 0.88 + tone * 0.12;
+        buffer.colors[n * 3 + 1] = 0.9 + tone * 0.1;
+        buffer.colors[n * 3 + 2] = 0.84 + tone * 0.16;
       }
+    }
+    function commitPlacement(prepared) {
+      // Keep attribute identities and upload only populated prefixes, not maximum pool capacity.
+      for (const pool of pools) {
+        const buffer = prepared.buffers.get(pool), mesh = pool.mesh;
+        mesh.count = buffer?.count ?? 0;
+        if (!mesh.count) continue;
+        if (!mesh.instanceColor) {
+          mesh.setColorAt(0, plantColor);
+          mesh.material.needsUpdate = true;
+        }
+        for (const [attribute, values, size] of [
+          [mesh.instanceMatrix, buffer.matrices, 16], [mesh.instanceColor, buffer.colors, 3]
+        ]) {
+          attribute.array.set(values.subarray(0, mesh.count * size));
+          attribute.clearUpdateRanges();
+          attribute.addUpdateRange(0, mesh.count * size);
+          attribute.needsUpdate = true;
+        }
+      }
+      groundGrass.commit(prepared.grass);
+      state = { ...state, ...prepared.counts, sampleInstances: prepared.samples, groundCover: true };
+      placementRevision++;
     }
     return {
       update,
       animate,
       hasAnimation,
       markDirty() {
+        invalidation++;
         dirty = true;
       },
       setVisibility({ grass = grassVisible, trees = treesVisible }) {
@@ -718,6 +808,7 @@
          */
         grassVisible = Boolean(grass);
         treesVisible = Boolean(trees);
+        invalidation++;
         dirty = true;
       },
       setDetail(mode) {
@@ -727,6 +818,7 @@
          */
         if (!['auto', 'high', 'medium', 'low', 'off'].includes(mode)) return;
         detailMode = mode;
+        invalidation++;
         dirty = true;
       },
       adjustAutomaticDetail(direction) {
@@ -739,6 +831,7 @@
         const next = Math.max(0, Math.min(2, automaticTier + direction));
         if (next === automaticTier) return false;
         automaticTier = next;
+        invalidation++;
         dirty = true;
         return true;
       },
@@ -748,6 +841,9 @@
       },
       getState: () => ({
         placementRevision,
+        placementPending: Boolean(placementJob),
+        placementBudgetMs: PLACEMENT_BUDGET_MS,
+        lastPlacementMs,
         ...state,
         detailMode,
         automaticTier,

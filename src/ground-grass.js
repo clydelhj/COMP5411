@@ -116,8 +116,8 @@
   }) {
     /*
      * Use fixed 0.8 m planting positions with 12/6/3-blade geometry and at most three draw calls;
-     * individual blades cast no shadows. The existing vegetation scheduler calls update, and wind
-     * uses the shared sleep clock.
+     * individual blades cast no shadows. The vegetation scheduler prepares placement in bounded
+     * slices, commits a complete set, and advances wind through the shared sleep clock.
      */
     const material = new THREE.MeshStandardMaterial({
       vertexColors: true,
@@ -186,7 +186,6 @@
       return mesh;
     });
     const frustum = new THREE.Frustum(),
-      projection = new THREE.Matrix4(),
       matrix = new THREE.Matrix4();
     const position = new THREE.Vector3(),
       scale = new THREE.Vector3(),
@@ -198,31 +197,53 @@
       triangles: 0,
       sampleInstances: []
     };
-    function update(verticalScale, tier, enabled) {
-      pools.forEach(mesh => {
-        mesh.count = 0;
-      });
-      state = {
+    // Scratch buffers never touch displayed attributes until the entire placement pass is ready.
+    const staged = pools.map(() => ({
+      count: 0,
+      capacity: 256,
+      matrices: new Float32Array(256 * 16),
+      colors: new Float32Array(256 * 3),
+      slopes: new Float32Array(256 * 2)
+    }));
+    function reserve(buffer) {
+      if (buffer.count < buffer.capacity) return;
+      buffer.capacity = Math.min(LIMIT, buffer.capacity * 2);
+      for (const [key, size] of [['matrices', 16], ['colors', 3], ['slopes', 2]]) {
+        const next = new Float32Array(buffer.capacity * size);
+        next.set(buffer[key]);
+        buffer[key] = next;
+      }
+    }
+    function* prepareUpdate(verticalScale, tier, enabled, view) {
+      /* Yield bounded candidate batches to the parent vegetation scheduler. The camera/frustum
+       * snapshot stays fixed for this pass, so continuous navigation cannot restart it forever.
+       */
+      staged.forEach(buffer => { buffer.count = 0; });
+      const nextState = {
         tufts: 0,
         triangles: 0,
         sampleInstances: []
       };
-      if (!enabled) return;
-      projection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-      frustum.setFromProjectionMatrix(projection);
-      const i0 = Math.floor((camera.position.x - RADIUS_M) / SPACING_M),
-        i1 = Math.ceil((camera.position.x + RADIUS_M) / SPACING_M);
-      const j0 = Math.floor((camera.position.z - RADIUS_M) / SPACING_M),
-        j1 = Math.ceil((camera.position.z + RADIUS_M) / SPACING_M);
+      if (!enabled) return { state: nextState, buffers: staged };
+      const viewPosition = view.position;
+      frustum.copy(view.frustum);
+      const i0 = Math.floor((viewPosition.x - RADIUS_M) / SPACING_M),
+        i1 = Math.ceil((viewPosition.x + RADIUS_M) / SPACING_M);
+      const j0 = Math.floor((viewPosition.z - RADIUS_M) / SPACING_M),
+        j1 = Math.ceil((viewPosition.z + RADIUS_M) / SPACING_M);
+      let candidates = 0;
       for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        if ((++candidates & 31) === 0) yield;
         const x = (i + 0.15 + seed(i, j) * 0.7) * SPACING_M,
           z = (j + 0.15 + seed(i, j, 1) * 0.7) * SPACING_M;
+        // Reject square-grid corners before coverage and displayed-surface queries.
+        if ((x - viewPosition.x) ** 2 + (z - viewPosition.z) ** 2 > RADIUS_M ** 2) continue;
         const coverage = data.coverageAt(x, z);
         if (coverage < 0.08 || seed(i, j, 2) > coverage) continue;
         const y = sampleHeight(x, z);
         if (y === null || !Number.isFinite(y) || y < 1.5 * verticalScale) continue;
         position.set(x, y + 0.35, z);
-        const distance = camera.position.distanceTo(position);
+        const distance = viewPosition.distanceTo(position);
         if (distance > RADIUS_M || !frustum.containsPoint(position)) continue;
         const hx = sampleHeight(x + 1, z),
           hz = sampleHeight(x, z + 1);
@@ -232,8 +253,7 @@
         const slope = Math.hypot(gx, gz) / verticalScale;
         if (seed(i, j, 3) < smooth(0.70, 1.19, slope)) continue;
         const level = tier === 0 && distance < 16 ? 0 : tier < 2 && distance < 42 ? 1 : 2;
-        const mesh = pools[level],
-          n = mesh.count;
+        const mesh = pools[level], buffer = staged[level], n = buffer.count;
         if (n >= LIMIT) continue;
         const angle = seed(i, j, 4) * Math.PI * 2,
           sx = 0.85 + seed(i, j, 5) * 0.45,
@@ -241,16 +261,19 @@
         rotation.setFromAxisAngle(up, angle);
         position.set(x, y - 0.015, z);
         matrix.compose(position, rotation, scale.set(sx, sy, sx));
-        mesh.setMatrixAt(n, matrix);
+        reserve(buffer);
+        buffer.matrices.set(matrix.elements, n * 16);
         const tone = seed(i, j, 7);
         tint.setRGB(0.78 + tone * 0.35, 0.83 + tone * 0.25, 0.72 + tone * 0.25);
-        if (!mesh.instanceColor) material.needsUpdate = true;
-        mesh.setColorAt(n, tint);
-        mesh.geometry.attributes.grassSlope.setXY(n, (gx * Math.cos(angle) - gz * Math.sin(angle)) * sx / sy, (gx * Math.sin(angle) + gz * Math.cos(angle)) * sx / sy);
-        mesh.count++;
-        state.tufts++;
-        state.triangles += mesh.geometry.index.count / 3;
-        if (state.sampleInstances.length < 16) state.sampleInstances.push({
+        buffer.colors[n * 3] = tint.r;
+        buffer.colors[n * 3 + 1] = tint.g;
+        buffer.colors[n * 3 + 2] = tint.b;
+        buffer.slopes[n * 2] = (gx * Math.cos(angle) - gz * Math.sin(angle)) * sx / sy;
+        buffer.slopes[n * 2 + 1] = (gx * Math.sin(angle) + gz * Math.cos(angle)) * sx / sy;
+        buffer.count++;
+        nextState.tufts++;
+        nextState.triangles += mesh.geometry.index.count / 3;
+        if (nextState.sampleInstances.length < 16) nextState.sampleInstances.push({
           x,
           y,
           z,
@@ -258,14 +281,41 @@
           coverage
         });
       }
-      for (const mesh of pools) {
-        mesh.instanceMatrix.needsUpdate = true;
-        mesh.geometry.attributes.grassSlope.needsUpdate = true;
-        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      return { state: nextState, buffers: staged };
+    }
+    function commit(prepared) {
+      /* Only populated prefixes are copied/uploaded. Keep BufferAttribute identities stable so
+       * repeated placement passes reuse their WebGL buffers rather than leaking replacements.
+       */
+      for (let level = 0; level < pools.length; level++) {
+        const mesh = pools[level], buffer = prepared.buffers[level];
+        mesh.count = buffer.count;
+        if (!buffer.count) continue;
+        if (!mesh.instanceColor) {
+          mesh.setColorAt(0, tint);
+          material.needsUpdate = true;
+        }
+        for (const [attribute, values, size] of [
+          [mesh.instanceMatrix, buffer.matrices, 16],
+          [mesh.instanceColor, buffer.colors, 3],
+          [mesh.geometry.attributes.grassSlope, buffer.slopes, 2]
+        ]) {
+          attribute.array.set(values.subarray(0, buffer.count * size));
+          attribute.clearUpdateRanges();
+          attribute.addUpdateRange(0, buffer.count * size);
+          attribute.needsUpdate = true;
+        }
       }
+      state = prepared.state;
+    }
+    function hide() {
+      pools.forEach(mesh => { mesh.count = 0; });
+      state = { tufts: 0, triangles: 0, sampleInstances: [] };
     }
     return {
-      update,
+      prepareUpdate,
+      commit,
+      hide,
       getState: () => ({
         ...state,
         spacingM: SPACING_M,

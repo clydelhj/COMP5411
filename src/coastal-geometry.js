@@ -54,6 +54,49 @@
       source
     };
   }
+  // Reattach queries after Worker transfer. The closure always reads the final stitched top.
+  function createHeightSampler(result, field) {
+    const { land, heights, landCells, shoreQueryRanges, heightQuery } = result;
+    const { xs, zs, rows, cols, step, dx, dz } = heightQuery;
+    return (x, z, conservative = false) => {
+      const c = Math.max(0, Math.min(cols - 2, Math.floor((x - xs[0]) / (step * dx))));
+      const r = Math.max(0, Math.min(rows - 2, Math.floor((z - zs[0]) / (step * dz))));
+      if (!landCells[r * (cols - 1) + c] || field.distance(x, z) > 0) return null;
+      // In the curved contact strip, query the actual subdivided triangles.
+      // The range is local to one original cell, so no whole-mesh raycast runs.
+      if (field.distance(x, z) > -BEACH_WIDTH - step * 2 && land) {
+        const start = shoreQueryRanges[(r * (cols - 1) + c) * 2];
+        const end = shoreQueryRanges[(r * (cols - 1) + c) * 2 + 1];
+        const positions = land.top.attributes.position.array;
+        const indices = land.top.index.array;
+        for (let i = start; i < end; i += 3) {
+          const a = indices[i] * 3,
+            b = indices[i + 1] * 3,
+            q = indices[i + 2] * 3;
+          const ax = positions[a],
+            az = positions[a + 2];
+          const bx = positions[b] - ax,
+            bz = positions[b + 2] - az;
+          const cx = positions[q] - ax,
+            cz = positions[q + 2] - az;
+          const determinant = bx * cz - bz * cx;
+          if (Math.abs(determinant) < 1e-10) continue;
+          const u = ((x - ax) * cz - (z - az) * cx) / determinant;
+          const v = (bx * (z - az) - bz * (x - ax)) / determinant;
+          if (u >= -1e-5 && v >= -1e-5 && u + v <= 1.00001) {
+            if (conservative) return Math.max(positions[a + 1], positions[b + 1], positions[q + 1]);
+            return positions[a + 1] * (1 - u - v) + positions[b + 1] * u + positions[q + 1] * v;
+          }
+        }
+        return null;
+      }
+      const u = (x - xs[c]) / (xs[c + 1] - xs[c]),
+        v = (z - zs[r]) / (zs[r + 1] - zs[r]);
+      const k = r * cols + c;
+      if (conservative) return Math.max(heights[k], heights[k + 1], heights[k + cols], heights[k + cols + 1]);
+      return u + v <= 1 ? heights[k] * (1 - u - v) + heights[k + 1] * u + heights[k + cols] * v : heights[k + 1] * (1 - v) + heights[k + cols] * (1 - u) + heights[k + cols + 1] * (u + v - 1);
+    };
+  }
   function build(THREE, options) {
     const {
       field,
@@ -275,57 +318,22 @@
     // zero here; the sea-level shoreline itself needs no vertical wall.
     if (land) land.walls = geometry(wallBuilders[0].positions, wallBuilders[0].indices);
     if (water) water.walls = geometry(wallBuilders[1].positions, wallBuilders[1].indices);
-    // Plants follow the displayed triangles. Collision uses their highest corner
-    // near shore, and the original four-corner ceiling farther inland.
-    const sampleHeight = (x, z, conservative = false) => {
-      const c = Math.max(0, Math.min(cols - 2, Math.floor((x - xs[0]) / (axes.step * globalSize.dx))));
-      const r = Math.max(0, Math.min(rows - 2, Math.floor((z - zs[0]) / (axes.step * globalSize.dz))));
-      if (!landCells[r * (cols - 1) + c] || field.distance(x, z) > 0) return null;
-      // In the curved contact strip, query the actual subdivided triangles.
-      // The range is local to one original cell, so no whole-mesh raycast runs.
-      if (field.distance(x, z) > -BEACH_WIDTH - axes.step * 2 && land) {
-        const start = shoreQueryRanges[(r * (cols - 1) + c) * 2];
-        const end = shoreQueryRanges[(r * (cols - 1) + c) * 2 + 1];
-        const positions = land.top.attributes.position.array;
-        const indices = land.top.index.array;
-        for (let i = start; i < end; i += 3) {
-          const a = indices[i] * 3,
-            b = indices[i + 1] * 3,
-            q = indices[i + 2] * 3;
-          const ax = positions[a],
-            az = positions[a + 2];
-          const bx = positions[b] - ax,
-            bz = positions[b + 2] - az;
-          const cx = positions[q] - ax,
-            cz = positions[q + 2] - az;
-          const determinant = bx * cz - bz * cx;
-          if (Math.abs(determinant) < 1e-10) continue;
-          const u = ((x - ax) * cz - (z - az) * cx) / determinant;
-          const v = (bx * (z - az) - bz * (x - ax)) / determinant;
-          if (u >= -1e-5 && v >= -1e-5 && u + v <= 1.00001) {
-            if (conservative) return Math.max(positions[a + 1], positions[b + 1], positions[q + 1]);
-            return positions[a + 1] * (1 - u - v) + positions[b + 1] * u + positions[q + 1] * v;
-          }
-        }
-        return null;
-      }
-      const u = (x - xs[c]) / (xs[c + 1] - xs[c]),
-        v = (z - zs[r]) / (zs[r + 1] - zs[r]);
-      const k = r * cols + c;
-      if (conservative) return Math.max(heights[k], heights[k + 1], heights[k + cols], heights[k + cols + 1]);
-      return u + v <= 1 ? heights[k] * (1 - u - v) + heights[k + 1] * u + heights[k + cols] * v : heights[k + 1] * (1 - v) + heights[k + cols] * (1 - u) + heights[k + cols + 1] * (u + v - 1);
-    };
-    return {
+    const result = {
       land,
       water,
       heights,
       landCells,
-      sampleHeight,
       shoreQueryRanges,
-      coastSegments: Float32Array.from(coastSegments)
+      coastSegments: Float32Array.from(coastSegments),
+      heightQuery: { xs, zs, rows, cols, step: axes.step, dx: globalSize.dx, dz: globalSize.dz }
     };
+    result.sampleHeight = createHeightSampler(result, field);
+    return result;
   }
+
   global.NotoCoastalGeometry = {
+    workerSource: registerCoastalGeometry.toString(),
+    createHeightSampler,
     prepare,
     contactHeight,
     build

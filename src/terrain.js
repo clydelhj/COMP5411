@@ -55,11 +55,12 @@
     status.textContent = `Unable to load terrain: ${error.message}`;
   }
   try {
-    if (!tileset || !window.NotoTileGeometry || !window.NotoRockMaterials || !window.NotoWaterMaterials || !window.NotoWaterMotion || !window.NotoEnvironment || !window.NotoVegetation) {
+    if (!tileset || !window.NotoGeometryWorker || !window.NotoTileGeometry || !window.NotoRockMaterials || !window.NotoWaterMaterials || !window.NotoWaterMotion || !window.NotoEnvironment || !window.NotoVegetation) {
       throw new Error('Missing local terrain assets. Keep the data, src and vendor folders together.');
     }
     const libraries = window.NOTO_LIBRARIES;
-    const coreURL = moduleURL(await decode(libraries.core));
+    const coreSource = await decode(libraries.core);
+    const coreURL = moduleURL(coreSource);
     const threeURL = moduleURL((await decode(libraries.module)).replaceAll('./three.core.js', coreURL));
     const controlsURL = moduleURL((await decode(libraries.controls)).replaceAll("from 'three'", `from '${threeURL}'`));
     const THREE = await import(threeURL);
@@ -252,6 +253,9 @@
     const waterMaterials = window.NotoWaterMaterials.create(THREE);
     const coastalField = await window.NotoCoastalGeometry.prepare(window.NOTO_SHORELINE);
     oceanAt.coast = coastalField;
+    const geometryBuilder = await window.NotoGeometryWorker.create({
+      THREE, coreURL, coreSource, tileset, oceanBits, shoreline: window.NOTO_SHORELINE, coastalField
+    });
     const waterMotion = await window.NotoWaterMotion.create(THREE, window.NOTO_SHORELINE, waterMaterials, coastalField);
     materialFactory.shared.waterMotion = waterMotion;
     const waterTop = waterMaterials.top;
@@ -537,6 +541,11 @@
         add(piece.index?.array);
         add(piece.userData.notoOriginalBoundaryNormals);
         add(piece.userData.notoBoundaryVertexIndices);
+        add(piece.userData.notoBoundaryPositions);
+      }
+      for (const edge of Object.values(geometry.edgeGeometry || {})) {
+        add(edge?.top.attributes.position.array);
+        add(edge?.top.index.array);
       }
       add(geometry.heights);
       add(geometry.coastSegments);
@@ -595,14 +604,10 @@
           const started = performance.now();
           lastBuildAt = started;
           // Cache keys include seam context. Sample coarse/fine boundaries on the same coarse triangle without internal sidewalls.
-          geometry = window.NotoTileGeometry.build(THREE, tileset, geometryTile(tile), rawCache.get(tile.key), neighbors.map(neighbor => ({
+          geometry = await geometryBuilder.build(geometryTile(tile), rawCache.get(tile.key), neighbors.map(neighbor => ({
             tile: geometryTile(neighbor),
             heights: rawCache.get(neighbor.key)
-          })), oceanAt);
-          if (tile.virtual) {
-            window.NotoTileGeometry.conformEdges(THREE, tile, geometry, coarser, m);
-            window.NotoTileGeometry.conformEdges(THREE, tile, geometry, coarser, m, 'water');
-          }
+          })), coarser);
           materials = geometry.land ? await materialFactory.createTile(geometry.heights, geometry.metadata) : null;
           const item = {
             tile,
@@ -633,17 +638,19 @@
       buildTasks.set(cacheKey, task);
       return task;
     }
-    function showSet(next) {
+    async function showSet(next, expectedRevision = null) {
       /*
-       * Atomically show a nonempty map of built tiles. Synchronize boundary normals, replace groups
-       * and request a frame; an empty map preserves current coverage.
+       * Average compact boundary normals in the Worker, then atomically replace scene groups.
+       * A newer selection invalidates an outstanding commit; old coverage remains visible.
        */
       if (!next.size) return;
       const firstTile = next.values().next().value.tile;
       const resident = firstTile.virtual ? null : residentMaps.get(firstTile.level);
       // Reusing a subset of the resident meshes may require boundary-normal synchronization.
       if (resident && resident !== next) resident.normalsReady = false;
-      if (!next.normalsReady) window.NotoTileGeometry.synchronizeNormals([...next.values()].map(item => item.geometry));
+      const isCurrent = () => expectedRevision === null || expectedRevision === revision;
+      if (!next.normalsReady && !await geometryBuilder.synchronizeNormals([...next.values()], isCurrent)) return false;
+      if (!isCurrent()) return false;
       if (resident === next) next.normalsReady = true;
       for (const [key, item] of live) if (next.get(key) !== item) terrain.remove(item.group);
       for (const [key, item] of next) if (live.get(key) !== item) terrain.add(item.group);
@@ -664,6 +671,7 @@
       });
       status.hidden = true;
       requestRender();
+      return true;
     }
     function disposeItem(item) {
       /* Dispose tile geometry and tile-owned rock materials; keep shared resources alive. */
@@ -690,9 +698,9 @@
         mesh.castShadow = mesh.geometry === geometry.land?.top || mesh.geometry === geometry.land?.walls;
         mesh.receiveShadow = true;
         if (mesh.geometry === geometry.water?.top) {
-          mesh.geometry.computeBoundingBox();
+          if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
           mesh.geometry.boundingBox.expandByScalar(2);
-          mesh.geometry.computeBoundingSphere();
+          if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
           mesh.geometry.boundingSphere.radius += 2;
         }
       });
@@ -747,7 +755,7 @@
             if (!cached) await waitFrame();
           }
           if (revision !== thisRevision) continue;
-          showSet(next);
+          if (!await showSet(next, thisRevision)) continue;
           pendingSelection = null;
           trimCaches();
         }
@@ -1390,6 +1398,7 @@
         graphics: {
           ...graphics
         },
+        geometryWorker: geometryBuilder.getState(),
         environment: environment.getState(),
         water: waterMotion.getState(),
         surf: surf.getState(),
@@ -1442,7 +1451,7 @@
       await waitFrame();
     }
     residentMaps.set(maxLevel, initial);
-    showSet(initial);
+    await showSet(initial);
     // Enable navigation after coarse inputs are ready; local LOD selection always keeps full-map coverage.
     await warmResident();
     navigationReady = true;

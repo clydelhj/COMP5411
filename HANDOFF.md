@@ -1,6 +1,6 @@
 # Maintenance handoff
 
-Baseline date: October 20, 2026. Project: **Noto Peninsula: An Interactive 3D Landscape**, COMP5411 Group 12, LEE Hyunjin and TAN Jiming.
+Baseline date: October 24, 2026. Project: **Noto Peninsula: An Interactive 3D Landscape**, COMP5411 Group 12, LEE Hyunjin and TAN Jiming.
 
 ## Entry and documentation
 
@@ -16,10 +16,10 @@ Keep runtime paths relative to the root. Asset distribution instructions govern 
 
 ## Current integrated features
 
-- Local distance-adaptive terrain patches, asynchronous loading, retained coverage, mixed-detail stitching, bounded caches and camera safety.
+- Local distance-adaptive terrain patches, dedicated Worker geometry construction and boundary-normal averaging, retained coverage, mixed-detail stitching, bounded caches and camera safety.
 - Continuous coastline clipping independent of display spacing, closed exposed walls and a −100 m model bottom.
 - Geological PBR categories with triplanar projection, continuous boundary blending and randomized texture sampling.
-- Real-classification-driven representative plants, deterministic locations and tree-shape variants; soil grass texture and nearby instanced blades, with independent grass/tree visibility settings.
+- Real-classification-driven representative plants, deterministic locations and tree-shape variants; soil grass texture and nearby instanced blades, with independent grass/tree visibility settings and cooperative placement preparation.
 - Geometric waves, nearshore crests, foam/wetness and GPU spray with a shared clock.
 - GMT+9 date/time, clear/cloudy/rainy presets, day/night lights, local shadows, GPU rain and pointer flashlight.
 - Performance-based terrain/canvas/plant budgets and default 30-second idle animation followed by sleep.
@@ -38,7 +38,7 @@ Forest broadleaf trees use 12–22 m heights and conifers 18–30 m; orchard and
 
 Mixed-detail land edges match the actual coarse surface, including shoreline subdivisions. Animated water edges interpolate the same coarse endpoint wave displacements. Plant roots and collision queries use the displayed surface. Water-wave filtering follows the user detail setting, rather than changing its global parameters whenever patch arrangement changes.
 
-Keep shared material arrays, water resources and plant resources owned by their factories. Evict only independent per-patch resources. Cached resources remain allocated during sleep. No module should introduce a separate animation loop or polling timer for effects; the main scheduler controls shared time, visibility, dialogs and idle sleep.
+Keep shared material arrays, water resources and plant resources owned by their factories. Evict only independent per-patch resources. Cached resources remain allocated during sleep. `geometry-worker.js` owns background construction, with compact transferable outputs and explicit fallback diagnostics. Do not transfer buffers owned by visible meshes or the raw cache. Plant preparation uses the existing frame scheduler with a 3 ms target slice; retain old instances until a complete, current replacement is ready. No module should introduce a separate animation loop or polling timer for effects; the main scheduler controls shared time, visibility, dialogs and idle sleep.
 
 The renderer requests high performance, but browser/driver/system policy chooses the device. Do not describe this request as a forced GPU switch. Use `terrainViewer.getState().graphics.renderer` when the browser exposes it.
 

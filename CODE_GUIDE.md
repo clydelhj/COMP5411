@@ -1,6 +1,6 @@
 # Code guide
 
-Current runtime baseline: October 20, 2026. All paths below are relative to the directory containing `index-1m.html`.
+Current runtime baseline: October 24, 2026. All paths below are relative to the directory containing `index-1m.html`.
 
 ## Structure
 
@@ -11,6 +11,7 @@ Current runtime baseline: October 20, 2026. All paths below are relative to the 
 ├── src/
 │   ├── terrain.js
 │   ├── terrain-lod.js
+│   ├── geometry-worker.js
 │   ├── tile-geometry.js
 │   ├── coastal-geometry.js
 │   ├── model-volume.js
@@ -48,6 +49,7 @@ Large runtime/source assets may be distributed separately; their paths after ins
 | --- | --- |
 | `terrain.js` | Scene setup, asynchronous loads, caches, camera safety, settings, performance feedback and frame scheduling |
 | `terrain-lod.js` | Distance-based nested display patches, selection hysteresis, source resampling and display-patch lookup |
+| `geometry-worker.js` | Dedicated Worker, transferable geometry buffers, compact seam/normal messages and main-thread reconstruction |
 | `tile-geometry.js` | Land/water classification, terrain triangles, mixed-detail edges and shared normals |
 | `coastal-geometry.js` | Continuous shoreline clipping, coastal refinement and display contact profile |
 | `model-volume.js` | Exposed outer walls and the −100 m bottom |
@@ -61,11 +63,21 @@ Large runtime/source assets may be distributed separately; their paths after ins
 
 ## Startup and resource flow
 
-The HTML uses deferred ordinary scripts. Third-party libraries and the terrain manifest load first; geological configuration precedes material factories. Shared water/shoreline and environment modules precede geometry. Vegetation data and model/grass payloads precede the vegetation runtime. `terrain-lod.js` loads before the final orchestrator, `terrain.js`.
+The HTML uses deferred ordinary scripts. Third-party libraries and the terrain manifest load first; geological configuration precedes material factories. Shared water/shoreline and environment modules precede geometry. Vegetation data and model/grass payloads precede the vegetation runtime. `geometry-worker.js` loads after its geometry dependencies. `terrain-lod.js` loads before the final orchestrator, `terrain.js`.
 
 `terrain.js` decompresses the bundled Three.js modules, prepares the shared classification and texture resources, creates the scene and loads terrain input. Input files call `window.NOTO_TILE_RECEIVE(key, payload)` with compressed height arrays. Heights decode as `uint16 / 100 - 100` metres, with 65535 reserved for NoData.
 
 Geometric and material resources for each display patch are constructed off the active set. A complete replacement set, including its edge constraints, is committed together. The previous set remains visible during loading. Independent patch resources are released on cache eviction; shared material arrays, water textures and vegetation resources belong to their factories, not individual terrain patches.
+
+## Background geometry and bounded plant updates
+
+`geometry-worker.js` builds a named dedicated Worker from local module initializer sources and a Blob URL. It imports its own encoded copy of the already decoded Three.js core source, avoiding cross-realm opaque-origin Blob imports. This avoids fetching local source scripts from a `file://` page; both direct-file and localhost entry modes use the same geometry implementation. The Worker has no renderer or WebGL context.
+
+The ocean mask and shoreline inputs are copied once during initialization. Each build receives only its patch, loaded neighbor heights and compact completed coarse-edge geometry. Terrain topology, coastal refinement, mixed-detail constraints, vertex normals and bounds are computed in the Worker. Newly owned output ArrayBuffers are transferred back; live height caches and visible geometry are never transferred or detached. The main thread restores BufferGeometry wrappers, reattaches displayed-surface height queries and creates materials/scene objects.
+
+Boundary vertex indices, positions and original normals are prepared in the Worker. Before committing a replacement set, compact boundary data is averaged there; the main thread applies the returned normal values. A selection revision check rejects stale commits. Existing complete coverage stays visible throughout construction. Worker startup/runtime failure selects an explicit compatibility fallback, exposed with its reason in `terrainViewer.getState().geometryWorker`; the fallback uses the original main-thread geometry algorithm.
+
+Plant and grass placement use cooperative generators with a 3 ms target slice. Candidate scans, distance sorting and instance preparation span multiple requested frames. A completed snapshot replaces the old instance set atomically. Camera motion schedules a later snapshot without continually restarting the current one; terrain/settings invalidation cancels stale work. Shared GPU attributes retain their identities and upload only populated ranges. This is bounded main-thread scheduling, not a plant Worker or a guarantee that every individual operation completes within 3 ms.
 
 ## Terrain data and local LOD
 
@@ -117,7 +129,7 @@ Only one frame request can be pending. Inputs, settings and completed resources 
 
 Performance feedback uses consecutive rendered-frame intervals and asynchronous GPU timing where available. Loading/building intervals and the first wake-up frame are excluded. Sustained slow windows reduce local terrain budgets and automatic canvas/plant detail; sustained fast windows restore them gradually. Both adjustment directions have a 6-second cooldown. Manual canvas and vegetation settings are not overwritten. Hardware hints choose the initial tier, while measured load drives later adaptation.
 
-`terrainViewer.getState()` exposes actual grid spacings, `lodMode: "distance-adaptive"`, cache/build counters, estimated geometry memory, frame/GPU timing, graphics-device information, vegetation/grass counts and environment/water state. Estimated memory is not a VRAM measurement; `powerPreference` is a request rather than proof of discrete-GPU selection.
+`terrainViewer.getState()` exposes Worker mode/build/attachment timings, pending plant placement and accumulated placement CPU time, actual grid spacings, `lodMode: "distance-adaptive"`, cache/build counters, estimated geometry memory, frame/GPU timing, graphics-device information, vegetation/grass counts and environment/water state. Estimated memory is not a VRAM measurement; `powerPreference` is a request rather than proof of discrete-GPU selection.
 
 ## Maintenance and rebuilding
 
@@ -137,3 +149,7 @@ Use two-space indentation for JavaScript/HTML/CSS and four spaces for Python. Ex
 See [REBUILD.md](REBUILD.md) for source locations, dependencies and portable rebuild commands. `scripts/build_grass_ground.py` adds the current grass texture payload from the retained `grass_ground` source images. Ordinary source changes should be checked in the browser without regenerating unrelated datasets.
 
 The dated [progress report](docs/COMP5411_Progress_Report_EN.md) preserves October 18 measurements. Its uniform-visible-LOD description is historical; this guide describes the current local selection. Targeted October 19 checks covered all 12 detail limits, selection coverage/budget/fallback, mixed land/water edges, stable small camera turns, grass attachment, sleep and file/HTTP loading. October 20 checks covered tree attachment across representative detail limits and 1/5/10 height scales, independent grass/tree visibility combinations, sleep and both entry modes. Full device coverage, long navigation sessions and final presentation acceptance remain incomplete.
+
+## Focused regression tests
+
+Run `node --test tests/geometry-worker.test.cjs` with Node.js 22 or newer. Tests use real worker threads, the bundled Three.js core and generated terrain/coast fixtures. They cover transferred topology and attribute parity, height queries, mixed-detail water edges, boundary normals, caller buffer ownership, stale commits and compatibility fallback. No DEM download or npm installation is required. Browser rendering and interaction still need separate checks.

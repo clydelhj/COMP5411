@@ -1128,6 +1128,7 @@
     return result;
   }
   global.NotoTileGeometry = {
+    workerSource: registerNotoTileGeometry.toString(),
     build,
     conformEdges(THREE, tile, result, coarser, metadata, kind = 'land') {
       // Continuous coasts refine beyond the base grid. Constrain fine edges to completed coarse boundary polylines,
