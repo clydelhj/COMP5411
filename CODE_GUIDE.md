@@ -11,6 +11,7 @@ Current runtime baseline: October 24, 2026. All paths below are relative to the 
 ├── src/
 │   ├── terrain.js
 │   ├── terrain-lod.js
+│   ├── terrain-refinement.js
 │   ├── geometry-worker.js
 │   ├── tile-geometry.js
 │   ├── coastal-geometry.js
@@ -49,6 +50,7 @@ Large runtime/source assets may be distributed separately; their paths after ins
 | --- | --- |
 | `terrain.js` | Scene setup, asynchronous loads, caches, camera safety, settings, performance feedback and frame scheduling |
 | `terrain-lod.js` | Distance-based nested display patches, selection hysteresis, source resampling and display-patch lookup |
+| `terrain-refinement.js` | Progressive local split/merge transactions, near-region priority and displayed-topology validation |
 | `geometry-worker.js` | Dedicated Worker, transferable geometry buffers, compact seam/normal messages and main-thread reconstruction |
 | `tile-geometry.js` | Land/water classification, terrain triangles, mixed-detail edges and shared normals |
 | `coastal-geometry.js` | Continuous shoreline clipping, coastal refinement and display contact profile |
@@ -63,11 +65,11 @@ Large runtime/source assets may be distributed separately; their paths after ins
 
 ## Startup and resource flow
 
-The HTML uses deferred ordinary scripts. Third-party libraries and the terrain manifest load first; geological configuration precedes material factories. Shared water/shoreline and environment modules precede geometry. Vegetation data and model/grass payloads precede the vegetation runtime. `geometry-worker.js` loads after its geometry dependencies. `terrain-lod.js` loads before the final orchestrator, `terrain.js`.
+The HTML uses deferred ordinary scripts. Third-party libraries and the terrain manifest load first; geological configuration precedes material factories. Shared water/shoreline and environment modules precede geometry. Vegetation data and model/grass payloads precede the vegetation runtime. `geometry-worker.js` loads after its geometry dependencies. `terrain-lod.js` and `terrain-refinement.js` load before the final orchestrator, `terrain.js`.
 
 `terrain.js` decompresses the bundled Three.js modules, prepares the shared classification and texture resources, creates the scene and loads terrain input. Input files call `window.NOTO_TILE_RECEIVE(key, payload)` with compressed height arrays. Heights decode as `uint16 / 100 - 100` metres, with 65535 reserved for NoData.
 
-Geometric and material resources for each display patch are constructed off the active set. A complete replacement set, including its edge constraints, is committed together. The previous set remains visible during loading. Independent patch resources are released on cache eviction; shared material arrays, water textures and vegetation resources belong to their factories, not individual terrain patches.
+Geometric and material resources are prepared off the active set. A local split/merge transaction replaces one parent or its displayed descendants, together with neighbors whose seam context changes. Existing coverage remains visible while that transaction builds; unrelated regions do not wait for the full final selection. Independent patch resources are released on cache eviction; shared material arrays, water textures and vegetation resources belong to their factories, not individual terrain patches.
 
 ## Background geometry and bounded plant updates
 
@@ -75,7 +77,7 @@ Geometric and material resources for each display patch are constructed off the 
 
 The ocean mask and shoreline inputs are copied once during initialization. Each build receives only its patch, loaded neighbor heights and compact completed coarse-edge geometry. Terrain topology, coastal refinement, mixed-detail constraints, vertex normals and bounds are computed in the Worker. Newly owned output ArrayBuffers are transferred back; live height caches and visible geometry are never transferred or detached. The main thread restores BufferGeometry wrappers, reattaches displayed-surface height queries and creates materials/scene objects.
 
-Boundary vertex indices, positions and original normals are prepared in the Worker. Before committing a replacement set, compact boundary data is averaged there; the main thread applies the returned normal values. A selection revision check rejects stale commits. Existing complete coverage stays visible throughout construction. Worker startup/runtime failure selects an explicit compatibility fallback, exposed with its reason in `terrainViewer.getState().geometryWorker`; the fallback uses the original main-thread geometry algorithm.
+Boundary vertex indices, positions and original normals are prepared in the Worker. Before each local commit, compact boundary data for the display frontier is averaged there; the main thread applies the returned values and uploads only changed normal buffers. A displayed-topology and user-grid check rejects stale commits, while ordinary camera changes allow useful local work to complete. Existing complete coverage stays visible throughout construction. Worker startup/runtime failure selects an explicit compatibility fallback, exposed with its reason in `terrainViewer.getState().geometryWorker`; the fallback uses the original main-thread geometry algorithm.
 
 Plant and grass placement use cooperative generators with a 3 ms target slice. Candidate scans, distance sorting and instance preparation span multiple requested frames. A completed snapshot replaces the old instance set atomically. Camera motion schedules a later snapshot without continually restarting the current one; terrain/settings invalidation cancels stale work. Shared GPU attributes retain their identities and upload only populated ranges. This is bounded main-thread scheduling, not a plant Worker or a guarantee that every individual operation completes within 3 ms.
 
@@ -85,11 +87,13 @@ The 1 m source crop contains 33,226 × 23,136 nodes over 33,225 × 23,135 m. Nat
 
 The default finest display spacing is 5 m. `terrain-lod.js` uses a nested doubling sequence derived from that setting, such as 5/10/20/40/80/160 m. Display patches contain at most 128 cells per side and form complete, nonoverlapping coverage. They are independent of input-file rectangles. Nodes are sampled from the nearest suitable available input through triangle interpolation, preserving NoData rather than inventing elevations across gaps.
 
-The selection budget prioritizes projected error near the camera. A 30% view buffer and a 1 km camera neighborhood reduce sensitivity to small orientation changes. Split and merge thresholds are 2.4 and 1.5 pixels; committed splits receive priority. Selection requests are coalesced at 300 ms. These rules reduce oscillation but do not promise unchanged geometry during large movement or sustained overload.
+The selection budget prioritizes projected error near the camera. A 30% view buffer and a 1 km camera neighborhood reduce sensitivity to small orientation changes. Split and merge thresholds are 2.4 and 1.5 pixels; committed splits receive priority. Selection requests are coalesced at 80 ms without resetting the timer on every movement. These rules reduce oscillation but do not promise unchanged geometry during large movement or sustained overload.
 
 Fine boundary nodes first follow coarse triangle interpolation. The final fine land/water edges then match the actual coarse edges, including coastal subdivisions. Water edge attributes identify coarse endpoints so the vertex shader interpolates their wave displacements. This keeps mixed-detail water edges together while they animate. Collision and plant placement query the active display patches rather than assuming one scene-wide level.
 
-A coarse 128 m starting surface provides initial coverage; inputs at 16 m and coarser are preloaded. Missing inputs affect only patches that need them, which select a coarser available source. Geometry cache keys include neighboring edge context. Active, building and pending resources are protected from eviction.
+A coarse 128 m starting surface provides initial coverage; inputs at 16 m and coarser are preloaded. Missing inputs affect only patches that need them, which select a coarser available source. Geometry cache keys include neighboring edge context. A coastal patch may ignore same/finer neighbors only when its original local ownership has no unresolved cells and there is no coarser context. Such a patch bypasses neighbor-dependent interior walls, so its geometry remains valid as finer neighbors change. All other patches retain the full context. Equivalent cache entries own their resources only once. Active, building, pending and in-progress transaction resources are protected from eviction.
+
+`terrain-refinement.js` turns the final selection into local transactions. It prioritizes desired nearby descendants, refines a bounded subtree inside one displayed parent (up to three levels along the highest-priority branch) and merges complete descendant sets when coarser detail is needed. Actual allocated cell/object budgets control whether a merge must precede nearby refinement; a smaller final target alone does not force a distant merge first. Incompatible startup/user grids first establish aligned coarse coverage. Within a transaction, completed unchanged patches are reused and changed coarse endpoint owners build before fine patches. Up to 12 nearby patch sample reads start ahead of those builds. A complete local group commits immediately; the remaining target continues in the background. Camera movement updates the next target without discarding valid current work. User grid changes invalidate incompatible work. `terrainViewer.getState().refinement` exposes commit count/type, pending group size and target size.
 
 The initial base-cell budget is approximately 2 × 1024² on the higher starting tier, or 1 × 1024² otherwise. At most 384 display patches are selected. Cache targets and the memory-limited effective budget may further constrain detail; coastal subdivisions add geometry beyond the base-cell count. These are estimates and soft budgets, not measured VRAM limits.
 
@@ -152,4 +156,4 @@ The dated [progress report](docs/COMP5411_Progress_Report_EN.md) preserves Octob
 
 ## Focused regression tests
 
-Run `node --test tests/geometry-worker.test.cjs` with Node.js 22 or newer. Tests use real worker threads, the bundled Three.js core and generated terrain/coast fixtures. They cover transferred topology and attribute parity, height queries, mixed-detail water edges, boundary normals, caller buffer ownership, stale commits and compatibility fallback. No DEM download or npm installation is required. Browser rendering and interaction still need separate checks.
+Run `node --test tests/geometry-worker.test.cjs tests/terrain-refinement.test.cjs tests/terrain-refinement-geometry.test.cjs` with Node.js 22 or newer. Tests use real worker threads, the bundled Three.js core and generated terrain/coast fixtures. They cover transferred topology and attribute parity, height queries, mixed-detail water edges, boundary normals, caller buffer ownership, stale commits and compatibility fallback. No DEM download or npm installation is required. Progressive tests also check full coverage throughout local transitions, selection priority, merging and stale-topology rejection. Browser rendering and interaction still need separate checks.

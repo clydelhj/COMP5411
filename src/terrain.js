@@ -55,7 +55,7 @@
     status.textContent = `Unable to load terrain: ${error.message}`;
   }
   try {
-    if (!tileset || !window.NotoGeometryWorker || !window.NotoTileGeometry || !window.NotoRockMaterials || !window.NotoWaterMaterials || !window.NotoWaterMotion || !window.NotoEnvironment || !window.NotoVegetation) {
+    if (!tileset || !window.NotoTerrainRefinement || !window.NotoGeometryWorker || !window.NotoTileGeometry || !window.NotoRockMaterials || !window.NotoWaterMaterials || !window.NotoWaterMotion || !window.NotoEnvironment || !window.NotoVegetation) {
       throw new Error('Missing local terrain assets. Keep the data, src and vendor folders together.');
     }
     const libraries = window.NOTO_LIBRARIES;
@@ -317,6 +317,7 @@
       descriptors,
       unavailable: unavailableTiles
     });
+    const refinement = window.NotoTerrainRefinement.create({ lod: spatialLOD, metadata: m });
     const inFlight = new Map();
     const receivers = new Map();
     const queue = [];
@@ -493,9 +494,8 @@
       });
     }
 
-    // 5. Keep complete coverage and commit only after all new patches and seams are ready.
+    // 5. Keep complete coverage while nearby parent/child transactions become ready.
     let live = new Map(),
-      revision = 0,
       initialized = false,
       lodTimer;
     let currentPlan = null;
@@ -506,8 +506,9 @@
     let geometryBytes = 0,
       foregroundBusy = false,
       pendingSelection = null;
-    let lastMotion = 0,
-      lastBuildAt = -Infinity;
+    const refinementState = { commits: 0, lastType: null, lastCommitMs: 0, pendingPatches: 0, selectionDelayMs: 80 };
+    let activeTransition = null;
+    let lastBuildAt = -Infinity;
     let warmingResident = false;
     const buildingRaw = new Map();
     function neighborsFor(tile) {
@@ -558,8 +559,8 @@
        * Trim caches while protecting visible, building and selected tiles. Dispose unused
        * nonresident geometry over budget, then evict unprotected raw arrays. Returns undefined.
        */
-      const needed = new Set([...live.values()].map(item => item.tile.cacheKey || item.tile.key).concat([...buildTasks.keys()], (pendingSelection || []).map(tile => tile.cacheKey || tile.key)));
-      const rawNeeded = new Set([...live.keys(), ...(pendingSelection || []).map(tile => tile.key)]);
+      const needed = new Set([...live.values()].map(item => item.tile.cacheKey || item.tile.key).concat([...buildTasks.keys()], (pendingSelection || []).map(tile => tile.cacheKey || tile.key), (activeTransition?.tiles || []).map(tile => tile.cacheKey || tile.key)));
+      const rawNeeded = new Set([...live.keys(), ...(pendingSelection || []).map(tile => tile.key), ...(activeTransition?.tiles || []).map(tile => tile.key)]);
       for (const [key, item] of geometryCache) {
         if (geometryBytes <= quality.geometryBytes) break;
         if (needed.has(key) || !item.tile.virtual && residentGeometryLevels.has(item.tile.level)) continue;
@@ -585,7 +586,7 @@
        * clear task/protection counters on completion. Returns Promise<object> with tile, geometry,
        * materials, group and bytes.
        */
-      const cacheKey = tile.cacheKey || tile.key;
+      const cacheKey = tile.virtual ? spatialLOD.geometryKey(tile) : tile.cacheKey || tile.key;
       if (geometryCache.has(cacheKey)) {
         const item = geometryCache.get(cacheKey);
         geometryCache.delete(cacheKey);
@@ -609,15 +610,25 @@
             heights: rawCache.get(neighbor.key)
           })), coarser);
           materials = geometry.land ? await materialFactory.createTile(geometry.heights, geometry.metadata) : null;
+          const finalKey = tile.virtual ? spatialLOD.noteGeometry(tile, geometry.coarseOnlyDependencies) : cacheKey;
+          // The proven-independent key may already exist from an earlier frontier. Own each
+          // geometry resource once rather than replacing that entry and double-counting it.
+          const equivalent = geometryCache.get(finalKey);
+          if (equivalent) {
+            geometry.dispose();
+            materials?.dispose();
+            cacheStats.geometryHits++;
+            return equivalent;
+          }
           const item = {
-            tile,
+            tile: tile.virtual ? { ...tile, cacheKey: finalKey } : tile,
             geometry,
             materials,
             group: meshGroup(geometry, materials),
             bytes: estimateBytes(geometry)
           };
           if (tile.file && surfaceCells(tile) > 1000) quality.bytesPerCell = quality.bytesPerCell * 0.95 + item.bytes / surfaceCells(tile) * 0.05;
-          geometryCache.set(cacheKey, item);
+          geometryCache.set(finalKey, item);
           geometryBytes += item.bytes;
           cacheStats.built++;
           quality.buildMs = quality.buildMs * 0.9 + (performance.now() - started) * 0.1;
@@ -638,17 +649,16 @@
       buildTasks.set(cacheKey, task);
       return task;
     }
-    async function showSet(next, expectedRevision = null) {
+    async function showSet(next, isCurrent = () => true) {
       /*
        * Average compact boundary normals in the Worker, then atomically replace scene groups.
-       * A newer selection invalidates an outstanding commit; old coverage remains visible.
+       * The caller validates topology and user detail settings; camera motion does not discard valid work.
        */
       if (!next.size) return;
       const firstTile = next.values().next().value.tile;
       const resident = firstTile.virtual ? null : residentMaps.get(firstTile.level);
       // Reusing a subset of the resident meshes may require boundary-normal synchronization.
       if (resident && resident !== next) resident.normalsReady = false;
-      const isCurrent = () => expectedRevision === null || expectedRevision === revision;
       if (!next.normalsReady && !await geometryBuilder.synchronizeNormals([...next.values()], isCurrent)) return false;
       if (!isCurrent()) return false;
       if (resident === next) next.normalsReady = true;
@@ -722,74 +732,107 @@
       if (resolutionLabel.textContent !== text) resolutionLabel.textContent = text;
       resolutionLabel.title = 'Nearest visible detail; distant patches use coarser grids';
     }
+    function refinementPriority(tile) {
+      const bounds = tileBox(tile);
+      const visible = frustum.intersectsBox(bounds);
+      const distance = Math.max(1, bounds.distanceToPoint(camera.position));
+      const focusDistance = bounds.distanceToPoint(controls.target);
+      return (visible ? 4 : 1) / distance + 1 / (100 + focusDistance);
+    }
     async function updateLOD() {
-      // Retain current full coverage during asynchronous construction; include seam signatures when comparing plans.
+      // Selection is cheap and replaceable. A valid local transaction can finish during movement.
       const selected = chooseLeaves();
       const plan = selected.map(tile => tile.cacheKey || tile.key).join('|');
-      // Compare the requested plan separately from the displayed set to avoid rebuilding the same seams.
       const displayed = selected.length === live.size && selected.every(tile => live.get(tile.key)?.tile.cacheKey === tile.cacheKey);
       if (displayed) {
         currentPlan = plan;
-        if (foregroundBusy) {
-          revision++;
-          pendingSelection = null;
-        }
+        pendingSelection = null;
         return;
       }
-      if (plan === currentPlan && foregroundBusy && pendingSelection) return;
-      currentPlan = plan;
-      revision++;
-      pendingSelection = selected;
+      if (plan !== currentPlan || !pendingSelection) {
+        currentPlan = plan;
+        pendingSelection = selected;
+      }
       if (foregroundBusy) return;
       foregroundBusy = true;
       try {
         while (pendingSelection) {
-          const desired = pendingSelection,
-            thisRevision = revision;
-          const next = new Map();
-          for (const tile of [...desired].sort((a, b) => b.step - a.step)) {
+          const transaction = refinement.next(live, pendingSelection, refinementPriority, {
+            budget: quality.effectiveCells,
+            limit: MAX_TILE_OBJECTS
+          });
+          if (!transaction) {
+            pendingSelection = null;
+            break;
+          }
+          activeTransition = transaction;
+          const started = performance.now();
+          const valid = () => Boolean(pendingSelection) && refinement.isApplicable(transaction, live, displayLevels[minimumLevel].step);
+          const next = new Map(), builds = [];
+          for (const tile of transaction.tiles) {
+            const existing = live.get(tile.key);
+            if (existing?.tile.cacheKey === tile.cacheKey) next.set(tile.key, existing);
+            else builds.push(tile);
+          }
+          refinementState.pendingPatches = builds.length;
+          // Start a bounded set of nearby sample reads while the Worker prepares coarser edge owners.
+          const prefetched = new Set();
+          for (const tile of [...builds].sort((a, b) => refinementPriority(b) - refinementPriority(a))) {
+            for (const neighbor of neighborsFor(tile)) {
+              if (prefetched.size >= 12 || prefetched.has(neighbor.key)) continue;
+              prefetched.add(neighbor.key);
+              loadRaw(neighbor, -1).catch(() => {});
+            }
+          }
+          // Coarser adjacent geometry must exist before fine edges can be constrained to it.
+          builds.sort((a, b) => b.step - a.step || refinementPriority(b) - refinementPriority(a));
+          for (const tile of builds) {
+            if (!valid()) break;
             const cached = geometryCache.has(tile.cacheKey || tile.key);
             next.set(tile.key, await getItem(tile, 0, [...next.values()]));
-            if (revision !== thisRevision) break;
-            // Yield between geometry builds to keep the main thread responsive.
+            refinementState.pendingPatches--;
             if (!cached) await waitFrame();
           }
-          if (revision !== thisRevision) continue;
-          if (!await showSet(next, thisRevision)) continue;
-          pendingSelection = null;
+          if (valid() && next.size === transaction.tiles.length && await showSet(next, valid)) {
+            refinementState.commits++;
+            refinementState.lastType = transaction.type;
+            refinementState.lastCommitMs = performance.now() - started;
+          }
+          activeTransition = null;
+          refinementState.pendingPatches = 0;
           trimCaches();
+          // Let input and a presentation frame run between local commits.
+          await waitFrame();
         }
       } catch (error) {
         pendingSelection = null;
         currentPlan = null;
-        // Retain existing coverage. After a missing source file, reselect an available sampling level for that region.
         if (error.terrainTileKey) {
           console.warn('Using available terrain detail:', error.message);
           for (const key of rawCache.keys()) if (key.startsWith('patch/')) rawCache.delete(key);
           scheduleLOD();
-        } else {
-          errorMessage(error);
-        }
+        } else errorMessage(error);
       } finally {
+        activeTransition = null;
+        refinementState.pendingPatches = 0;
         foregroundBusy = false;
       }
     }
     resolutionSelect.addEventListener('change', () => {
       /*
        * Apply the finest terrain limit and cancel uncommitted older requests. Read the generated
-       * select option; reject levels finer than the source DEM or outside the tileset. Update
-       * request revision to prevent stale asynchronous commits. Keep current coverage until the
-       * complete patch set for the new limit is ready. Returns undefined; updates settings and the
+       * select option; reject levels finer than the source DEM or outside the tileset. Change the
+       * detail base so incompatible local transactions cannot commit. Keep coverage while the
+       * aligned coarse grid and subsequent local refinement become ready. Returns undefined; updates settings and the
        * loading plan.
        */
       const level = Number(resolutionSelect.value);
       if (!Number.isInteger(level) || level < 0 || level > maxLevel) return;
       if (level === minimumLevel) return;
       minimumLevel = level;
-      revision++;
       pendingSelection = null;
       currentPlan = null;
-      // Explicit settings also retain old coverage until the complete replacement set is ready.
+      // Retain old coverage until an aligned coarse grid can begin progressive replacement.
       wakeRendering();
       if (initialized) updateLOD();
     });
@@ -819,13 +862,13 @@
     function scheduleLOD() {
       /*
        * Coalesce repeated LOD update requests. Keep an existing timer; otherwise clear a new timer
-       * after 300 ms and update LOD if initialized. Returns undefined and schedules delayed work.
+       * after 80 ms and update LOD if initialized. Local commits continue during camera motion.
        */
       if (lodTimer) return;
       lodTimer = setTimeout(() => {
         lodTimer = null;
         if (initialized) updateLOD();
-      }, 300);
+      }, refinementState.selectionDelayMs);
     }
 
     // 6. Wheel, buttons, keyboard navigation and conservative collision constraints.
@@ -995,7 +1038,6 @@
       const distance = camera.position.distanceTo(controls.target);
       if (pendingZoom * units < 0) pendingZoom = 0;
       pendingZoom += units * Math.max(ZOOM_MIN_STEP_M, distance * ZOOM_DISTANCE_FACTOR);
-      lastMotion = performance.now();
       wakeRendering();
     }
     function moveZoom(now) {
@@ -1035,7 +1077,6 @@
       pendingZoom = fraction < 1 || !step ? 0 : pendingZoom - step;
       if (Math.abs(pendingZoom) < 1e-6) pendingZoom = 0;
       constrainCamera();
-      lastMotion = now;
     }
 
     // Capture wheel input for metre-based zoom. OrbitControls still handles dragging, touch and orbiting.
@@ -1364,7 +1405,6 @@
     slider.addEventListener('input', updateScale);
     // Control changes record interaction and request a frame and LOD update.
     controls.addEventListener('change', () => {
-      lastMotion = performance.now();
       wakeRendering();
       scheduleLOD();
     });
@@ -1399,6 +1439,7 @@
           ...graphics
         },
         geometryWorker: geometryBuilder.getState(),
+        refinement: { ...refinementState, active: Boolean(activeTransition), desiredPatches: pendingSelection?.length ?? 0 },
         environment: environment.getState(),
         water: waterMotion.getState(),
         surf: surf.getState(),

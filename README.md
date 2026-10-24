@@ -43,7 +43,7 @@ Viewing requires WebGL2, Gzip `DecompressionStream` and hardware acceleration. R
 
 ## Detail and animation settings
 
-The finest permitted terrain spacing defaults to **5 m**. Settings offer 1–8 m in 1 m increments and 16/32/64/128 m. This is a detail limit: nearby terrain receives priority while distant patches can remain coarser. `Near grid` reports the finest visible land spacing, rather than a uniform whole-scene spacing. Changing the view does not replace the entire visible region with one coarse level.
+The finest permitted terrain spacing defaults to **5 m**. Settings offer 1–8 m in 1 m increments and 16/32/64/128 m. This is a detail limit: nearby terrain receives priority while distant patches can remain coarser. `Near grid` reports the finest visible land spacing, rather than a uniform whole-scene spacing. Nearby refinement is displayed as complete local groups become ready. Camera motion updates the target without repeatedly discarding valid current work; adjacent seams update with each group.
 
 Window render resolution and 3D vegetation detail default to Auto. Manual settings remain under user control. Tree locations and shape variants are deterministic; distance changes representation, with a fade over 1200–1500 m. Soil ground also has blended grass texture and nearby instanced grass blades. Grass positions stay fixed when geometric detail changes.
 
@@ -67,7 +67,7 @@ The renderer requests `powerPreference: "high-performance"`. The browser, operat
 | `assets/material-library/`, `assets/vegetation/` | Source assets, derived runtime assets and source records |
 | `gis/vegetation/` | Aligned classification and satellite-reference rasters, QGIS styles and metadata |
 | `noto_terrain_materials_package/` | Geological sources, borehole summaries and reference model |
-| `tests/` | Synthetic Worker geometry regression tests; run `node --test tests/geometry-worker.test.cjs` with Node.js 22+ |
+| `tests/` | Synthetic Worker geometry regression tests; see `CODE_GUIDE.md` for Node.js 22+ test commands |
 | `scripts/`, `vendor/` | Offline generators, local server and third-party code |
 | `source-data/terrain/` | Original DEM location when the source-data bundle is installed |
 | `docs/` | Proposal and dated English progress report |

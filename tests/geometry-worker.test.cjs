@@ -156,6 +156,7 @@ function compareArray(actual, expected, label) {
 }
 
 function compareGeometry(actual, expected) {
+  assert.equal(Boolean(actual.coarseOnlyDependencies), Boolean(expected.coarseOnlyDependencies), 'coastal dependency qualification survives transfer');
   assert.deepEqual(JSON.parse(JSON.stringify(actual.metadata)), JSON.parse(JSON.stringify(expected.metadata)));
   for (const key of ['heights', 'landCells', 'shoreQueryRanges', 'coastSegments']) {
     compareArray(actual[key], expected[key], key);

@@ -124,8 +124,12 @@
       function priority(tile) {
         return score(tile) * (committedSplits.has(tile.key) ? 1.3 : 1);
       }
-      // Geometry signatures include adjacent patches and coarser endpoint owners only, so local LOD changes do not invalidate the entire cache.
-      const selected = [...leaves.values()].sort((a, b) => a.key.localeCompare(b.key));
+      return decorate(leaves.values());
+    }
+    function decorate(tiles) {
+      // Include adjacent patches and coarser endpoint owners in each geometry signature.
+      // Progressive transactions use the same seam context as a fully selected frontier.
+      const selected = [...tiles].sort((a, b) => a.key.localeCompare(b.key));
       return selected.map(tile => {
         const context = new Map(selected.filter(other => touches(tile, other)).map(other => [other.key, other]));
         for (const entry of context.values()) {
@@ -137,9 +141,31 @@
         return {
           ...tile,
           neighbors,
-          cacheKey: `${tile.key}|${neighbors.map(t => t.key).sort().join(';')}`
+          cacheKey: geometryKey(tile, neighbors)
         };
       });
+    }
+    function geometryKey(tile, neighbors = tile.neighbors || [tile]) {
+      // Only proven independent coastal patches can ignore same/finer neighbors. Ordinary
+      // land/NoData shells keep the full ownership context; coarser endpoint chains stay tracked.
+      const independent = nodes.get(tile.key)?.coarseOnlyDependencies;
+      const owners = independent ? neighbors.filter(other => other.key === tile.key || other.step > tile.step) : neighbors;
+      return `${tile.key}|${owners.map(other => other.key).sort().join(';')}`;
+    }
+    function noteGeometry(tile, independent) {
+      const cached = nodes.get(tile.key);
+      if (cached) cached.coarseOnlyDependencies = Boolean(independent);
+      return geometryKey(tile);
+    }
+    function coarse(step, maximumStep = 128) {
+      reset(step);
+      let spacing = step;
+      while (spacing < maximumStep) spacing *= 2;
+      const result = [], span = CELLS * spacing;
+      for (let z = 0; z * span < height; z++) for (let x = 0; x * span < width; x++) {
+        result.push(node(spacing, x, z));
+      }
+      return result;
     }
     function commit(selected) {
       committedSplits = new Set();
@@ -219,6 +245,11 @@
     }
     return {
       select,
+      decorate,
+      geometryKey,
+      noteGeometry,
+      coarse,
+      children,
       commit,
       sample,
       at,

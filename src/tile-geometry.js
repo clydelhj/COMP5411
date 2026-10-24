@@ -319,6 +319,10 @@
       }
     } while (changed);
     const query = (row, col) => callOcean(oceanAt, row, col);
+    // A coarse owner's classification and final edge polyline may depend on its own context.
+    // Reuse without fine-neighbor invalidation only when there is no such indirect owner.
+    query.neighborIndependent = records.get(keyFor(tile))?.unresolved.length === 0 &&
+      !candidates.some(entry => levelOf(entry.tile) > levelOf(tile));
     query.cellOcean = (candidate, row, col) => {
       /*
        * Read cell ownership from the current build records using the tile key, including compact
@@ -1094,6 +1098,9 @@
     if (coastal) {
       return {
         ...coastal,
+        // This branch has no neighbor-dependent interior walls. If local ownership was already
+        // resolved, only coarser endpoint owners can change its final surface geometry.
+        coarseOnlyDependencies: oceanAt.neighborIndependent === true,
         metadata: tileMetadata(axes, globalSize, Boolean(reduced)),
         dispose() {
           disposeGeometry(coastal.land);

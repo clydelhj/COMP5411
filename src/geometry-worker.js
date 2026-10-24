@@ -78,6 +78,7 @@
       if (result.water?.top && !result.water.top.boundingBox) result.water.top.computeBoundingBox();
       const packet = {
         heights: result.heights, landCells: result.landCells, metadata: result.metadata,
+        coarseOnlyDependencies: result.coarseOnlyDependencies === true,
         coastSegments: result.coastSegments, shoreQueryRanges: result.shoreQueryRanges,
         heightQuery: result.heightQuery, edgeGeometry: {}
       };
@@ -293,13 +294,16 @@
         for (let e = 0; e < tops.length; e++) {
           const attribute = tops[e].attributes.normal, indices = tops[e].userData.notoBoundaryVertexIndices;
           const values = response.value[e];
+          let changed = false;
           for (let i = 0; i < indices.length; i++) {
             const target = indices[i] * 3, source = i * 3;
+            changed ||= attribute.array[target] !== values[source] || attribute.array[target + 1] !== values[source + 1] || attribute.array[target + 2] !== values[source + 2];
             attribute.array[target] = values[source];
             attribute.array[target + 1] = values[source + 1];
             attribute.array[target + 2] = values[source + 2];
           }
-          attribute.needsUpdate = true;
+          // Local LOD commits must not upload every unchanged terrain normal buffer again.
+          if (changed) attribute.needsUpdate = true;
         }
         state.normalSyncMs = response.elapsed;
         return true;
