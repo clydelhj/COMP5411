@@ -11,7 +11,7 @@ try { ({ chromium } = require('playwright')); } catch { /* Explicitly optional o
 const root = path.resolve(__dirname, '..');
 const required = process.env.REQUIRE_OCEAN_GPU === '1';
 
-test('ocean animation, shading, scale and idle behavior run in actual WebGL2', {
+test('ocean, moving clouds, sunset shading and idle behavior run in actual WebGL2', {
   skip: !chromium && !required ? 'Playwright is optional; configure NODE_PATH to run the ocean GPU test.' : false,
   timeout: 120000
 }, async t => {
@@ -107,6 +107,47 @@ test('ocean animation, shading, scale and idle behavior run in actual WebGL2', {
       assert.deepEqual(report.reflection.cameraAfter, report.reflection.cameraBefore, 'reflection leaves the main camera untouched');
       assert.equal(report.reflection.hidden.after, report.reflection.hidden.before, 'hidden water does not capture reflection');
       assert.equal(report.reflection.hidden.needsFrame, false, 'hidden water cannot keep the scheduler awake');
+    }
+    if (process.env.REQUIRE_SKY_ATMOSPHERE === '1') {
+      const sky = report.atmosphere;
+      assert(sky, 'shared atmosphere renderer is present');
+      assert(sky.state.updates > 0, 'sky atlas is actually rendered');
+      assert(sky.state.width * sky.state.height <= 1536 * 384, 'sky lookup resolution is bounded');
+      assert(sky.state.estimatedTextureMiB <= 8, 'sky lookup and noise storage stay bounded');
+      assert(sky.state.updateHz <= 10, 'sky lookup cannot update on every display frame');
+      assert.equal(sky.state.cloudSamples, 24, 'cloud volume uses the accepted 24-step integration budget');
+      assert.equal(sky.state.noiseVolumeSize, 64, 'cloud density uses the bounded three-dimensional noise volume');
+      assert(sky.drift.sky.changedPixels > 200 && sky.drift.sky.mean > 0.05, 'clouds visibly drift when only their clock advances');
+      assert(sky.drift.water.changedPixels > 200 && sky.drift.water.mean > 0.02, 'moving clouds change their reflection without moving the water clock');
+      assert.equal(sky.drift.waveTimeAfter, sky.drift.waveTimeBefore, 'cloud drift test keeps geometric waves frozen');
+      assert(sky.drift.shortStep.mean < sky.drift.sky.mean, 'a 0.11 second step changes clouds less than a 60 second drift');
+      assert(sky.ablation.sky.changedPixels > 200 && sky.ablation.water.changedPixels > 200, 'visible sky and reflected water both use the atmosphere atlas');
+      assert.equal(sky.sameTime.after, sky.sameTime.before, 'same-time frames do not regenerate the sky');
+      assert.equal(sky.idle.after.updates, sky.idle.before.updates, 'sky GPU updates stop without requested frames');
+      assert.equal(sky.idle.after.time, sky.idle.before.time, 'sky time freezes while idle');
+      assert.equal(sky.idle.difference.changedPixels, 0, 'idle cloud framebuffer remains unchanged');
+      for (const probes of [sky.sunriseProbes, sky.sunsetProbes]) {
+        assert(probes[0].rgba[0] > probes[0].rgba[2] * 1.1, 'sun-facing low horizon becomes warmer than blue at dawn/dusk');
+      }
+      assert(sky.noonProbes[2].rgba[2] > sky.noonProbes[2].rgba[0], 'daytime zenith retains its blue color');
+      const redBlue = rgb => rgb[0] / Math.max(1, rgb[2]);
+      assert(redBlue(sky.sunset.waterRGB) > redBlue(sky.noon.waterRGB), 'sunset warmth reaches the water reflection');
+      const luminance = rgb => rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+      assert(luminance(sky.night.skyRGB) < luminance(sky.noon.skyRGB) * 0.5, 'night sky is not a bright daytime cloud layer');
+      assert.equal(sky.stateRestoration.sameTarget, true, 'sky renderer restores the caller target');
+      assert.deepEqual(sky.stateRestoration.after, sky.stateRestoration.before, 'sky pass restores renderer settings exactly');
+      const transmissions = sky.sunOcclusion.map(sample => sample.transmission);
+      assert(Math.max(...transmissions) - Math.min(...transmissions) > 0.05, 'drifting clouds modulate transmission along the sun ray');
+      const sunSamples = [...sky.sunOcclusion].sort((a, b) => a.transmission - b.transmission);
+      assert(luminance(sunSamples.at(-1).rgb) > luminance(sunSamples[0].rgb) * 1.1, 'the rendered solar disk dims behind denser clouds');
+      assert(sky.seam.legacyError > 0.02, 'legacy implicit wrapped-UV sampling exposes the longitude mip seam');
+      assert(sky.seam.actualError < 0.005, 'actual sky and transmission sampling stay continuous across the longitude seam');
+      assert(sky.seam.actualNeighborJump < 0.005, 'the longitude seam does not create a bright or colored column');
+      for (const sample of sky.performance.cases) {
+        assert.equal(sample.cpuSubmitMs.length, 3, 'three warmed atlas submissions are timed per weather');
+        assert(sample.cpuSubmitMs.every(value => Number.isFinite(value) && value >= 0), 'CPU submission timings are finite');
+        assert(sample.gpuMs.every(value => Number.isFinite(value) && value >= 0), 'available GPU query timings are finite');
+      }
     }
   } finally {
     await browser?.close();

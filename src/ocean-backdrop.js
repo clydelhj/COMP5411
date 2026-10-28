@@ -1,4 +1,4 @@
-/* Matching analytic sky and a bounded offshore horizon; no external textures or scene renderer. */
+/* Shared moving-cloud sky and a bounded offshore horizon; no external textures or scene renderer. */
 (function registerOceanBackdrop(global) {
   'use strict';
 
@@ -15,7 +15,7 @@
       uSkyCameraWorld: { value: new THREE.Matrix4() }
     };
     const skyMaterial = new THREE.ShaderMaterial({
-      name: 'Ocean-coherent analytic sky',
+      name: 'Ocean-coherent moving cloud sky',
       uniforms: skyUniforms,
       depthTest: false,
       depthWrite: false,
@@ -32,7 +32,8 @@
           float alignment=dot(direction,uSeaSunDirection);
           float disk=smoothstep(0.99997,0.999992,alignment);
           float halo=pow(max(alignment,0.0),96.0)*0.025;
-          color += uSeaSunColor*uSeaSunIntensity*(disk*2.0+halo);
+          // The shared atmosphere includes its cloud-occluded sun at full angular resolution.
+          if(uSkyAtmosphereEnabled<0.5) color += uSeaSunColor*uSeaSunIntensity*(disk*2.0+halo);
           gl_FragColor=vec4(color,1.0);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
@@ -41,6 +42,7 @@
     const sky = new THREE.Mesh(skyGeometry, skyMaterial);
     sky.name = 'Shared ocean and sky illumination';
     sky.frustumCulled = false;
+    skyMaterial.userData.temporalReactive = true;
     sky.renderOrder = -10000;
     sky.onBeforeRender = (_renderer, _scene, view) => {
       skyUniforms.uSkyInverseProjection.value.copy(view.projectionMatrixInverse);

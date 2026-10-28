@@ -18,6 +18,7 @@
     document.querySelector('#viewport').append(renderer.domElement);
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(48, 960 / 540, 0.5, 18000);
+    const controls = { target: new THREE.Vector3() };
     const sun = new THREE.DirectionalLight(0xfff4e3, 3);
     const ambient = new THREE.HemisphereLight(0xffffff, 0x7d8069, 1.4);
     scene.add(sun, sun.target, ambient);
@@ -47,7 +48,9 @@
     const materials = window.NotoWaterMaterials.create(THREE);
     materials.top.userData.temporalReactive = true;
     const spectrum = window.NotoOceanSpectrum?.create({ THREE, renderer }) || null;
+    const atmosphere = window.NotoSkyAtmosphere?.create({ THREE, renderer }) || null;
     const motion = await window.NotoWaterMotion.create(THREE, source, materials, { distances: values }, spectrum);
+    motion.setAtmosphere?.(atmosphere);
     const reflection = window.NotoOceanReflection?.create({
       THREE, renderer, camera, terrain: group,
       metadata: { width_m: widthM, height_m: heightM, elevation_max_m: 400, source_width: 8193, source_height: 8193, source_spacing_m: [1, 1] }
@@ -96,9 +99,13 @@
     land.name = 'Generated land and submerged floor';
     land.receiveShadow = true;
     group.add(land);
+    const backdrop = window.NotoOceanBackdrop?.create({
+      THREE, scene, terrain: group, camera, controls,
+      metadata: { width_m: widthM, height_m: heightM }, motion, materials
+    }) || null;
     const temporal = window.NotoTemporalReconstruction.create({ THREE, renderer });
     temporal.setEnabled(false);
-    let now = 1000, viewIndex = 0, weatherIndex = 0;
+    let now = 1000, viewIndex = 0, weatherIndex = 0, skyTime = 0;
     let weather = 'clear', day = true, verticalScale = 1;
     const views = [
       { name: 'grazing', eye: [520, 11, 480], target: [120, 0, -700] },
@@ -127,6 +134,7 @@
       };
       motion.setLighting?.(lighting);
       reflection?.setLighting(lighting);
+      atmosphere?.setLighting(lighting);
       spectrum?.setWeather(weather);
       temporal.invalidate('lighting');
     }
@@ -134,6 +142,7 @@
       viewIndex = index % views.length;
       camera.position.set(...views[viewIndex].eye);
       camera.lookAt(...views[viewIndex].target);
+      controls.target.set(...views[viewIndex].target);
       camera.updateMatrixWorld();
     }
     function setScale(value) {
@@ -145,13 +154,16 @@
     }
     function frame(seconds = 0) {
       if (seconds) motion.advance(seconds);
+      skyTime += seconds;
       now += Math.max(1 / 60, seconds) * 1000;
       spectrum?.update(motion.getState().time);
       camera.updateMatrixWorld();
       group.updateMatrixWorld(true);
+      atmosphere?.update(skyTime);
+      backdrop?.update();
       reflection?.update({ now, waterVisible: true });
       temporal.render(scene, camera, { now });
-      document.querySelector('#state').textContent = JSON.stringify({ view: views[viewIndex].name, weather, day, verticalScale, water: motion.getState(), spectrum: spectrum?.getState() || null, reflection: reflection?.getState() || null, temporal: temporal.getState() }, null, 2);
+      document.querySelector('#state').textContent = JSON.stringify({ view: views[viewIndex].name, weather, day, verticalScale, water: motion.getState(), spectrum: spectrum?.getState() || null, reflection: reflection?.getState() || null, atmosphere: atmosphere?.getState() || null, temporal: temporal.getState() }, null, 2);
     }
     function snapshot() {
       const gl = renderer.getContext();
@@ -182,6 +194,34 @@
         count++;
       }
       return total / count;
+    }
+    function imageRegion(pixels, bounds) {
+      const width = renderer.domElement.width, height = renderer.domElement.height;
+      let r = 0, g = 0, b = 0, count = 0;
+      const values = [];
+      // readPixels is bottom-up. Bounds are normalized from the bottom left.
+      for (let row = Math.floor(height * bounds[1]); row < Math.floor(height * bounds[3]); row++) {
+        for (let col = Math.floor(width * bounds[0]); col < Math.floor(width * bounds[2]); col++) {
+          const offset = (row * width + col) * 4;
+          r += pixels[offset]; g += pixels[offset + 1]; b += pixels[offset + 2];
+          values.push(pixels[offset], pixels[offset + 1], pixels[offset + 2]); count++;
+        }
+      }
+      return { rgb: [r / count, g / count, b / count], values, pixels: count };
+    }
+    function regionDifference(a, b, bounds) {
+      const left = imageRegion(a, bounds), right = imageRegion(b, bounds);
+      let maximum = 0, total = 0, changedPixels = 0;
+      for (let index = 0; index < left.values.length; index += 3) {
+        let delta = 0;
+        for (let channel = 0; channel < 3; channel++) {
+          const change = Math.abs(left.values[index + channel] - right.values[index + channel]);
+          total += change; delta = Math.max(delta, change);
+        }
+        maximum = Math.max(maximum, delta);
+        if (delta > 3) changedPixels++;
+      }
+      return { mean: total / left.values.length, maximum, changedPixels, pixels: left.pixels };
     }
     function gpuOffsets(points, normalProbe = false) {
       const previous = renderer.getRenderTarget();
@@ -289,6 +329,151 @@
         infoAutoReset: renderer.info.autoReset, xrEnabled: renderer.xr.enabled
       };
     }
+    function skyProbes(directions) {
+      const previous = renderer.getRenderTarget();
+      const target = new THREE.WebGLRenderTarget(directions.length, 1, { type: THREE.FloatType, depthBuffer: false });
+      const material = new THREE.ShaderMaterial({
+        uniforms: { ...atmosphere.uniforms, uProbeDirections: { value: directions.map(point => new THREE.Vector3(...point).normalize()) } },
+        vertexShader: 'void main(){gl_Position=vec4(position.xy,0.0,1.0);}',
+        fragmentShader: `${window.NotoSkyAtmosphere.shaderDeclarations}\nuniform vec3 uProbeDirections[${directions.length}];\nvoid main(){vec3 ray=uProbeDirections[int(gl_FragCoord.x)];gl_FragColor=vec4(atmosphereSkyColor(ray),atmosphereCloudTransmission(ray));}`,
+        depthTest: false, depthWrite: false, blending: THREE.NoBlending
+      });
+      const probe = new THREE.Scene();
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
+      probe.add(mesh);
+      const result = new Float32Array(directions.length * 4);
+      try {
+        renderer.setRenderTarget(target);
+        renderer.render(probe, new THREE.Camera());
+        renderer.readRenderTargetPixels(target, 0, 0, directions.length, 1, result);
+      } finally {
+        renderer.setRenderTarget(previous);
+        mesh.geometry.dispose(); material.dispose(); target.dispose();
+      }
+      return directions.map((direction, index) => ({ direction, rgba: [...result.slice(index * 4, index * 4 + 4)] }));
+    }
+    function solarLighting(elevation, mode = 'clear', azimuth = 0) {
+      weather = mode;
+      day = elevation > -6;
+      const radians = elevation * Math.PI / 180;
+      const direction = new THREE.Vector3(Math.sin(azimuth) * Math.cos(radians), Math.sin(radians), -Math.cos(azimuth) * Math.cos(radians));
+      sun.position.copy(direction).multiplyScalar(5000);
+      sun.color.set(elevation < 12 ? 0xffbd83 : 0xfff4e3);
+      sun.intensity = (weather === 'clear' ? 3 : weather === 'cloudy' ? 0.9 : 0.35) * Math.max(0, Math.min(1, direction.y * 5));
+      const sky = new THREE.Color(day ? 0xb8d9ed : 0x0b1222);
+      ambient.color.set(day ? 0xffffff : 0x23334e);
+      ambient.intensity = day ? 1.4 : 0.1;
+      const lighting = { direction: direction.toArray(), elevation, weather, sunColor: sun.color.toArray(), sunIntensity: sun.intensity, skyColor: sky.toArray() };
+      motion.setWeather(weather); motion.setSky(sky); motion.setLighting?.(lighting);
+      reflection?.setLighting(lighting); atmosphere?.setLighting(lighting);
+      temporal.invalidate('lighting');
+      return direction;
+    }
+    async function measureAtmosphereCost() {
+      const gl = renderer.getContext();
+      const timer = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+      const debug = gl.getExtension('WEBGL_debug_renderer_info');
+      const result = {
+        renderer: debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
+        gpuTimerAvailable: Boolean(timer), cases: []
+      };
+      // Time only atlas generation, excluding the scene, readback, PNG encoding and first compilation.
+      for (const mode of ['clear', 'rainy']) {
+        solarLighting(5, mode);
+        skyTime += 1;
+        atmosphere.update(skyTime);
+        const samples = { weather: mode, cpuSubmitMs: [], gpuMs: [], timerResults: [] };
+        for (let index = 0; index < 3; index++) {
+          skyTime += 1;
+          const query = timer ? gl.createQuery() : null;
+          try {
+            if (query) gl.beginQuery(timer.TIME_ELAPSED_EXT, query);
+            const start = performance.now();
+            const updated = atmosphere.update(skyTime);
+            samples.cpuSubmitMs.push(performance.now() - start);
+            if (query) gl.endQuery(timer.TIME_ELAPSED_EXT);
+            if (!updated) throw new Error('Timed sky sample was suppressed rather than rendered');
+            if (!query) { samples.timerResults.push('unavailable'); continue; }
+            let completed = false;
+            // Yield for command submission and query completion; never call finish or spin on the GPU.
+            for (let attempt = 0; attempt < 30; attempt++) {
+              await new Promise(resolve => setTimeout(resolve, 8));
+              if (gl.getParameter(timer.GPU_DISJOINT_EXT)) {
+                samples.timerResults.push('disjoint'); completed = true; break;
+              }
+              if (gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE)) {
+                samples.gpuMs.push(gl.getQueryParameter(query, gl.QUERY_RESULT) / 1e6);
+                samples.timerResults.push('available'); completed = true; break;
+              }
+            }
+            if (!completed) samples.timerResults.push('pending-timeout');
+          } finally { if (query) gl.deleteQuery(query); }
+        }
+        result.cases.push(samples);
+      }
+      return result;
+    }
+    function skyLongitudeSeam() {
+      const width = 254, height = 8;
+      const previous = renderer.getRenderTarget();
+      const target = new THREE.WebGLRenderTarget(width, height, { type: THREE.FloatType, depthBuffer: false });
+      const material = new THREE.ShaderMaterial({
+        uniforms: { ...atmosphere.uniforms, uSeamMode: { value: 0 } },
+        vertexShader: 'varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.0,1.0);}',
+        fragmentShader: `${window.NotoSkyAtmosphere.shaderDeclarations}
+          uniform int uSeamMode;varying vec2 vUv;
+          void main(){
+            vec3 direction=normalize(vec3(-1.0,0.2,(vUv.x-0.5)*0.02));
+            vec2 sampleUv=atmosphereSkyUv(direction);
+            if(uSeamMode==1) gl_FragColor=texture2D(uSkyAtmosphereMap,sampleUv);
+            else if(uSeamMode==2) gl_FragColor=textureLod(uSkyAtmosphereMap,sampleUv,0.0);
+            else gl_FragColor=vec4(atmosphereSkyColor(direction),atmosphereCloudTransmission(direction));
+          }`,
+        depthTest: false, depthWrite: false, blending: THREE.NoBlending
+      });
+      const probe = new THREE.Scene();
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
+      probe.add(mesh);
+      const render = mode => {
+        const pixels = new Float32Array(width * height * 4);
+        material.uniforms.uSeamMode.value = mode;
+        renderer.setRenderTarget(target);
+        renderer.render(probe, new THREE.Camera());
+        renderer.readRenderTargetPixels(target, 0, 0, width, height, pixels);
+        return pixels;
+      };
+      try {
+        // An odd half-width places the wrap inside a derivative quad, exposing implicit-LOD failure.
+        const actual = render(0), legacy = render(1), reference = render(2);
+        const center = [width / 2 - 1, width / 2];
+        const pixel = (image, x) => [...image.slice((3 * width + x) * 4, (3 * width + x) * 4 + 4)];
+        const error = image => Math.max(...center.flatMap(x => pixel(image, x).map((value, channel) => Math.abs(value - pixel(reference, x)[channel]))));
+        const neighborJump = image => Math.max(...center.flatMap(x => pixel(image, x).map((value, channel) => Math.abs(value - pixel(image, x === center[0] ? x - 1 : x + 1)[channel]))));
+        return {
+          width, height, direction: 'normalize(-1,0.2,(u-0.5)*0.02)',
+          actualError: error(actual), legacyError: error(legacy),
+          actualNeighborJump: neighborJump(actual), legacyNeighborJump: neighborJump(legacy),
+          actualCenter: center.map(x => pixel(actual, x)), referenceCenter: center.map(x => pixel(reference, x)),
+          legacyCenter: center.map(x => pixel(legacy, x))
+        };
+      } finally {
+        renderer.setRenderTarget(previous);
+        mesh.geometry.dispose(); material.dispose(); target.dispose();
+      }
+    }
+    function checkLongitudeSeam() {
+      temporal.setEnabled(false);
+      solarLighting(3);
+      skyTime = 100;
+      frame();
+      const report = skyLongitudeSeam();
+      camera.position.set(3500, 14, 2000);
+      controls.target.set(800, 30, 2000);
+      camera.lookAt(controls.target);
+      camera.updateMatrixWorld();
+      frame();
+      return report;
+    }
     async function runChecks() {
       const report = { views: [], probes: [], spectrum: null, errors: [] };
       const images = {};
@@ -338,7 +523,11 @@
       const lowSun = new THREE.Vector3(-0.28, 0.08, -0.957).normalize();
       sun.position.copy(lowSun).multiplyScalar(5000);
       sun.color.set(0xffc28d);
-      motion.setLighting?.({ direction: lowSun.toArray(), elevation: 4.6, weather: 'clear', sunColor: sun.color.toArray(), sunIntensity: 2.2 });
+      sun.intensity = 2.2;
+      const lowLighting = { direction: lowSun.toArray(), elevation: 4.6, weather: 'clear', sunColor: sun.color.toArray(), sunIntensity: 2.2, skyColor: new THREE.Color(0xb8d9ed).toArray() };
+      motion.setLighting?.(lowLighting);
+      reflection?.setLighting(lowLighting);
+      atmosphere?.setLighting(lowLighting);
       frame();
       capture('low-sun-glint');
       applyLighting('clear', false); frame();
@@ -478,11 +667,118 @@
           report.spectrumFallback = { state: unsupported.getState(), enabled: unsupported.uniforms.uOceanSpectrumEnabled.value };
         } finally { unsupported.dispose(); }
       }
+      if (atmosphere) {
+        temporal.setEnabled(false);
+        setScale(1);
+        camera.position.set(650, 14, 650);
+        controls.target.set(650, 30, -2000);
+        camera.lookAt(controls.target);
+        camera.updateMatrixWorld();
+        const skyRegion = [0.12, 0.63, 0.88, 0.95];
+        const waterRegion = [0.15, 0.10, 0.88, 0.38];
+        const horizonDirections = [[0, 0.055, -1], [0, 0.22, -1], [0, 1, 0], [0.8, 0.12, -0.6]];
+        solarLighting(50);
+        skyTime = 100;
+        frame();
+        const noon = snapshot();
+        capture('clouds-noon');
+        const noonProbes = skyProbes(horizonDirections);
+        const frozenWaterTime = motion.getState().time;
+        const shortBefore = snapshot();
+        skyTime += 0.11;
+        frame();
+        const shortAfter = snapshot();
+        skyTime += 60;
+        frame();
+        const drifted = snapshot();
+        capture('clouds-drifted-60s');
+        const beforeSameTime = atmosphere.getState().updates;
+        frame();
+        const afterSameTime = atmosphere.getState().updates;
+        const frozenImage = snapshot();
+        const frozenState = atmosphere.getState();
+        await new Promise(resolve => setTimeout(resolve, 150));
+        const idleSkyState = atmosphere.getState();
+        const idleSkyImage = snapshot();
+        const enabled = atmosphere.uniforms.uSkyAtmosphereEnabled.value;
+        atmosphere.uniforms.uSkyAtmosphereEnabled.value = 0;
+        frame();
+        const fallbackImage = snapshot();
+        capture('without-cloud-atlas');
+        atmosphere.uniforms.uSkyAtmosphereEnabled.value = enabled;
+        const sunriseDirection = solarLighting(3, 'clear', -0.1);
+        frame();
+        const sunrise = snapshot();
+        const sunriseProbes = skyProbes(horizonDirections);
+        capture('clouds-sunrise');
+        const sunsetDirection = solarLighting(3, 'clear', 0.1);
+        frame();
+        const sunset = snapshot();
+        const sunsetProbes = skyProbes(horizonDirections);
+        capture('clouds-sunset');
+        const sunOcclusion = [];
+        solarLighting(7, 'cloudy');
+        const sunDirection = [0, Math.sin(7 * Math.PI / 180), -Math.cos(7 * Math.PI / 180)];
+        for (const time of [0, 90, 240, 480, 900, 1600]) {
+          skyTime = time;
+          frame();
+          const probe = skyProbes([sunDirection])[0];
+          sunOcclusion.push({ time, rgb: probe.rgba.slice(0, 3), transmission: probe.rgba[3],
+            waterGlintRGB: imageRegion(snapshot(), [0.43, 0.06, 0.57, 0.40]).rgb });
+        }
+        capture('clouds-cloudy-sun');
+        solarLighting(-20);
+        frame();
+        const nightSky = snapshot();
+        capture('clouds-night');
+        const priorTarget = renderer.getRenderTarget(), originalState = rendererSnapshot();
+        const sentinel = new THREE.WebGLRenderTarget(24, 24, { depthBuffer: false });
+        let stateRestoration;
+        try {
+          renderer.setRenderTarget(sentinel);
+          renderer.setViewport(1, 2, 18, 17);
+          renderer.setScissor(3, 4, 12, 11);
+          renderer.setScissorTest(true);
+          renderer.setClearColor(0x135724, 0.35);
+          renderer.autoClear = false;
+          renderer.shadowMap.autoUpdate = false;
+          renderer.shadowMap.needsUpdate = true;
+          const before = rendererSnapshot();
+          atmosphere.update(skyTime + 1);
+          stateRestoration = { before, after: rendererSnapshot(), sameTarget: renderer.getRenderTarget() === sentinel };
+        } finally {
+          renderer.setRenderTarget(priorTarget);
+          renderer.setViewport(...originalState.viewport);
+          renderer.setScissor(...originalState.scissor);
+          renderer.setScissorTest(originalState.scissorTest);
+          renderer.setClearColor(new THREE.Color().fromArray(originalState.clearColor), originalState.clearAlpha);
+          renderer.autoClear = originalState.autoClear;
+          renderer.shadowMap.autoUpdate = originalState.shadowAutoUpdate;
+          renderer.shadowMap.needsUpdate = originalState.shadowNeedsUpdate;
+          sentinel.dispose();
+        }
+        report.atmosphere = {
+          state: atmosphere.getState(), backdrop: backdrop?.getState(), noonProbes, sunriseProbes, sunsetProbes,
+          drift: { sky: regionDifference(shortAfter, drifted, skyRegion), water: regionDifference(shortAfter, drifted, waterRegion),
+            shortStep: regionDifference(shortBefore, shortAfter, skyRegion), waveTimeBefore: frozenWaterTime, waveTimeAfter: motion.getState().time },
+          ablation: { sky: regionDifference(drifted, fallbackImage, skyRegion), water: regionDifference(drifted, fallbackImage, waterRegion) },
+          sameTime: { before: beforeSameTime, after: afterSameTime },
+          idle: { before: frozenState, after: idleSkyState, difference: regionDifference(frozenImage, idleSkyImage, skyRegion) },
+          sunrise: { direction: sunriseDirection.toArray(), skyRGB: imageRegion(sunrise, skyRegion).rgb, waterRGB: imageRegion(sunrise, waterRegion).rgb },
+          sunset: { direction: sunsetDirection.toArray(), skyRGB: imageRegion(sunset, skyRegion).rgb, waterRGB: imageRegion(sunset, waterRegion).rgb },
+          noon: { skyRGB: imageRegion(noon, skyRegion).rgb, waterRGB: imageRegion(noon, waterRegion).rgb },
+          night: { skyRGB: imageRegion(nightSky, skyRegion).rgb, waterRGB: imageRegion(nightSky, waterRegion).rgb },
+          sunOcclusion, stateRestoration
+        };
+        report.atmosphere.seam = checkLongitudeSeam();
+        capture('clouds-west-longitude-seam');
+        report.atmosphere.performance = await measureAtmosphereCost();
+      }
       window.oceanStressImages = images;
       window.oceanStressReport = report;
       return report;
     }
-    window.oceanStress = { THREE, renderer, scene, camera, motion, spectrum, reflection, temporal, setView, setScale, applyLighting, frame, snapshot, runChecks };
+    window.oceanStress = { THREE, renderer, scene, camera, motion, spectrum, reflection, atmosphere, backdrop, temporal, setView, setScale, applyLighting, frame, snapshot, checkLongitudeSeam, runChecks };
     applyLighting(); setScale(1); setView(0); frame();
     for (const button of document.querySelectorAll('button')) button.disabled = false;
     document.querySelector('#advance').onclick = () => frame(1);

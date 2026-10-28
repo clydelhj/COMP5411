@@ -21,6 +21,7 @@ Current runtime baseline: October 28, 2026. All paths below are relative to the 
 │   ├── rock-materials.js
 │   ├── water-materials.js
 │   ├── ocean-spectrum.js
+│   ├── sky-atmosphere.js
 │   ├── water-motion.js
 │   ├── ocean-reflection.js
 │   ├── ocean-backdrop.js
@@ -64,6 +65,7 @@ Large runtime/source assets may be distributed separately; their paths after ins
 | `rock-materials.js` | Geological queries, triplanar PBR, categorical blending and ground cover |
 | `water-materials.js`, `water-motion.js` | Filtered micro normals, geometric waves, spectral shading, Fresnel/absorption and foam |
 | `ocean-spectrum.js` | Two bounded GPU FFT wind-wave fields, gradients and crest/compression data |
+| `sky-atmosphere.js` | Cached procedural atmosphere, slow cloud drift and cloud-occluded solar environment |
 | `ocean-reflection.js` | Cached low-resolution reflection of an owned coarse terrain proxy |
 | `ocean-backdrop.js` | Shared analytic sky and a small illustrative offshore horizon |
 | `scene-effects.js` | Pointer flashlight and bounded GPU coastal spray |
@@ -74,6 +76,8 @@ Large runtime/source assets may be distributed separately; their paths after ins
 ## Startup and resource flow
 
 The HTML uses deferred ordinary scripts. Third-party libraries and the terrain manifest load first; geological configuration precedes material factories. Shared water/shoreline and environment modules precede geometry. Vegetation data and model/grass payloads precede the vegetation runtime. `geometry-worker.js` loads after its geometry dependencies. `terrain-lod.js` and `terrain-refinement.js` load before the final orchestrator, `terrain.js`.
+
+Load `sky-atmosphere.js` before `water-motion.js`: the water factory and backdrop share its shader declarations. Bind the atmosphere controller with `waterMotion.setAtmosphere()` before the first material compilation.
 
 `temporal-reconstruction.js` loads before the final orchestrator. `terrain.js` decompresses the bundled Three.js modules, prepares the shared classification and texture resources, creates the scene and loads terrain input. Input files call `window.NOTO_TILE_RECEIVE(key, payload)` with compressed height arrays. Heights decode as `uint16 / 100 - 100` metres, with 65535 reserved for NoData.
 
@@ -135,7 +139,13 @@ Water is a hybrid geometric/spectral renderer. Three long Gerstner components at
 
 `ocean-spectrum.js` generates two independent deterministic 128 × 128 wind-wave fields over 1024 m and 173 m periods. Gaussian initial frequencies evolve with deep-water dispersion; inverse Stockham transforms run in float render targets. Choppy tangent derivatives produce surface slopes, physical height and a crest/compression proxy. The two cascades require 32 small passes per update, capped at 20 Hz and driven only by the visible-water clock. Float32 transform buffers avoid accumulated half-float error; the final mipmapped RGBA16F fields filter distant detail. Estimated texture storage is about 1.33 MiB. Unsupported capabilities or shader failures select neutral fields and analytic shading. There is no runtime CPU FFT, pixel readback or independent loop. The adapted transform organization and retained MIT notice are documented in `LICENSES-AND-SOURCES.md`.
 
-`water-motion.js` combines the spectral slopes with analytic geometric tangents and subtle procedural capillary normals. Open-water tangents avoid four repeated displacement evaluations per vertex; additional shore-gradient samples run only in transition/breaker bands. Low water reflectance (F0 = 0.0204), filtered roughness, the PBR sun highlight, shadow attenuation and crest scattering shape the reflected light. Beer-Lambert absorption uses a shore-distance optical-depth proxy, not surveyed bathymetry. Advected irregular foam follows nearshore breakers and sparse compression whitecaps. A bounded GPU particle pool supplies spray. The visible analytic sky and its reflection share the same sun direction, weather and colors.
+`water-motion.js` combines the spectral slopes with analytic geometric tangents and independent capillary normals. Open-water tangents avoid four repeated displacement evaluations per vertex; additional shore-gradient samples run only in transition/breaker bands. Low water reflectance (F0 = 0.0204), slope-variance roughness filtering, the PBR sun highlight, shadow attenuation and crest scattering shape the reflected light. Beer-Lambert absorption uses a shore-distance optical-depth proxy, not surveyed bathymetry. Advected irregular foam follows nearshore breakers and sparse compression whitecaps. A bounded GPU particle pool supplies spray. Sky reflection samples the same cloud environment as the visible sky; only the matching directional sun is cloud-attenuated, leaving pointer lights intact. The shared environment supplies the reflected solar disk.
+
+`sky-atmosphere.js` renders a 1536 × 384 upper-hemisphere environment atlas, capped at 5 Hz. A deterministic 64³ scalar noise texture is generated once during loading; 24 bounded depth samples with fixed spatial staggering and short along-sun density probes provide coherent puffs and approximate self-shadow. Large cloud-bank grouping, horizon filtering and high wisps separate the scales. Wind advection is 7.5/2.7 m/s in the two horizontal axes. Atlas RGB stores linear sky/cloud illumination and A stores cloud transmittance. The mipmapped RGBA16F atlas plus noise uses approximately 6.29 MiB; RGBA8 is the render-target fallback. A small analytic solar disk uses cloud transmittance at full angular resolution. Directional twilight grading gives a warm peach/pink horizon and cloud edges while retaining a cooler zenith. Clear/cloudy/rainy presets change coverage and density. The sea and `ocean-backdrop.js` share uniform objects and the same lookup function, avoiding a volumetric cloud calculation per water fragment. Fog and ambient light receive matching twilight grading. Renderer state is restored after atlas updates, and analytic-sky fallback remains available.
+
+The atmosphere clock is independent of water visibility but remains caller-owned: it advances when the sky can be in the view frustum or water can reflect it. This lets inland sky views animate without advancing invisible water. Unchanged time reuses the atlas; time/date/weather changes request an immediate refresh. Sleep, hidden pages and dialogs freeze cloud motion. Cloud density/lighting and the environment projection are visual approximations for a ground-level landscape, not a physically validated atmosphere, weather simulation or camera-relative cloud volume. Clouds do not cast terrain shadow maps.
+
+The sky lookup unwraps longitude derivatives before mip selection and uses `textureGrad`, preserving filtering across the panoramic azimuth boundary. The sky and solar-transmission queries share this sampler.
 
 `ocean-reflection.js` mirrors an owned camera across mean sea level into a 512 × 288 mipmapped linear-color target, approximately 1.31 MiB including estimated depth storage. Its owned front-facing terrain proxy reads original coarse `heights` and `landCells`, never the heavily subdivided coastal mesh, and is capped at 150,000 triangles. Empty texels retain the analytic sky. Projective sampling distorts the reflected silhouette with the water normal and filters it according to roughness. Filtered coverage composites the land once and attenuates the reflected sun. Captures occur only after camera, terrain-scale or lighting changes, throttled to 10 Hz with at most eight settling attempts. Animated waves alone reuse the capture. Plants, detailed geological shading and dynamic shadows are intentionally absent from this coarse reflection. Renderer state is restored after capture.
 
@@ -145,7 +155,7 @@ The environment uses a NOAA-style solar approximation at the model center, selec
 
 ## Rendering and adaptation
 
-Only one frame request can be pending. Inputs, settings and completed resources request scene updates. Animation-only frames advance shared uniforms and draw, without repeating terrain selection or vegetation distribution. By default, visible animation continues for 30 seconds after the last interaction; then time and drawing stop. Image reconstruction can finish a bounded settling sequence without advancing sleeping water, rain or wind clocks. Hidden pages and open dialogs pause idle animation. Cached resources remain allocated during sleep.
+Only one frame request can be pending. Inputs, settings and completed resources request scene updates. Animation-only frames advance shared uniforms and draw, without repeating terrain selection or vegetation distribution. By default, visible animation continues for 30 seconds after the last interaction; then time and drawing stop. Image reconstruction can finish a bounded settling sequence without advancing sleeping cloud, water, rain or wind clocks. Hidden pages and open dialogs pause idle animation. Cached resources remain allocated during sleep.
 
 ### Temporal reconstruction and history rejection
 
@@ -163,7 +173,7 @@ Explicit resets cover time/date/weather changes, pointer-light changes, committe
 
 Performance feedback uses consecutive rendered-frame intervals and asynchronous GPU timing where available. Loading/building intervals and the first wake-up frame are excluded. Sustained slow windows reduce local terrain budgets and automatic canvas/plant detail; sustained fast windows restore them gradually. Both adjustment directions have a 6-second cooldown. Manual canvas and vegetation settings are not overwritten. Hardware hints choose the initial tier, while measured load drives later adaptation.
 
-`terrainViewer.getState()` exposes Worker mode/build/attachment timings, pending plant placement and accumulated placement CPU time, actual grid spacings, `lodMode: "distance-adaptive"`, cache/build counters, estimated geometry memory, frame/GPU timing, graphics-device information, vegetation/grass counts and environment/water state. `oceanSpectrum`, `oceanReflection` and `oceanBackdrop` report capability/fallback, update/capture counts and resource budgets. Estimated memory is not a VRAM measurement; `powerPreference` is a request rather than proof of discrete-GPU selection.
+`terrainViewer.getState()` exposes Worker mode/build/attachment timings, pending plant placement and accumulated placement CPU time, actual grid spacings, `lodMode: "distance-adaptive"`, cache/build counters, estimated geometry memory, frame/GPU timing, graphics-device information, vegetation/grass counts and environment/water state. `oceanSpectrum`, `oceanReflection`, `oceanBackdrop` and `skyAtmosphere` report capability/fallback, update/capture counts and resource budgets. `skyAtmosphere.clockTime` and `skyInView` expose the shared scheduler integration. Estimated memory is not a VRAM measurement; `powerPreference` is a request rather than proof of discrete-GPU selection.
 
 ## Maintenance and rebuilding
 
@@ -179,7 +189,7 @@ Use two-space indentation for JavaScript/HTML/CSS and four spaces for Python. Ex
 | Geological appearance | `src/rock-materials.js`, `data/material-texture-config.js` |
 | Water and surf | `src/water-materials.js`, `src/water-motion.js`, `src/ocean-spectrum.js`, `src/ocean-reflection.js`, `src/ocean-backdrop.js`, `src/scene-effects.js` |
 | Plant coverage/detail and soil grass | `src/vegetation.js`, `src/ground-grass.js` |
-| Sun, weather and shadows | `src/environment.js` |
+| Sky, clouds, sun and weather | `src/sky-atmosphere.js`, `src/ocean-backdrop.js`, `src/environment.js` |
 
 See [REBUILD.md](REBUILD.md) for source locations, dependencies and portable rebuild commands. `scripts/build_grass_ground.py` adds the current grass texture payload from the retained `grass_ground` source images. Ordinary source changes should be checked in the browser without regenerating unrelated datasets.
 
@@ -192,3 +202,5 @@ Run `node --test tests/geometry-worker.test.cjs tests/terrain-refinement.test.cj
 For the synthetic WebGL history test, install Playwright in a separate test environment and run `node --test tests/temporal-browser.test.cjs`. Set `REQUIRE_TEMPORAL_GPU=1` to treat a missing browser dependency as a failure, and `TEMPORAL_BROWSER_CHANNEL=msedge` to use installed Edge. Without Playwright this optional test is explicitly skipped; the viewer itself gains no dependency. `tests/temporal-scene.html` can also be opened through the local server. The fixture checks a camera pan across a thin contrasting occluder, lighting changes, reactive surfaces, static accumulation, camera matrix restoration, resize, disable/fallback and finite settling. It uses generated geometry and the bundled Three.js library, with no DEM or model download.
 
 For the asset-free ocean fixture, run `node --test tests/ocean-browser.test.cjs` in the same separate Playwright environment. `OCEAN_BROWSER_CHANNEL=msedge` selects installed Edge; `REQUIRE_OCEAN_GPU=1` requires the browser and `REQUIRE_OCEAN_SPECTRUM=1` additionally requires the float-target FFT path. `OCEAN_ARTIFACT_DIR` optionally saves screenshots and the diagnostic report. The fixture checks evolving deterministic fields, gradient/crest consistency, CPU/GPU wave agreement, height-scale independence, weather/day/night shading, renderer-state restoration, reflection caching, temporal compatibility and stopped idle clocks. `tests/ocean-scene.html` is available through the local server. Pixel readback is restricted to tests.
+
+`REQUIRE_SKY_ATMOSPHERE=1` also requires the procedural cloud path. The same generated fixture checks cloud-only drift with a fixed wave clock, reflected cloud changes, sunrise/sunset/night colors, cloud attenuation of solar radiance, atlas caching and renderer restoration. It uses the actual sky backdrop module. Optional asynchronous GPU timings describe isolated atlas draws when the browser exposes timer queries; they are not full-viewer frame-rate measurements.

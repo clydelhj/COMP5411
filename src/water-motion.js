@@ -125,12 +125,17 @@
       return normalize(cross(tangentZ,tangentX));
     }
   `;
-  const SKY_GLSL = /* glsl */`
+  const SKY_GLSL = (global.NotoSkyAtmosphere?.shaderDeclarations || /* glsl */`
+    uniform float uSkyAtmosphereEnabled;
+    vec3 atmosphereSkyColor(vec3 direction) { return vec3(0.0); }
+    float atmosphereCloudTransmission(vec3 direction) { return 1.0; }
+  `) + /* glsl */`
     uniform vec3 uSeaSky;
     uniform vec3 uSeaSunDirection;
     uniform float uSeaDaylight;
     uniform float uSeaCloudiness;
     vec3 seaSkyColor(vec3 direction) {
+      if(uSkyAtmosphereEnabled>0.5) return atmosphereSkyColor(direction);
       float skyHeight = sqrt(clamp(direction.y,0.0,1.0));
       vec3 horizonSky = uSeaSky*vec3(1.02,1.05,1.06);
       vec3 zenithSky = uSeaSky*vec3(0.34,0.57,0.86);
@@ -194,6 +199,8 @@
     const neutralSpectrum = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat);
     neutralSpectrum.needsUpdate = true;
     const uniforms = {
+      uSkyAtmosphereMap: { value: neutralSpectrum },
+      uSkyAtmosphereEnabled: { value: 0 },
       uSeaReflection: { value: neutralSpectrum },
       uSeaReflectionMatrix: { value: new THREE.Matrix4() },
       uSeaReflectionEnabled: { value: 0 },
@@ -239,7 +246,7 @@
     const original = materials.top.onBeforeCompile;
     materials.top.name = 'Noto spectral wind sea and long swell';
     materials.top.userData.temporalReactive = true;
-    materials.top.customProgramCacheKey = () => 'noto-water-spectral-optics-v5';
+    materials.top.customProgramCacheKey = () => 'noto-water-spectral-optics-v6';
     materials.top.defaultAttributeValues = {
       ...materials.top.defaultAttributeValues,
       notoSeaEdge: [0, 0, 0, 0]
@@ -267,14 +274,14 @@
         vec2 smallUV = seaRotation * (p + vec2(-uSeaTime*0.42,uSeaTime*0.28)) / 37.0;
         vec2 capillaryUV = (p + vec2(uSeaTime*0.16,-uSeaTime*0.12)) / 9.0;
         float microFilter = 1.0-smoothstep(0.8,8.0,seaFootprint);
-        vec2 microSlopes = seaSlope(notoWaterDetail.rgb)*0.52;
-        microSlopes += seaSlope(texture2D(uNotoWaterDetail,smallUV).rgb)*seaRotation*0.30;
-        microSlopes += seaSlope(texture2D(uNotoWaterDetail,capillaryUV).rgb)*0.18*microFilter;
+        vec2 microSlopes = seaSlope(notoWaterDetail.rgb)*0.35;
+        microSlopes += seaSlope(texture2D(uNotoWaterDetail,smallUV).rgb)*seaRotation*0.50;
+        microSlopes += seaSlope(texture2D(uNotoWaterDetail,capillaryUV).rgb)*0.35*microFilter;
         vec2 slopes = microSlopes*uSeaWeather;
         if(uOceanSpectrumEnabled>0.5) {
           // Spectrum RG stores physical height gradients; normal components have the opposite sign.
           // A bounded facet gain keeps sub-grid wind waves legible on the regional terrain mesh.
-          slopes = -(oceanLarge.rg*1.6+oceanSmall.rg*2.2) + microSlopes*0.30*microFilter;
+          slopes = -(oceanLarge.rg*1.25+oceanSmall.rg*2.35) + microSlopes*0.85*microFilter;
         }
         vec3 nSea = normalize(vSeaNormal);
         // Filter subpixel facets while keeping their unresolved energy in roughness.
@@ -285,6 +292,7 @@
         float distanceToShore = shoreDistance(vNotoWaterXZ);
         vec2 foamP = vNotoWaterXZ;
         float seaFootprint = max(length(dFdx(foamP)),length(dFdy(foamP)));
+        float cloudSunTransmission = atmosphereCloudTransmission(uSeaSunDirection);
         vec4 oceanLarge = vec4(0.0), oceanSmall = vec4(0.0);
         if(uOceanSpectrumEnabled>0.5) {
           oceanLarge = texture2D(uOceanSpectrumLarge,foamP/uOceanSpectrumSize.x);
@@ -292,18 +300,18 @@
         }
         float foamPatch = seaNoise((foamP-vec2(uSeaTime*1.35,uSeaTime*0.55))/197.0);
         float breakup = seaNoise(seaRotation*(foamP-vec2(uSeaTime*0.8,uSeaTime*0.35))/53.0);
-        float bubbles = seaNoise((foamP+vec2(uSeaTime*0.45,-uSeaTime*0.27))/8.0);
+        float bubbles = seaNoise((foamP+vec2(uSeaTime*0.45,-uSeaTime*0.27))/3.2);
         // Breaker energy follows the same moving crest as geometry, but foam coverage advects and tears.
         float phase = surfPhase(foamP,distanceToShore);
         float crest = pow(0.5+0.5*sin(phase),4.5);
         float shoreZone = smoothstep(0.0,2.0,distanceToShore) * (1.0-smoothstep(44.0,85.0,distanceToShore));
-        float coverage = smoothstep(0.31,0.64,foamPatch*0.58+breakup*0.42);
-        float lace = smoothstep(0.25,0.64,bubbles*0.65+breakup*0.35);
+        float coverage = smoothstep(0.36,0.67,foamPatch*0.58+breakup*0.42);
+        float lace = smoothstep(0.24,0.66,bubbles*0.70+breakup*0.30);
         float distantSurf = smoothstep(7.0,32.0,max(fwidth(distanceToShore),seaFootprint));
         crest = mix(crest,0.12,distantSurf);
         float wake = pow(0.5+0.5*sin(phase-0.95),3.0);
         float residue = (1.0-smoothstep(14.0,49.0,distanceToShore))*wake*coverage*0.30;
-        float surfFoam = shoreZone*(crest*(0.16+coverage*0.84)*lace*2.15+residue);
+        float surfFoam = shoreZone*(crest*(0.05+coverage*0.95)*lace*1.85+residue);
         float oceanCrest = max(oceanLarge.b,oceanSmall.b*0.80);
         // Only compressed positive crests aerate; the proxy is deliberately sparse in calm weather.
         float whitecaps = smoothstep(0.045,0.16,oceanCrest)*smoothstep(0.35,0.70,breakup*0.6+bubbles*0.4);
@@ -313,16 +321,27 @@
         // reveals a subdued coastal bed tint while offshore water keeps a deep blue-green body.
         float opticalDepth = clamp(0.6+max(distanceToShore,0.0)*0.10,0.6,70.0);
         vec3 transmission = exp(-vec3(0.38,0.085,0.048)*opticalDepth);
-        vec3 deepBody = vec3(0.0025,0.028,0.047);
+        vec3 deepBody = vec3(0.002,0.040,0.055);
         vec3 shallowBed = vec3(0.11,0.145,0.105);
         vec3 waterBody = mix(deepBody,shallowBed,transmission);
         waterBody += vec3(0.001,0.011,0.014)*clamp(oceanLarge.a+oceanSmall.a,0.0,1.8);
         diffuseColor.rgb = mix(waterBody,vec3(0.68,0.77,0.73),foam);
-        float unresolvedFacets = smoothstep(0.5,20.0,seaFootprint)*0.045;
-        roughnessFactor = mix(clamp(notoWaterDetail.a+unresolvedFacets+uSeaCloudiness*0.025,0.055,0.17),0.55,foam);`);
+        // Resolved capillary facets break up broad highlights. Their subpixel variation
+        // becomes roughness rather than a bright, unstable stripe at grazing angles.
+        float unresolvedFacets = smoothstep(0.5,20.0,seaFootprint)*0.035;
+        float slopeVariance = clamp(length(dFdx(oceanSmall.rg))+length(dFdy(oceanSmall.rg)),0.0,0.3);
+        roughnessFactor = mix(clamp(notoWaterDetail.a+0.018+unresolvedFacets+slopeVariance*0.16+uSeaCloudiness*0.025,0.075,0.21),0.55,foam);`);
       shader.fragmentShader = shader.fragmentShader.replace('#include <lights_physical_fragment>', `
         #include <lights_physical_fragment>
         material.specularColor = vec3(0.0204);`);
+      // Attenuate only the solar directional light before its diffuse/specular terms
+      // accumulate. Pointer spot/point lights retain their own complete contribution.
+      shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_begin>', THREE.ShaderChunk.lights_fragment_begin.replace(
+        'getDirectionalLightInfo( directionalLight, directLight );',
+        `getDirectionalLightInfo( directionalLight, directLight );
+        directLight.color *= mix(1.0,cloudSunTransmission*0.72,
+          smoothstep(0.995,0.9999,dot(inverseTransformDirection(directLight.direction,viewMatrix),uSeaSunDirection)));`
+      ));
       shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `
         // The same sky/sun state drives Fresnel reflection, directional glint and crest scattering.
         // Terrain shadows and point-light highlights remain in the standard PBR lighting result.
@@ -345,23 +364,22 @@
               reflectedLandCoverage = terrainReflection.a*reflectionEdge;
               // Transparent clear texels have zero RGB: filtering already weights RGB by coverage.
               vec3 reflectedLand = terrainReflection.rgb/max(terrainReflection.a,0.0001);
-              skyReflection = mix(skyReflection,reflectedLand,reflectedLandCoverage*0.94);
+              // Opaque reflected land also occludes the solar disk inside the shared environment.
+              skyReflection = mix(skyReflection,reflectedLand,reflectedLandCoverage);
             }
           }
         }
-        float sunAlignment = max(dot(reflected,uSeaSunDirection),0.0);
-        float sunDisk = pow(sunAlignment,mix(1450.0,180.0,roughnessFactor));
-        float sunHalo = pow(sunAlignment,24.0)*0.035;
         float shadowVisibility = getShadowMask();
-        vec3 reflectedSun = uSeaSunColor*uSeaSunIntensity*(sunDisk*5.0+sunHalo)*shadowVisibility*(1.0-reflectedLandCoverage);
         float forwardLight = pow(max(dot(toCamera,-uSeaSunDirection),0.0),4.0);
         float crestLight = clamp(oceanLarge.a*0.40+oceanSmall.a+0.15,0.0,1.0);
-        vec3 scattering = vec3(0.004,0.055,0.062)*forwardLight*crestLight*uSeaSunIntensity*shadowVisibility;
+        vec3 scattering = vec3(0.004,0.055,0.062)*forwardLight*crestLight*uSeaSunIntensity*shadowVisibility*cloudSunTransmission;
+        // The shared sky atlas contains the sun and its cloud occlusion. Do not add a
+        // second screen-independent solar disk over reflected clouds and terrain.
         vec3 directHighlights = reflectedLight.directSpecular;
         vec3 bodyLighting = max(outgoingLight-directHighlights-reflectedLight.indirectSpecular,vec3(0.0));
         float reflectionWeight = fresnel*(1.0-foam*0.96);
         outgoingLight = bodyLighting*(1.0-reflectionWeight)
-          +(skyReflection+reflectedSun)*reflectionWeight+directHighlights+scattering*(1.0-foam);
+          +skyReflection*reflectionWeight+directHighlights+scattering*(1.0-foam);
         #include <opaque_fragment>`);
       materials.top.userData.notoShader = shader;
     };
@@ -438,6 +456,10 @@ Convert to pixel indices, clamp and interpolate four samples. Returns approximat
       uniforms,
       shaderDeclarations: GLSL,
       skyShaderDeclarations: SKY_GLSL,
+      setAtmosphere(controller) {
+        // Sky and reflected clouds sample one shared linear environment atlas.
+        if (controller?.uniforms) Object.assign(uniforms, controller.uniforms);
+      },
       setReflection(controller) {
         // Uniform objects are shared by the main sea and its offshore horizon material.
         if (controller?.uniforms) Object.assign(uniforms, controller.uniforms);

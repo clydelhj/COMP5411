@@ -172,13 +172,19 @@ Returns view, animation, diagnostics and cleanup interfaces. */
       const p = PRESETS[weather],
         day = clamp((solar.elevation + 6) / 16, 0, 1),
         direct = clamp(solar.direction[1] * 5, 0, 1);
+      const twilight = (1 - clamp((solar.elevation - 3) / 15, 0, 1))
+        * clamp((solar.elevation + 12) / 12, 0, 1)
+        * (weather === 'clear' ? 1 : weather === 'cloudy' ? 0.55 : 0.25);
       sun.intensity = p.sun * direct;
       sun.color.set(0xffbe85).lerp(new THREE.Color(0xfff4e3), clamp(solar.elevation / 30, 0, 1));
       sun.castShadow = solar.elevation > 0.5;
       hemisphere.intensity = 0.10 + p.ambient * day;
       hemisphere.color.set(0x23334e).lerp(new THREE.Color(p.sky), day);
+      hemisphere.color.lerp(new THREE.Color(0xf1b8a2), twilight * 0.24);
       hemisphere.groundColor.set(p.ground);
       const sky = new THREE.Color(0x0b1222).lerp(new THREE.Color(p.sky), day);
+      // Warm distant haze and ambient light agree with the directional twilight sky.
+      sky.lerp(new THREE.Color(0xe8b2a5), twilight * 0.40);
       renderer.setClearColor(sky);
       scene.fog = new THREE.Fog(sky, p.fog * 0.15, p.fog);
       rain.visible = p.rain;

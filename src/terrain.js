@@ -58,7 +58,7 @@
     status.textContent = `Unable to load terrain: ${error.message}`;
   }
   try {
-    if (!tileset || !window.NotoOceanReflection || !window.NotoOceanSpectrum || !window.NotoOceanBackdrop || !window.NotoTemporalReconstruction || !window.NotoTerrainRefinement || !window.NotoGeometryWorker || !window.NotoTileGeometry || !window.NotoRockMaterials || !window.NotoWaterMaterials || !window.NotoWaterMotion || !window.NotoEnvironment || !window.NotoVegetation) {
+    if (!tileset || !window.NotoSkyAtmosphere || !window.NotoOceanReflection || !window.NotoOceanSpectrum || !window.NotoOceanBackdrop || !window.NotoTemporalReconstruction || !window.NotoTerrainRefinement || !window.NotoGeometryWorker || !window.NotoTileGeometry || !window.NotoRockMaterials || !window.NotoWaterMaterials || !window.NotoWaterMotion || !window.NotoEnvironment || !window.NotoVegetation) {
       throw new Error('Missing local terrain assets. Keep the data, src and vendor folders together.');
     }
     const libraries = window.NOTO_LIBRARIES;
@@ -252,6 +252,7 @@
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     temporal = window.NotoTemporalReconstruction.create({ THREE, renderer });
     const oceanSpectrum = window.NotoOceanSpectrum.create({ THREE, renderer });
+    const skyAtmosphere = window.NotoSkyAtmosphere.create({ THREE, renderer });
     temporal.setEnabled(temporalCheckbox.checked);
     temporalCheckbox.addEventListener('change', () => {
       temporal.setEnabled(temporalCheckbox.checked);
@@ -274,6 +275,7 @@
       THREE, coreURL, coreSource, tileset, oceanBits, shoreline: window.NOTO_SHORELINE, coastalField
     });
     const waterMotion = await window.NotoWaterMotion.create(THREE, window.NOTO_SHORELINE, waterMaterials, coastalField, oceanSpectrum);
+    waterMotion.setAtmosphere(skyAtmosphere);
     materialFactory.shared.waterMotion = waterMotion;
     const waterTop = waterMaterials.top;
     const waterCut = waterMaterials.cut;
@@ -302,6 +304,7 @@
         waterMotion.setWeather(weather);
         waterMotion.setSky(scene.fog.color);
         waterMotion.setLighting(environment.getState());
+        skyAtmosphere.setLighting(environment.getState());
         oceanReflection.setLighting(environment.getState());
         vegetation?.setLighting(environment.getState().cardBrightness);
         wakeRendering();
@@ -329,6 +332,7 @@
     waterMotion.setWeather(environment.getState().weather);
     waterMotion.setSky(scene.fog.color);
     waterMotion.setLighting(environment.getState());
+    skyAtmosphere.setLighting(environment.getState());
     oceanReflection.setLighting(environment.getState());
     const oceanBackdrop = window.NotoOceanBackdrop.create({ THREE, scene, terrain, camera, controls, metadata: m, motion: waterMotion, materials: waterMaterials });
 
@@ -1284,18 +1288,21 @@
       }
     }
 
-    // 8. On-demand drawing, with visible waves, rain and wind active until sleep.
+    // 8. On-demand drawing, with visible clouds, waves, rain and wind active until sleep.
     // A null pending frame ID means no frame is queued; queued frames can be cancelled when hidden.
     let framePending = null;
     let frameContinuation = false;
     let sceneUpdatePending = false;
     let lastAnimationFrame = null,
       waterVisible = false,
+      skyInView = false,
+      skyTime = 0,
       vegetationRevision = -1;
     let previousFlashlight = null;
     let displayedFrames = 0;
     const bounds = new THREE.Box3(),
       center = new THREE.Vector3(),
+      skyDirection = new THREE.Vector3(),
       size = new THREE.Vector3();
     function render(now) {
       /*
@@ -1354,6 +1361,11 @@
         environment.updateView(terrain.scale.y);
         oceanBackdrop.update();
         waterVisible ||= oceanBackdrop.getState().horizonInView;
+        camera.getWorldDirection(skyDirection);
+        const halfFov = camera.fov * Math.PI / 360;
+        // Conservatively include the top of the frustum; no synchronous occlusion/readback test.
+        skyInView = skyDirection.y * Math.cos(halfFov)
+          + Math.sqrt(Math.max(0, 1 - skyDirection.y * skyDirection.y)) * Math.sin(halfFov) > -0.04;
         surf.update(live, environment.getState().cardBrightness);
       } else {
         // Idle animation frames advance clocks without repeating LOD, collision, frustum or instance-placement work.
@@ -1369,6 +1381,7 @@
       const animate = !navigationPaused() && stayAwake(now);
       const animationDelta = animate && lastAnimationFrame !== null ? Math.min(0.05, Math.max(0, (now - lastAnimationFrame) / 1000)) : 0;
       if (animate) {
+        if (waterVisible || skyInView) skyTime += animationDelta;
         if (waterVisible) waterMotion.advance(animationDelta);
         environment.animate(animationDelta);
       }
@@ -1378,6 +1391,7 @@
       if (gpuQuery) graphicsContext.beginQuery(gpuTimer.TIME_ELAPSED_EXT, gpuQuery);
       // The small FFT passes share the visible-water clock, GPU budget measurement and idle scheduler.
       if (waterVisible) oceanSpectrum.update(waterMotion.uniforms.uSeaTime.value);
+      if (waterVisible || skyInView) skyAtmosphere.update(skyTime);
       oceanReflection.update({ now, waterVisible });
       temporal.render(scene, camera, { now });
       displayedFrames++;
@@ -1396,7 +1410,7 @@
       if (updateScene) updateResolution();
       if (pressed.size || pendingZoom || pendingPlants) {
         requestRender();
-      } else if (!navigationPaused() && stayAwake(now) && (waterVisible || environment.hasAnimation() || vegetation?.hasAnimation())) {
+      } else if (!navigationPaused() && stayAwake(now) && (skyInView || waterVisible || environment.hasAnimation() || vegetation?.hasAnimation())) {
         requestRender(false);
       } else if (!navigationPaused() && (temporal.needsFrame() || oceanReflection.needsFrame())) {
         // A bounded settling sequence improves a still image without an independent animation loop.
@@ -1504,6 +1518,7 @@
         environment: environment.getState(),
         water: waterMotion.getState(),
         oceanSpectrum: oceanSpectrum.getState(),
+        skyAtmosphere: { ...skyAtmosphere.getState(), clockTime: skyTime, skyInView },
         oceanBackdrop: oceanBackdrop.getState(),
         oceanReflection: oceanReflection.getState(),
         surf: surf.getState(),
