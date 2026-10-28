@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Temporal reconstruction stress scene</title>
+    <style>
+      body { margin: 20px; color: #e9eef3; background: #15202b; font: 14px system-ui,sans-serif; }
+      canvas { display: block; border: 1px solid #697580; image-rendering: auto; }
+      button { margin: 8px 6px 8px 0; padding: 8px 12px; }
+      pre { white-space: pre-wrap; max-width: 900px; }
+    </style>
+    <script defer src="../vendor/three-libraries.js"></script>
+    <script defer src="../src/temporal-reconstruction.js"></script>
+    <script defer src="temporal-scene.js"></script>
+  </head>
+  <body>
+    <h1>Thin-occluder history rejection</h1>
+    <p>Asset-free regression scene. The foreground green bar reveals a blue surface as the camera pans.</p>
+    <div id="viewport"></div>
+    <button id="pan" disabled>Pan past the thin occluder</button>
+    <button id="lighting" disabled>Change lighting</button>
+    <button id="toggle" disabled>Toggle temporal reconstruction</button>
+    <pre id="state">Loading bundled Three.js…</pre>
+  </body>
+</html>

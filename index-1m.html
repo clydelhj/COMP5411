@@ -35,6 +35,7 @@
     <script src="./src/vegetation.js" defer></script>
     <script src="./src/terrain-lod.js" defer></script>
     <script src="./src/terrain-refinement.js" defer></script>
+    <script src="./src/temporal-reconstruction.js" defer></script>
     <script src="./src/terrain.js" defer></script>
   </head>
 
@@ -148,6 +149,12 @@
         <option value="2">200%</option>
       </select>
       <p id="window-resolution-current" aria-live="polite"></p>
+      <fieldset class="reconstruction-settings">
+        <legend>Image reconstruction</legend>
+        <label for="temporal-reconstruction"><input id="temporal-reconstruction" type="checkbox" checked disabled> Temporal reconstruction</label>
+        <p>Shades at 75% width/height and reuses valid static-surface samples. Moving water and plants use the current frame. Disable to compare with native direct rendering.</p>
+        <p id="temporal-reconstruction-current" aria-live="polite">Waiting for the renderer…</p>
+      </fieldset>
       <fieldset class="vegetation-visibility">
         <legend>Vegetation visibility</legend>
         <label for="show-grass"><input id="show-grass" type="checkbox" checked disabled> Show grass</label>

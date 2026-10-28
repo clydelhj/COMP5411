@@ -505,13 +505,13 @@
     let lastWindFrame = null;
     // Only nearby trees and herbs animate in wind; off or distant-only views have no independent wind animation.
     const hasAnimation = () => group.visible && state.nearTrees + state.middleTrees + state.herbs + groundGrass.getState().tufts > 0;
-    function animate(now) {
+    function animate(now, enabled = true) {
       /*
        * Advance only the shared wind clock on an existing draw frame. Reset its baseline when no
        * nearby vegetation is visible and cap resumed steps at 50 ms. Does not recompute placement
-       * or schedule a frame.
+       * or schedule a frame. enabled=false freezes wind during reconstruction-only settling.
        */
-      if (!hasAnimation()) {
+      if (!enabled || !hasAnimation()) {
         lastWindFrame = null;
         return;
       }
@@ -557,11 +557,11 @@
       placementJob?.iterator.return();
       placementJob = null;
     }
-    function update(now, verticalScale) {
+    function update(now, verticalScale, animateWind = true) {
       /* Spend a small CPU slice preparing a complete replacement. Displayed attributes remain
        * intact until commit, and true keeps the existing scene scheduler alive while work waits.
        */
-      animate(now);
+      animate(now, animateWind);
       group.visible = detailMode !== 'off' && (grassVisible || treesVisible);
       if (placementJob && (placementJob.invalidation !== invalidation || lastScale !== verticalScale)) cancelPlacement();
       if (!group.visible) {

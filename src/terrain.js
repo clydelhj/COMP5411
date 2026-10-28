@@ -20,6 +20,8 @@
   const treeVisibilityCheckbox = document.querySelector('#show-trees');
   const idleSleepSelect = document.querySelector('#idle-sleep-delay');
   const windowResolutionLabel = document.querySelector('#window-resolution-current');
+  const temporalCheckbox = document.querySelector('#temporal-reconstruction');
+  const temporalLabel = document.querySelector('#temporal-reconstruction-current');
   let navigationReady = false;
   const navigationPaused = () => !navigationReady || helpDialog.open || settingsDialog.open;
   document.querySelector('#settings-button').addEventListener('click', () => settingsDialog.showModal());
@@ -50,12 +52,13 @@
     // Once ready, sleep controls remain available even if a later tile fails.
     resolutionSelect.disabled = windowResolutionSelect.disabled = vegetationDetailSelect.disabled = true;
     grassVisibilityCheckbox.disabled = treeVisibilityCheckbox.disabled = true;
+    temporalCheckbox.disabled = true;
     status.hidden = false;
     status.className = 'error';
     status.textContent = `Unable to load terrain: ${error.message}`;
   }
   try {
-    if (!tileset || !window.NotoTerrainRefinement || !window.NotoGeometryWorker || !window.NotoTileGeometry || !window.NotoRockMaterials || !window.NotoWaterMaterials || !window.NotoWaterMotion || !window.NotoEnvironment || !window.NotoVegetation) {
+    if (!tileset || !window.NotoTemporalReconstruction || !window.NotoTerrainRefinement || !window.NotoGeometryWorker || !window.NotoTileGeometry || !window.NotoRockMaterials || !window.NotoWaterMaterials || !window.NotoWaterMotion || !window.NotoEnvironment || !window.NotoVegetation) {
       throw new Error('Missing local terrain assets. Keep the data, src and vendor folders together.');
     }
     const libraries = window.NOTO_LIBRARIES;
@@ -163,6 +166,7 @@
       // Request the high-performance GPU; the browser, driver and operating system still choose the adapter.
       powerPreference: 'high-performance'
     });
+    let temporal = null;
     // Read the actual canvas device once; a power preference alone is not proof.
     const graphicsContext = renderer.getContext();
     const graphicsDebug = graphicsContext.getExtension('WEBGL_debug_renderer_info');
@@ -209,6 +213,7 @@
       quality.pixelRatio = Math.min(requested, renderer.capabilities.maxTextureSize / innerWidth, renderer.capabilities.maxTextureSize / innerHeight);
       renderer.setPixelRatio(quality.pixelRatio);
       renderer.setSize(innerWidth, innerHeight);
+      temporal?.invalidate('resize');
       windowResolutionLabel.textContent = `Canvas: ${renderer.domElement.width} × ${renderer.domElement.height} pixels`;
     }
     applyWindowResolution();
@@ -219,6 +224,7 @@
     });
     vegetationDetailSelect.addEventListener('change', () => {
       vegetation?.setDetail(vegetationDetailSelect.value);
+      temporal?.invalidate('vegetation-detail');
       wakeRendering();
     });
     function applyVegetationVisibility() {
@@ -228,6 +234,7 @@
       };
       materialFactory.shared.grassVisibility.value = visibility.grass ? 1 : 0;
       vegetation?.setVisibility(visibility);
+      temporal?.invalidate('vegetation-visibility');
     }
     for (const checkbox of [grassVisibilityCheckbox, treeVisibilityCheckbox]) {
       checkbox.addEventListener('change', () => {
@@ -243,6 +250,12 @@
     });
     renderer.setClearColor(0xe6ebed);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    temporal = window.NotoTemporalReconstruction.create({ THREE, renderer });
+    temporal.setEnabled(temporalCheckbox.checked);
+    temporalCheckbox.addEventListener('change', () => {
+      temporal.setEnabled(temporalCheckbox.checked);
+      wakeRendering();
+    });
     renderer.domElement.setAttribute('aria-label', 'Noto Peninsula terrain: drag to rotate, right-drag to pan, scroll to zoom');
     renderer.domElement.tabIndex = 0;
     document.querySelector('#viewport').appendChild(renderer.domElement);
@@ -251,6 +264,8 @@
     scene.add(terrain);
     // Shared water textures use a continuous phase in global X/Z coordinates.
     const waterMaterials = window.NotoWaterMaterials.create(THREE);
+    // Animated geometry and reflection never borrow static-surface history.
+    waterMaterials.top.userData.temporalReactive = true;
     const coastalField = await window.NotoCoastalGeometry.prepare(window.NOTO_SHORELINE);
     oceanAt.coast = coastalField;
     const geometryBuilder = await window.NotoGeometryWorker.create({
@@ -279,6 +294,7 @@
       sampleHeight: surfaceHeight,
       capable,
       onChange: weather => {
+        temporal.invalidate('lighting');
         waterMotion.setWeather(weather);
         waterMotion.setSky(scene.fog.color);
         vegetation?.setLighting(environment.getState().cardBrightness);
@@ -665,6 +681,7 @@
       for (const [key, item] of live) if (next.get(key) !== item) terrain.remove(item.group);
       for (const [key, item] of next) if (live.get(key) !== item) terrain.add(item.group);
       live = new Map(next);
+      temporal.invalidate('geometry');
       if (firstTile.virtual) spatialLOD.commit([...next.values()].map(item => item.tile));
       waterMotion.setView(displayLevels[minimumLevel].step * nativeSpacing, terrain.scale.y);
       environment.markDirty();
@@ -675,6 +692,7 @@
       vegetationDetailSelect.disabled = false;
       grassVisibilityCheckbox.disabled = treeVisibilityCheckbox.disabled = false;
       idleSleepSelect.disabled = false;
+      temporalCheckbox.disabled = false;
       flashlight.ready();
       zoomButtons.forEach(button => {
         button.disabled = false;
@@ -695,6 +713,8 @@
        */
       const group = new THREE.Group();
       if (geometry.land) {
+        // Shore wetness/foam also animates on land: exclude the complete affected patch.
+        if (geometry.coastSegments) materials.top.userData.temporalReactive = true;
         group.add(new THREE.Mesh(geometry.land.top, materials.top));
         if (geometry.land.walls) group.add(new THREE.Mesh(geometry.land.walls, materials.cut));
         group.add(new THREE.Mesh(geometry.land.bottom, materials.bottom));
@@ -1263,6 +1283,8 @@
     let lastAnimationFrame = null,
       waterVisible = false,
       vegetationRevision = -1;
+    let previousFlashlight = null;
+    let displayedFrames = 0;
     const bounds = new THREE.Box3(),
       center = new THREE.Vector3(),
       size = new THREE.Vector3();
@@ -1298,7 +1320,10 @@
         moveZoom(now);
         bounds.min.set(-m.width_m / 2, -100 * terrain.scale.y, -m.height_m / 2);
         bounds.max.set(m.width_m / 2, m.elevation_max_m * terrain.scale.y, m.height_m / 2);
-        camera.near = 0.5;
+        // Keep close navigation intact, but improve depth precision in regional views.
+        // Outside the expanded model bounds, no terrain/tree/wave is near this clipping plane.
+        const modelClearance = Math.max(0, bounds.distanceToPoint(camera.position) - 64);
+        camera.near = Math.max(0.5, Math.min(16, modelClearance / 512));
         camera.far = Math.max(camera.near + 1, camera.position.distanceTo(bounds.getCenter(center)) + bounds.getSize(size).length() * 0.55);
         camera.updateProjectionMatrix();
         if (initialized && now - coverageAt > 80) {
@@ -1307,10 +1332,11 @@
           frustum.setFromProjectionMatrix(matrix);
           coverageAt = now;
         }
-        pendingPlants = vegetation?.update(now, terrain.scale.y) ?? false;
+        pendingPlants = vegetation?.update(now, terrain.scale.y, !navigationPaused() && stayAwake(now)) ?? false;
         const nextPlantRevision = vegetation?.getState().placementRevision;
         if (nextPlantRevision !== vegetationRevision) {
           environment.markDirty();
+          temporal.invalidate('vegetation');
           vegetationRevision = nextPlantRevision;
         }
         waterVisible = [...live.values()].some(item => item.geometry.water && frustum.intersectsBox(tileBox(item.tile)));
@@ -1318,10 +1344,16 @@
         surf.update(live, environment.getState().cardBrightness);
       } else {
         // Idle animation frames advance clocks without repeating LOD, collision, frustum or instance-placement work.
-        vegetation?.animate(now);
+        vegetation?.animate(now, !navigationPaused() && stayAwake(now));
       }
       flashlight.update(terrain.scale.y, live);
-      const animate = !navigationPaused();
+      const lightState = flashlight.getState();
+      if (previousFlashlight && (lightState.enabled !== previousFlashlight.enabled || lightState.hasHit !== previousFlashlight.hasHit || lightState.radiusM !== previousFlashlight.radiusM || lightState.target?.some((value, index) => value !== previousFlashlight.target?.[index]))) {
+        temporal.invalidate('flashlight');
+      }
+      previousFlashlight = lightState;
+      // Reconstruction may settle for a few frames after sleep; effect clocks must stay frozen.
+      const animate = !navigationPaused() && stayAwake(now);
       const animationDelta = animate && lastAnimationFrame !== null ? Math.min(0.05, Math.max(0, (now - lastAnimationFrame) / 1000)) : 0;
       if (animate) {
         if (waterVisible) waterMotion.advance(animationDelta);
@@ -1331,7 +1363,13 @@
       const measureGpu = gpuTimer && navigationReady && !navigationPaused() && !foregroundBusy && !warmingResident && !buildTasks.size && now - lastBuildAt >= 250 && gpuQueries.length < 3 && ++gpuSampleFrame % 4 === 0;
       const gpuQuery = measureGpu ? graphicsContext.createQuery() : null;
       if (gpuQuery) graphicsContext.beginQuery(gpuTimer.TIME_ELAPSED_EXT, gpuQuery);
-      renderer.render(scene, camera);
+      temporal.render(scene, camera, { now });
+      displayedFrames++;
+      const temporalState = temporal.getState();
+      const temporalText = temporalState.active
+        ? 'Temporal reconstruction enabled; incompatible history is rejected.'
+        : `Direct rendering${temporalState.reason ? `: ${temporalState.reason}` : ''}.`;
+      if (temporalLabel.textContent !== temporalText) temporalLabel.textContent = temporalText;
       if (gpuQuery) {
         graphicsContext.endQuery(gpuTimer.TIME_ELAPSED_EXT);
         gpuQueries.push({
@@ -1343,6 +1381,9 @@
       if (pressed.size || pendingZoom || pendingPlants) {
         requestRender();
       } else if (!navigationPaused() && stayAwake(now) && (waterVisible || environment.hasAnimation() || vegetation?.hasAnimation())) {
+        requestRender(false);
+      } else if (!navigationPaused() && temporal.needsFrame()) {
+        // A bounded settling sequence improves a still image without an independent animation loop.
         requestRender(false);
       }
       frameContinuation = framePending !== null;
@@ -1379,6 +1420,7 @@
       frameSamples = [];
       sampleStart = 0;
       if (document.hidden) {
+        temporal.invalidate('visibility');
         if (framePending !== null) cancelAnimationFrame(framePending);
         framePending = null;
         frameContinuation = false;
@@ -1394,6 +1436,7 @@
        * request rendering/LOD; leave the DEM unchanged.
        */
       terrain.scale.y = Number(slider.value);
+      temporal.invalidate('vertical-scale');
       waterMotion.setView(displayLevels[minimumLevel].step * nativeSpacing, terrain.scale.y);
       environment.markDirty();
       vegetation?.markDirty();
@@ -1417,6 +1460,7 @@
     });
     renderer.domElement.addEventListener('webglcontextlost', event => {
       event.preventDefault();
+      temporal.setEnabled(false);
       errorMessage(new Error('WebGL context was lost. Reload to restore terrain.'));
     });
     status.textContent = 'Loading vegetation models…';
@@ -1444,6 +1488,7 @@
         water: waterMotion.getState(),
         surf: surf.getState(),
         flashlight: flashlight.getState(),
+        temporal: temporal.getState(),
         maximumResolutionM: nativeSpacing * displayLevels[minimumLevel].step,
         windowResolution,
         idleSleepDelay,
@@ -1473,7 +1518,7 @@
         lodMode: 'distance-adaptive',
         surfaceCells: [...live.values()].reduce((sum, item) => sum + surfaceCells(item.tile), 0),
         renderedTriangles: renderer.info.render.triangles,
-        renderedFrames: renderer.info.render.frame,
+        renderedFrames: displayedFrames,
         drawCalls: renderer.info.render.calls,
         camera: camera.position.toArray(),
         target: controls.target.toArray()

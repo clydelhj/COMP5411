@@ -1,6 +1,6 @@
 # Code guide
 
-Current runtime baseline: October 24, 2026. All paths below are relative to the directory containing `index-1m.html`.
+Current runtime baseline: October 28, 2026. All paths below are relative to the directory containing `index-1m.html`.
 
 ## Structure
 
@@ -12,6 +12,7 @@ Current runtime baseline: October 24, 2026. All paths below are relative to the 
 │   ├── terrain.js
 │   ├── terrain-lod.js
 │   ├── terrain-refinement.js
+│   ├── temporal-reconstruction.js
 │   ├── geometry-worker.js
 │   ├── tile-geometry.js
 │   ├── coastal-geometry.js
@@ -51,6 +52,7 @@ Large runtime/source assets may be distributed separately; their paths after ins
 | `terrain.js` | Scene setup, asynchronous loads, caches, camera safety, settings, performance feedback and frame scheduling |
 | `terrain-lod.js` | Distance-based nested display patches, selection hysteresis, source resampling and display-patch lookup |
 | `terrain-refinement.js` | Progressive local split/merge transactions, near-region priority and displayed-topology validation |
+| `temporal-reconstruction.js` | Jittered image reconstruction, static-surface reprojection, history rejection and bounded GPU targets |
 | `geometry-worker.js` | Dedicated Worker, transferable geometry buffers, compact seam/normal messages and main-thread reconstruction |
 | `tile-geometry.js` | Land/water classification, terrain triangles, mixed-detail edges and shared normals |
 | `coastal-geometry.js` | Continuous shoreline clipping, coastal refinement and display contact profile |
@@ -67,7 +69,7 @@ Large runtime/source assets may be distributed separately; their paths after ins
 
 The HTML uses deferred ordinary scripts. Third-party libraries and the terrain manifest load first; geological configuration precedes material factories. Shared water/shoreline and environment modules precede geometry. Vegetation data and model/grass payloads precede the vegetation runtime. `geometry-worker.js` loads after its geometry dependencies. `terrain-lod.js` and `terrain-refinement.js` load before the final orchestrator, `terrain.js`.
 
-`terrain.js` decompresses the bundled Three.js modules, prepares the shared classification and texture resources, creates the scene and loads terrain input. Input files call `window.NOTO_TILE_RECEIVE(key, payload)` with compressed height arrays. Heights decode as `uint16 / 100 - 100` metres, with 65535 reserved for NoData.
+`temporal-reconstruction.js` loads before the final orchestrator. `terrain.js` decompresses the bundled Three.js modules, prepares the shared classification and texture resources, creates the scene and loads terrain input. Input files call `window.NOTO_TILE_RECEIVE(key, payload)` with compressed height arrays. Heights decode as `uint16 / 100 - 100` metres, with 65535 reserved for NoData.
 
 Geometric and material resources are prepared off the active set. A local split/merge transaction replaces one parent or its displayed descendants, together with neighbors whose seam context changes. Existing coverage remains visible while that transaction builds; unrelated regions do not wait for the full final selection. Independent patch resources are released on cache eviction; shared material arrays, water textures and vegetation resources belong to their factories, not individual terrain patches.
 
@@ -129,7 +131,21 @@ The environment uses a NOAA-style solar approximation at the model center, selec
 
 ## Rendering and adaptation
 
-Only one frame request can be pending. Inputs, settings and completed resources request scene updates. Animation-only frames advance shared uniforms and draw, without repeating terrain selection or vegetation distribution. By default, visible animation continues for 30 seconds after the last interaction; then time and drawing stop. Hidden pages and open dialogs pause idle animation. Cached resources remain allocated during sleep.
+Only one frame request can be pending. Inputs, settings and completed resources request scene updates. Animation-only frames advance shared uniforms and draw, without repeating terrain selection or vegetation distribution. By default, visible animation continues for 30 seconds after the last interaction; then time and drawing stop. Image reconstruction can finish a bounded settling sequence without advancing sleeping water, rain or wind clocks. Hidden pages and open dialogs pause idle animation. Cached resources remain allocated during sleep.
+
+### Temporal reconstruction and history rejection
+
+The settings checkbox enables a local GPU reconstruction pass when float color targets and multiple render attachments are supported. The scene is shaded at 75% of the output width and height with a short subpixel jitter sequence. Two full-output ping-pong targets retain linear-light color and surface metadata. The final pass applies the renderer's output color conversion. UI text remains ordinary HTML. Direct rendering remains available through the checkbox and is the fallback for unsupported devices, excessive target sizes or setup failures.
+
+For a static opaque surface, the current depth reconstructs its world position. The previous view-projection matrix finds its history location. History is rejected behind the camera, outside the previous image, or when previous depth or depth-derived world normal disagrees. All four metadata taps associated with the bilinear color lookup must pass, so a thin foreground edge cannot contaminate a newly revealed background through interpolation. Accepted history is clamped to the current 3 × 3 color neighborhood; luminance disagreement reduces its weight. This is geometric normal validation, not storage of PBR normal-map details.
+
+Regional views use a near plane between 0.5 and 16 m, derived only from camera clearance outside the model bounding box with a 64 m plant/wave allowance. Inside or near the model it remains 0.5 m. This improves depth precision over tens of kilometres without clipping bounded terrain; the nearest camera-local rain can be clipped in remote views. Reprojection retains the previous matrices and fixed-scale linear-depth metadata, so ordinary near/far updates do not reset history.
+
+Water, instanced plants, transparent content and custom shader effects are reactive: a temporary separate-alpha blend marks them as current-frame-only without changing their RGB blend. Coastal land patches are also reactive because their foam and wetness animate. Material state and the camera's unjittered projection/inverse are restored after each render. The implementation deliberately does not reuse dynamic-surface history or claim per-object motion-vector reconstruction.
+
+Explicit resets cover time/date/weather changes, pointer-light changes, committed terrain/plant geometry, vertical scale, plant visibility/detail, canvas changes and hidden-page transitions. Camera cuts and long gaps also discard history; ordinary camera motion uses reprojection instead of globally clearing every frame. The existing scheduler supplies at most eight settling attempts. Long-frame gaps do not rearm that budget indefinitely. There is no separate render loop, polling timer or per-frame CPU pixel readback.
+
+`terrainViewer.getState().temporal` reports requested/active state, fallback reason, dimensions, history age and reset counters. `renderedFrames` counts presented viewer frames; draw/triangle counters include the scene and reconstruction passes. Lower input resolution is a deliberate shading-cost tradeoff: newly revealed and reactive surfaces cannot gain missing samples from old frames. Disable reconstruction when comparing native direct detail. This is a small WebGL reconstruction implementation, not DLSS/FSR or a promise of ghost-free output in every scene.
 
 Performance feedback uses consecutive rendered-frame intervals and asynchronous GPU timing where available. Loading/building intervals and the first wake-up frame are excluded. Sustained slow windows reduce local terrain budgets and automatic canvas/plant detail; sustained fast windows restore them gradually. Both adjustment directions have a 6-second cooldown. Manual canvas and vegetation settings are not overwritten. Hardware hints choose the initial tier, while measured load drives later adaptation.
 
@@ -143,6 +159,7 @@ Use two-space indentation for JavaScript/HTML/CSS and four spaces for Python. Ex
 | --- | --- |
 | Interface text/layout | `index-1m.html`, `src/styles.css` |
 | Navigation, caches or performance feedback | `src/terrain.js` |
+| Image reconstruction and history validation | `src/temporal-reconstruction.js`, scheduler hooks in `src/terrain.js` |
 | Distance detail, coverage or input sampling | `src/terrain-lod.js` |
 | Surface topology and mixed-detail edges | `src/tile-geometry.js`, `src/coastal-geometry.js`, `src/model-volume.js` |
 | Geological appearance | `src/rock-materials.js`, `data/material-texture-config.js` |
@@ -157,3 +174,5 @@ The dated [progress report](docs/COMP5411_Progress_Report_EN.md) preserves Octob
 ## Focused regression tests
 
 Run `node --test tests/geometry-worker.test.cjs tests/terrain-refinement.test.cjs tests/terrain-refinement-geometry.test.cjs` with Node.js 22 or newer. Tests use real worker threads, the bundled Three.js core and generated terrain/coast fixtures. They cover transferred topology and attribute parity, height queries, mixed-detail water edges, boundary normals, caller buffer ownership, stale commits and compatibility fallback. No DEM download or npm installation is required. Progressive tests also check full coverage throughout local transitions, selection priority, merging and stale-topology rejection. Browser rendering and interaction still need separate checks.
+
+For the synthetic WebGL history test, install Playwright in a separate test environment and run `node --test tests/temporal-browser.test.cjs`. Set `REQUIRE_TEMPORAL_GPU=1` to treat a missing browser dependency as a failure, and `TEMPORAL_BROWSER_CHANNEL=msedge` to use installed Edge. Without Playwright this optional test is explicitly skipped; the viewer itself gains no dependency. `tests/temporal-scene.html` can also be opened through the local server. The fixture checks a camera pan across a thin contrasting occluder, lighting changes, reactive surfaces, static accumulation, camera matrix restoration, resize, disable/fallback and finite settling. It uses generated geometry and the bundled Three.js library, with no DEM or model download.

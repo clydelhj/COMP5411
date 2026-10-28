@@ -53,6 +53,8 @@ Forest broadleaf trees are 12–22 m tall and conifers 18–30 m; orchard trees 
 
 After the last interaction, visible waves, rain and vegetation wind continue for **30 seconds** by default, then freeze. Settings offer immediate sleep, 15/30 seconds, 1/5 minutes or Never. Dialogs and hidden pages pause idle animation. Ordinary animation frames do not rebuild terrain or redistribute vegetation.
 
+Temporal reconstruction is enabled by default on supported WebGL2 devices and can be disabled in settings for a direct-render comparison. It shades the scene at 75% of the output width/height, then reuses validated static-surface history. Depth/normal checks reject newly exposed or incompatible surfaces; local color clamping limits stale shading. Lighting changes and committed geometry reset history. Moving water, coastal wetness, plants, rain and spray use current-frame samples. A bounded settling sequence can refine a still image without keeping the viewer awake. Unsupported devices and oversized buffers use direct rendering. This is a quality/performance tradeoff, not a guarantee of higher frame rate or native detail on every pixel.
+
 Terrain mesh generation, shoreline subdivision, mixed-detail stitching and boundary-normal averaging run in a dedicated Worker. The main thread retains interaction and rendering. Tree/grass placement is prepared in short cooperative slices, then committed as a complete set. Worker diagnostics are available through `terrainViewer.getState().geometryWorker`; a browser that cannot start the Worker uses an explicit compatibility fallback. These changes reduce CPU blocking; pixel shading, shadows and GPU uploads still have a rendering cost.
 
 The renderer requests `powerPreference: "high-performance"`. The browser, operating system and driver select the actual device; JavaScript cannot force a GPU number.
@@ -67,14 +69,14 @@ The renderer requests `powerPreference: "high-performance"`. The browser, operat
 | `assets/material-library/`, `assets/vegetation/` | Source assets, derived runtime assets and source records |
 | `gis/vegetation/` | Aligned classification and satellite-reference rasters, QGIS styles and metadata |
 | `noto_terrain_materials_package/` | Geological sources, borehole summaries and reference model |
-| `tests/` | Synthetic Worker geometry regression tests; see `CODE_GUIDE.md` for Node.js 22+ test commands |
+| `tests/` | Synthetic geometry/Worker tests and optional WebGL temporal-history stress tests; see `CODE_GUIDE.md` |
 | `scripts/`, `vendor/` | Offline generators, local server and third-party code |
 | `source-data/terrain/` | Original DEM location when the source-data bundle is installed |
 | `docs/` | Proposal and dated English progress report |
 | `CODE_GUIDE.md`, `HANDOFF.md` | Current architecture and maintenance baseline |
 | `REBUILD.md` | Offline rebuilding dependencies and commands |
 
-See [CODE_GUIDE.md](CODE_GUIDE.md) for the current implementation, [HANDOFF.md](HANDOFF.md) for the maintenance baseline and [REBUILD.md](REBUILD.md) for offline generators. The [progress report](docs/COMP5411_Progress_Report_EN.md) is dated October 18, 2026; its measured results and implementation snapshot precede the current October 24 baseline.
+See [CODE_GUIDE.md](CODE_GUIDE.md) for the current implementation, [HANDOFF.md](HANDOFF.md) for the maintenance baseline and [REBUILD.md](REBUILD.md) for offline generators. The [progress report](docs/COMP5411_Progress_Report_EN.md) is dated October 18, 2026; its measured results and implementation snapshot precede the current October 28 baseline.
 
 The [progress presentation](docs/COMP5411_Project_Progress.pptx) and [timed narration](docs/COMP5411_Progress_Video_Script_EN.txt) describe the October 20 viewer. The recording plan targets 3:50, including a 70-second recap and 115 seconds of actual application footage. Slides 4–6 provide still-image cues; demonstrate animation and interaction in the running viewer when recording the video.
 

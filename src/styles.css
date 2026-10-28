@@ -344,6 +344,30 @@ kbd {
   outline-offset: 3px;
 }
 
+.reconstruction-settings {
+  margin: 20px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.reconstruction-settings legend {
+  font-size: 13px;
+  color: #52696f;
+}
+
+#terrain-settings .reconstruction-settings label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  cursor: pointer;
+}
+
+.reconstruction-settings input {
+  margin: 0;
+  accent-color: #426f76;
+}
+
 
 /* Use the existing scrollable settings dialog for environment controls without resizing the title panel. */
 .environment-settings {

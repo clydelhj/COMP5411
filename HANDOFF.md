@@ -1,6 +1,6 @@
 # Maintenance handoff
 
-Baseline date: October 24, 2026. Project: **Noto Peninsula: An Interactive 3D Landscape**, COMP5411 Group 12, LEE Hyunjin and TAN Jiming.
+Baseline date: October 28, 2026. Project: **Noto Peninsula: An Interactive 3D Landscape**, COMP5411 Group 12, LEE Hyunjin and TAN Jiming.
 
 ## Entry and documentation
 
@@ -23,6 +23,7 @@ Keep runtime paths relative to the root. Asset distribution instructions govern 
 - Geometric waves, nearshore crests, foam/wetness and GPU spray with a shared clock.
 - GMT+9 date/time, clear/cloudy/rainy presets, day/night lights, local shadows, GPU rain and pointer flashlight.
 - Performance-based terrain/canvas/plant budgets and default 30-second idle animation followed by sleep.
+- Optional GPU temporal reconstruction of static surfaces, with depth/normal disocclusion rejection, neighborhood color clamping, lighting/geometry resets and a current-frame-only reactive mask.
 
 ## Conventions to preserve
 
@@ -39,6 +40,8 @@ Forest broadleaf trees use 12–22 m heights and conifers 18–30 m; orchard and
 Mixed-detail land edges match the actual coarse surface, including shoreline subdivisions. Preserve the conservative coastal cache qualification: original ownership fully resolved and no coarser context; ordinary shells and dependent coastal patches retain full neighbor signatures. Animated water edges interpolate the same coarse endpoint wave displacements. Plant roots and collision queries use the displayed surface. Water-wave filtering follows the user detail setting, rather than changing its global parameters whenever patch arrangement changes.
 
 Keep shared material arrays, water resources and plant resources owned by their factories. Evict only independent per-patch resources. Cached resources remain allocated during sleep. `geometry-worker.js` owns background construction, with compact transferable outputs and explicit fallback diagnostics. Do not transfer buffers owned by visible meshes or the raw cache. Plant preparation uses the existing frame scheduler with a 3 ms target slice; retain old instances until a complete, current replacement is ready. No module should introduce a separate animation loop or polling timer for effects; the main scheduler controls shared time, visibility, dialogs and idle sleep.
+
+`temporal-reconstruction.js` owns its color/depth/history targets. Keep its camera jitter inside the render call and restore the projection/inverse afterward. History is valid only for static opaque surfaces: water tops, coastal land with animated wetness, instanced vegetation, transparent objects and custom shader effects are reactive. Invalidate history after committed geometry/plant snapshots, lighting or flashlight changes, scale and visibility changes. Do not invalidate ordinary camera motion or every shadow-frustum update. Settling is finite and must leave water/rain/wind frozen after the sleep deadline. Preserve direct fallback and the settings checkbox; do not claim dynamic motion vectors or universal ghost-free reconstruction.
 
 The renderer requests high performance, but browser/driver/system policy chooses the device. Do not describe this request as a forced GPU switch. Use `terrainViewer.getState().graphics.renderer` when the browser exposes it.
 
