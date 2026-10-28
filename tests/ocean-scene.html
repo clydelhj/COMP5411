@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Ocean rendering stress scene</title>
+    <style>
+      body { margin: 20px; color: #e7eef4; background: #18232c; font: 14px system-ui,sans-serif; }
+      canvas { display: block; max-width: 100%; border: 1px solid #63727d; }
+      button { margin: 10px 7px 10px 0; padding: 8px 12px; }
+      pre { max-width: 960px; white-space: pre-wrap; }
+    </style>
+    <script defer src="../vendor/three-libraries.js"></script>
+    <script defer src="../src/ocean-spectrum.js"></script>
+    <script defer src="../src/ocean-reflection.js"></script>
+    <script defer src="../src/water-materials.js"></script>
+    <script defer src="../src/water-motion.js"></script>
+    <script defer src="../src/temporal-reconstruction.js"></script>
+    <script defer src="ocean-scene.js"></script>
+  </head>
+  <body>
+    <h1>Ocean appearance and animation</h1>
+    <p>Generated geometry and shoreline only. The buttons draw finite frames; this page has no idle animation loop.</p>
+    <div id="viewport"></div>
+    <button id="advance" disabled>Advance 1 second</button>
+    <button id="view" disabled>Change viewpoint</button>
+    <button id="weather" disabled>Change weather</button>
+    <button id="temporal" disabled>Toggle reconstruction</button>
+    <pre id="state">Loading bundled graphics code…</pre>
+  </body>
+</html>

@@ -58,7 +58,7 @@
     status.textContent = `Unable to load terrain: ${error.message}`;
   }
   try {
-    if (!tileset || !window.NotoTemporalReconstruction || !window.NotoTerrainRefinement || !window.NotoGeometryWorker || !window.NotoTileGeometry || !window.NotoRockMaterials || !window.NotoWaterMaterials || !window.NotoWaterMotion || !window.NotoEnvironment || !window.NotoVegetation) {
+    if (!tileset || !window.NotoOceanReflection || !window.NotoOceanSpectrum || !window.NotoOceanBackdrop || !window.NotoTemporalReconstruction || !window.NotoTerrainRefinement || !window.NotoGeometryWorker || !window.NotoTileGeometry || !window.NotoRockMaterials || !window.NotoWaterMaterials || !window.NotoWaterMotion || !window.NotoEnvironment || !window.NotoVegetation) {
       throw new Error('Missing local terrain assets. Keep the data, src and vendor folders together.');
     }
     const libraries = window.NOTO_LIBRARIES;
@@ -251,6 +251,7 @@
     renderer.setClearColor(0xe6ebed);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     temporal = window.NotoTemporalReconstruction.create({ THREE, renderer });
+    const oceanSpectrum = window.NotoOceanSpectrum.create({ THREE, renderer });
     temporal.setEnabled(temporalCheckbox.checked);
     temporalCheckbox.addEventListener('change', () => {
       temporal.setEnabled(temporalCheckbox.checked);
@@ -266,12 +267,13 @@
     const waterMaterials = window.NotoWaterMaterials.create(THREE);
     // Animated geometry and reflection never borrow static-surface history.
     waterMaterials.top.userData.temporalReactive = true;
+    waterMaterials.cut.userData.temporalReactive = true;
     const coastalField = await window.NotoCoastalGeometry.prepare(window.NOTO_SHORELINE);
     oceanAt.coast = coastalField;
     const geometryBuilder = await window.NotoGeometryWorker.create({
       THREE, coreURL, coreSource, tileset, oceanBits, shoreline: window.NOTO_SHORELINE, coastalField
     });
-    const waterMotion = await window.NotoWaterMotion.create(THREE, window.NOTO_SHORELINE, waterMaterials, coastalField);
+    const waterMotion = await window.NotoWaterMotion.create(THREE, window.NOTO_SHORELINE, waterMaterials, coastalField, oceanSpectrum);
     materialFactory.shared.waterMotion = waterMotion;
     const waterTop = waterMaterials.top;
     const waterCut = waterMaterials.cut;
@@ -284,6 +286,8 @@
     controls.maxDistance = Math.max(m.width_m, m.height_m) * 8;
     controls.maxPolarAngle = Math.PI * 0.85;
     controls.screenSpacePanning = true;
+    const oceanReflection = window.NotoOceanReflection.create({ THREE, renderer, camera, terrain, metadata: m });
+    waterMotion.setReflection(oceanReflection);
     const environment = window.NotoEnvironment.create({
       THREE,
       renderer,
@@ -297,6 +301,8 @@
         temporal.invalidate('lighting');
         waterMotion.setWeather(weather);
         waterMotion.setSky(scene.fog.color);
+        waterMotion.setLighting(environment.getState());
+        oceanReflection.setLighting(environment.getState());
         vegetation?.setLighting(environment.getState().cardBrightness);
         wakeRendering();
       }
@@ -322,6 +328,9 @@
     });
     waterMotion.setWeather(environment.getState().weather);
     waterMotion.setSky(scene.fog.color);
+    waterMotion.setLighting(environment.getState());
+    oceanReflection.setLighting(environment.getState());
+    const oceanBackdrop = window.NotoOceanBackdrop.create({ THREE, scene, terrain, camera, controls, metadata: m, motion: waterMotion, materials: waterMaterials });
 
     // 3. Bounded asynchronous script loading, shared by file and HTTP pages.
     const rawCache = new Map();
@@ -729,9 +738,9 @@
         mesh.receiveShadow = true;
         if (mesh.geometry === geometry.water?.top) {
           if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
-          mesh.geometry.boundingBox.expandByScalar(2);
+          mesh.geometry.boundingBox.expandByScalar(6);
           if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
-          mesh.geometry.boundingSphere.radius += 2;
+          mesh.geometry.boundingSphere.radius += 6;
         }
       });
       return group;
@@ -1326,8 +1335,10 @@
         camera.near = Math.max(0.5, Math.min(16, modelClearance / 512));
         camera.far = Math.max(camera.near + 1, camera.position.distanceTo(bounds.getCenter(center)) + bounds.getSize(size).length() * 0.55);
         camera.updateProjectionMatrix();
+        // Reflection captures happen before the scene render, including immediate-sleep views.
+        camera.updateMatrixWorld();
+        terrain.updateWorldMatrix(true, false);
         if (initialized && now - coverageAt > 80) {
-          camera.updateMatrixWorld();
           matrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
           frustum.setFromProjectionMatrix(matrix);
           coverageAt = now;
@@ -1341,6 +1352,8 @@
         }
         waterVisible = [...live.values()].some(item => item.geometry.water && frustum.intersectsBox(tileBox(item.tile)));
         environment.updateView(terrain.scale.y);
+        oceanBackdrop.update();
+        waterVisible ||= oceanBackdrop.getState().horizonInView;
         surf.update(live, environment.getState().cardBrightness);
       } else {
         // Idle animation frames advance clocks without repeating LOD, collision, frustum or instance-placement work.
@@ -1363,6 +1376,9 @@
       const measureGpu = gpuTimer && navigationReady && !navigationPaused() && !foregroundBusy && !warmingResident && !buildTasks.size && now - lastBuildAt >= 250 && gpuQueries.length < 3 && ++gpuSampleFrame % 4 === 0;
       const gpuQuery = measureGpu ? graphicsContext.createQuery() : null;
       if (gpuQuery) graphicsContext.beginQuery(gpuTimer.TIME_ELAPSED_EXT, gpuQuery);
+      // The small FFT passes share the visible-water clock, GPU budget measurement and idle scheduler.
+      if (waterVisible) oceanSpectrum.update(waterMotion.uniforms.uSeaTime.value);
+      oceanReflection.update({ now, waterVisible });
       temporal.render(scene, camera, { now });
       displayedFrames++;
       const temporalState = temporal.getState();
@@ -1382,7 +1398,7 @@
         requestRender();
       } else if (!navigationPaused() && stayAwake(now) && (waterVisible || environment.hasAnimation() || vegetation?.hasAnimation())) {
         requestRender(false);
-      } else if (!navigationPaused() && temporal.needsFrame()) {
+      } else if (!navigationPaused() && (temporal.needsFrame() || oceanReflection.needsFrame())) {
         // A bounded settling sequence improves a still image without an independent animation loop.
         requestRender(false);
       }
@@ -1437,6 +1453,7 @@
        */
       terrain.scale.y = Number(slider.value);
       temporal.invalidate('vertical-scale');
+      oceanReflection.invalidate('vertical-scale');
       waterMotion.setView(displayLevels[minimumLevel].step * nativeSpacing, terrain.scale.y);
       environment.markDirty();
       vegetation?.markDirty();
@@ -1486,6 +1503,9 @@
         refinement: { ...refinementState, active: Boolean(activeTransition), desiredPatches: pendingSelection?.length ?? 0 },
         environment: environment.getState(),
         water: waterMotion.getState(),
+        oceanSpectrum: oceanSpectrum.getState(),
+        oceanBackdrop: oceanBackdrop.getState(),
+        oceanReflection: oceanReflection.getState(),
         surf: surf.getState(),
         flashlight: flashlight.getState(),
         temporal: temporal.getState(),
@@ -1537,6 +1557,7 @@
       await waitFrame();
     }
     residentMaps.set(maxLevel, initial);
+    oceanReflection.setTerrain(initial);
     await showSet(initial);
     // Enable navigation after coarse inputs are ready; local LOD selection always keeps full-map coverage.
     await warmResident();

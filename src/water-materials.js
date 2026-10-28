@@ -1,5 +1,5 @@
-/* Procedural tileable sea color, normal, roughness and foam-noise textures.
-All water tiles share textures sampled in model x/z coordinates, so patterns do not restart at tile boundaries. */
+/* Shared, neutral water micro-detail and foam noise. Physical color and wind-sea
+ * slopes are evaluated by water-motion; model-coordinate sampling stays continuous across tiles. */
 (function registerNotoWaterMaterials(global) {
   'use strict';
 
@@ -7,9 +7,6 @@ All water tiles share textures sampled in model x/z coordinates, so patterns do 
   const TEXTURE_SIZE = 512;
   // TILE_SCALE_M: horizontal repeat length in metres, used as a visual scale.
   const TILE_SCALE_M = 96;
-  // RIPPLE_COMPONENTS: integer frequencies, phase and amplitude; Array<[kx,kz,phase,amplitude]>.
-  // Integer frequencies keep color and gradients periodic. These amplitudes do not displace vertices.
-  const RIPPLE_COMPONENTS = [[5, 2, 0.4, 0.42], [9, 4, 1.2, 0.25], [13, -3, 2.1, 0.14], [21, 7, 0.8, 0.08], [-4, 11, 2.7, 0.12], [31, -8, 4.2, 0.035]];
   function periodicNoise(u, v, cells) {
     /* Generate deterministic periodic value noise for foam coverage.
 Parameters: u/v are periodic coordinates; cells is the integer lattice count per repeat.
@@ -31,7 +28,7 @@ Hash wrapped lattice points and smoothly interpolate. Returns the same value in 
   }
   function createTextures(THREE) {
     /* Create seamless sea color and detail textures using THREE.
-Warp a periodic wave field, then calculate gradients with periodic central differences. Color RGB stores water color and A stores foam noise; detail RGB/A stores normals/roughness.
+    Warp a periodic fractal field, then calculate gradients with periodic central differences. Color RGB is neutral and A stores foam noise; detail RGB/A stores normals/roughness.
 Returns {color,detail} DataTextures with mipmaps: sRGB color and linear detail. */
     const colorPixels = new Uint8Array(TEXTURE_SIZE * TEXTURE_SIZE * 4);
     const detailPixels = new Uint8Array(colorPixels.length);
@@ -43,11 +40,12 @@ Returns {color,detail} DataTextures with mipmaps: sRGB color and linear detail. 
         const v = row / TEXTURE_SIZE;
         const wu = u + 0.045 * Math.sin(tau * (2 * u + v)) + 0.018 * Math.sin(tau * (u - 3 * v));
         const wv = v + 0.04 * Math.sin(tau * (u - 2 * v) + 1.3);
-        let height = 0;
-        for (const [kx, kz, phase, amplitude] of RIPPLE_COMPONENTS) {
-          const angle = tau * (kx * wu + kz * wv) + phase;
-          height += Math.sin(angle) * amplitude;
-        }
+        // Unequal noise bands avoid the parallel engraved lines of a few sine-wave textures.
+        const height = 0.90 * (periodicNoise(wu, wv, 4) - 0.5)
+          + 0.36 * (periodicNoise(wu, wv, 8) - 0.5)
+          + 0.18 * (periodicNoise(wu, wv, 16) - 0.5)
+          + 0.09 * (periodicNoise(wu, wv, 32) - 0.5)
+          + 0.045 * (periodicNoise(wu, wv, 64) - 0.5);
         heights[row * TEXTURE_SIZE + col] = height;
       }
     }
@@ -56,15 +54,11 @@ Returns {color,detail} DataTextures with mipmaps: sRGB color and linear detail. 
       for (let col = 0; col < TEXTURE_SIZE; col++) {
         const u = col / TEXTURE_SIZE,
           v = row / TEXTURE_SIZE;
-        const height = heightAt(col, row);
         const dx = (heightAt(col + 1, row) - heightAt(col - 1, row)) * TEXTURE_SIZE / (2 * TILE_SCALE_M);
         const dz = (heightAt(col, row + 1) - heightAt(col, row - 1)) * TEXTURE_SIZE / (2 * TILE_SCALE_M);
         const noise = periodicNoise(u, v, 4) * 0.55 + periodicNoise(u, v, 16) * 0.28 + periodicNoise(u, v, 64) * 0.17;
         const index = (row * TEXTURE_SIZE + col) * 4;
-        const shade = 0.98 + height * 0.055;
-        colorPixels[index] = Math.round(31 * shade);
-        colorPixels[index + 1] = Math.round(92 * shade);
-        colorPixels[index + 2] = Math.round(107 * shade);
+        colorPixels[index] = colorPixels[index + 1] = colorPixels[index + 2] = 255;
         // Alpha stores linear scalar data, not material opacity. sRGB decoding only affects RGB.
         colorPixels[index + 3] = Math.round(noise * 255);
         // RGB encodes the tangent-space normal along +X,+Z,+Y, transformed back into object space when sampled.
@@ -72,7 +66,7 @@ Returns {color,detail} DataTextures with mipmaps: sRGB color and linear detail. 
         detailPixels[index] = Math.round((-dx / length * 0.5 + 0.5) * 255);
         detailPixels[index + 1] = Math.round((-dz / length * 0.5 + 0.5) * 255);
         detailPixels[index + 2] = Math.round((1 / length * 0.5 + 0.5) * 255);
-        detailPixels[index + 3] = Math.round((0.18 + noise * 0.10) * 255);
+        detailPixels[index + 3] = Math.round((0.045 + noise * 0.055) * 255);
       }
     }
     const color = new THREE.DataTexture(colorPixels, TEXTURE_SIZE, TEXTURE_SIZE);
@@ -102,7 +96,7 @@ Returns {top,cut,textures,dispose}; dispose is idempotent. */
     const textures = createTextures(THREE);
     const top = new THREE.MeshStandardMaterial({
       color: 0xffffff,
-      roughness: 0.24,
+      roughness: 0.10,
       metalness: 0,
       side: THREE.DoubleSide
     });
@@ -113,7 +107,7 @@ Returns {top,cut,textures,dispose}; dispose is idempotent. */
     });
     top.name = 'Noto sea surface';
     cut.name = 'Noto water cut and base';
-    top.customProgramCacheKey = () => 'noto-water-detail-v2';
+    top.customProgramCacheKey = () => 'noto-water-microdetail-v3';
     top.onBeforeCompile = shader => {
       /* Inject shared water textures into standard color, normal and roughness shading.
 Parameter: shader is the Three.js shader/uniform container.
@@ -167,7 +161,7 @@ Updates the shader in place and retains a diagnostic reference. */
           normal = normalize(mix(normal, notoWaterNormal, 0.85));
         `).replace('#include <roughnessmap_fragment>', /* glsl */`
           #include <roughnessmap_fragment>
-          roughnessFactor = clamp(notoWaterDetail.a, 0.18, 0.34);
+          roughnessFactor = clamp(notoWaterDetail.a, 0.045, 0.12);
         `);
       top.userData.notoShader = shader;
     };

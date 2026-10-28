@@ -1,6 +1,6 @@
 /*
- * Gerstner geometry, multiscale ripples, sky reflection and broken surf share model coordinates and
- * the sleep-aware clock.
+ * Hybrid long-swell geometry and GPU spectral wind-sea shading share model coordinates and
+ * the sleep-aware clock. Optical reference: Three.js Water.js (MIT), with local ocean optics.
  */
 (function registerWaterMotion(global) {
   'use strict';
@@ -21,6 +21,8 @@
     uniform float uSeaWeather;
     uniform vec4 uSeaWaves[3];
     float shoreDistance(vec2 p) {
+      // The visual offshore backdrop is outside the measured crop, never a repeated map edge.
+      if(any(greaterThan(abs(p),uSeaSize*0.5))) return 2048.0;
       vec2 uv = (p + uSeaSize * 0.5) / uShoreExtent;
       vec2 packed = texture2D(uShoreDistance, uv).rg * 255.0;
       return (packed.x + packed.y * 256.0 - 32768.0) / 8.0;
@@ -33,7 +35,7 @@
     // and inside the uniformly fine surf strip (<65 m).
     float breakerHeight(vec2 p, float distance) {
       float crest = pow(0.5 + 0.5*sin(surfPhase(p,distance)), 4.0);
-      return 0.95 * uSeaWeather * crest * smoothstep(16.0,24.0,distance)
+      return 1.30 * uSeaWeather * crest * smoothstep(16.0,24.0,distance)
         * (1.0-smoothstep(25.0,65.0,distance));
     }
     vec3 seaOffset(vec2 p) {
@@ -58,14 +60,96 @@
     }
     vec3 seaPoint(vec2 p) { return vec3(p.x,0.0,p.y) + seaOffset(p); }
     vec3 seaNormal(vec2 p) {
-      // Central differences of the full displacement include shore gradients and horizontal orbits, keeping normals consistent with geometry.
-      vec3 dx = seaPoint(p+vec2(0.5,0.0))-seaPoint(p-vec2(0.5,0.0));
-      vec3 dz = seaPoint(p+vec2(0.0,0.5))-seaPoint(p-vec2(0.0,0.5));
-      return normalize(cross(dz,dx));
+      // Differentiate the displaced surface analytically. Only the narrow coastal
+      // transition needs neighbouring distance samples; open water evaluates each swell once.
+      vec2 edge = uSeaSize*0.5-abs(p);
+      float edgeDistance = min(edge.x,edge.y);
+      if(edgeDistance<=0.0) return vec3(0.0,1.0,0.0);
+      float edgeT = clamp(edgeDistance/80.0,0.0,1.0);
+      float edgeFade = edgeT*edgeT*(3.0-2.0*edgeT);
+      vec2 edgeGradient = (edge.x<edge.y) ? vec2(-sign(p.x),0.0) : vec2(0.0,-sign(p.y));
+      vec2 edgeFadeGradient = edgeGradient*(6.0*edgeT*(1.0-edgeT)/80.0);
+      float distance = shoreDistance(p);
+      float guard = 96.0+3.0*uSeaGrid;
+      float shoreT = clamp((distance-guard)/120.0,0.0,1.0);
+      float shoreFade = shoreT*shoreT*(3.0-2.0*shoreT);
+      bool hasBreaker = distance>16.0 && distance<65.0;
+      if(shoreFade<=0.0 && !hasBreaker) return vec3(0.0,1.0,0.0);
+      vec2 shoreGradient = vec2(0.0);
+      if((shoreT>0.0 && shoreT<1.0) || hasBreaker) {
+        shoreGradient = vec2(
+          shoreDistance(p+vec2(0.5,0.0))-shoreDistance(p-vec2(0.5,0.0)),
+          shoreDistance(p+vec2(0.0,0.5))-shoreDistance(p-vec2(0.0,0.5)));
+      }
+      float fade = shoreFade*edgeFade;
+      vec2 fadeGradient = shoreFade*edgeFadeGradient
+        + edgeFade*(6.0*shoreT*(1.0-shoreT)/120.0)*shoreGradient;
+      vec3 tangentX = vec3(1.0,0.0,0.0);
+      vec3 tangentZ = vec3(0.0,0.0,1.0);
+      if(shoreFade>0.0) {
+        for(int i=0;i<3;i++) {
+          vec4 w = uSeaWaves[i];
+          float amplitude = w.z*uSeaWeather*smoothstep(1.5*uSeaGrid,4.0*uSeaGrid,w.y);
+          if(amplitude>0.0) {
+            vec2 d = vec2(cos(w.x),sin(w.x));
+            float k = 6.28318530718/w.y;
+            float phase = k*dot(d,p)-sqrt(9.81*k)*uSeaTime+w.w;
+            float c = cos(phase), s = sin(phase);
+            vec3 shape = vec3(0.55*d.x*c,s,0.55*d.y*c);
+            vec3 derivative = vec3(-0.55*d.x*s,c,-0.55*d.y*s);
+            tangentX += amplitude*(fadeGradient.x*shape+fade*k*d.x*derivative);
+            tangentZ += amplitude*(fadeGradient.y*shape+fade*k*d.y*derivative);
+          }
+        }
+      }
+      if(hasBreaker) {
+        float phase = surfPhase(p,distance);
+        float q = 0.5+0.5*sin(phase);
+        float crest = q*q*q*q;
+        vec2 phaseGradient = 6.28318530718*(shoreGradient/48.0
+          + vec2(0.019,0.013)*0.16*cos(p.x*0.019+p.y*0.013)
+          + vec2(0.047,-0.031)*0.09*cos(p.x*0.047-p.y*0.031));
+        vec2 crestGradient = 2.0*q*q*q*cos(phase)*phaseGradient;
+        float riseT = clamp((distance-16.0)/8.0,0.0,1.0);
+        float fallT = clamp((distance-25.0)/40.0,0.0,1.0);
+        float rise = riseT*riseT*(3.0-2.0*riseT);
+        float fall = 1.0-fallT*fallT*(3.0-2.0*fallT);
+        float riseDerivative = 6.0*riseT*(1.0-riseT)/8.0;
+        float fallDerivative = -6.0*fallT*(1.0-fallT)/40.0;
+        vec2 breakerGradient = 1.30*uSeaWeather*(edgeFade*(crestGradient*rise*fall
+          + crest*(riseDerivative*fall+rise*fallDerivative)*shoreGradient)
+          + crest*rise*fall*edgeFadeGradient);
+        tangentX.y += breakerGradient.x;
+        tangentZ.y += breakerGradient.y;
+      }
+      return normalize(cross(tangentZ,tangentX));
     }
   `;
-  const SURFACE_GLSL = /* glsl */`
+  const SKY_GLSL = /* glsl */`
     uniform vec3 uSeaSky;
+    uniform vec3 uSeaSunDirection;
+    uniform float uSeaDaylight;
+    uniform float uSeaCloudiness;
+    vec3 seaSkyColor(vec3 direction) {
+      float skyHeight = sqrt(clamp(direction.y,0.0,1.0));
+      vec3 horizonSky = uSeaSky*vec3(1.02,1.05,1.06);
+      vec3 zenithSky = uSeaSky*vec3(0.34,0.57,0.86);
+      vec3 sky = mix(horizonSky,zenithSky,skyHeight);
+      sky = mix(sky,uSeaSky*0.78,uSeaCloudiness*0.68);
+      float warmth = (1.0-smoothstep(0.08,0.4,uSeaSunDirection.y))*uSeaDaylight;
+      return mix(sky,sky*vec3(1.16,0.94,0.78),warmth*(1.0-skyHeight)*0.45);
+    }
+  `;
+  const SURFACE_GLSL = SKY_GLSL + /* glsl */`
+    uniform vec3 uSeaSunColor;
+    uniform float uSeaSunIntensity;
+    uniform sampler2D uOceanSpectrumLarge;
+    uniform sampler2D uOceanSpectrumSmall;
+    uniform vec2 uOceanSpectrumSize;
+    uniform float uOceanSpectrumEnabled;
+    uniform sampler2D uSeaReflection;
+    uniform mat4 uSeaReflectionMatrix;
+    uniform float uSeaReflectionEnabled;
     varying vec3 vSeaNormal;
     varying vec3 vSeaWorldPosition;
     // Rotate sampled slopes back to model coordinates when rotating UVs, keeping wave and highlight directions consistent.
@@ -77,13 +161,14 @@
     }
     float seaNoise(vec2 uv) { return texture2D(uNotoWaterColor, uv).a; }
   `;
-  async function create(THREE, source, materials, coastalField = null) {
+  async function create(THREE, source, materials, coastalField = null, spectrum = null) {
     /*
      * Connect the precomputed coast and shared animation to water materials. Parameters: THREE is
      * the namespace; source contains the field extent, cell size and compressed distance; materials
      * contains top/cut materials; coastalField optionally supplies the already decoded shared
      * field. Decode offset 16-bit signed distances into filterable RG channels. Inject matching
-     * displacement into top and sides; evaluate foam and fine waves in the fragment stage. Expose
+     * displacement into top and sides; spectrum optionally supplies two GPU wind-sea fields.
+     * Evaluate absorption, reflection, foam and fine waves in the fragment stage. Expose
      * clock, grid and weather updates without an independent animation loop. Returns
      * Promise<Object> with animation, numerical-query and disposal interfaces.
      */
@@ -105,7 +190,13 @@
     texture.minFilter = texture.magFilter = THREE.LinearFilter;
     texture.generateMipmaps = false;
     texture.needsUpdate = true;
+    // A complete neutral fallback keeps the same shader usable on devices without float FFT targets.
+    const neutralSpectrum = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat);
+    neutralSpectrum.needsUpdate = true;
     const uniforms = {
+      uSeaReflection: { value: neutralSpectrum },
+      uSeaReflectionMatrix: { value: new THREE.Matrix4() },
+      uSeaReflectionEnabled: { value: 0 },
       uShoreDistance: {
         value: texture
       },
@@ -130,13 +221,25 @@
       uSeaSky: {
         value: new THREE.Color(0xb9dbe9)
       },
+      uSeaSunDirection: { value: new THREE.Vector3(0.35, 0.78, 0.52).normalize() },
+      uSeaSunColor: { value: new THREE.Color(0xfff4e3) },
+      uSeaSunIntensity: { value: 3 },
+      uSeaDaylight: { value: 1 },
+      uSeaCloudiness: { value: 0 },
+      ...(spectrum?.uniforms || {
+        uOceanSpectrumLarge: { value: neutralSpectrum },
+        uOceanSpectrumSmall: { value: neutralSpectrum },
+        uOceanSpectrumSize: { value: new THREE.Vector2(1024, 173) },
+        uOceanSpectrumEnabled: { value: 0 }
+      }),
       uSeaWaves: {
         value: WAVES.map(w => new THREE.Vector4(...w))
       }
     };
     const original = materials.top.onBeforeCompile;
-    materials.top.name = 'Noto Gerstner sea with shoreline foam';
-    materials.top.customProgramCacheKey = () => 'noto-water-gerstner-surf-lod-v4';
+    materials.top.name = 'Noto spectral wind sea and long swell';
+    materials.top.userData.temporalReactive = true;
+    materials.top.customProgramCacheKey = () => 'noto-water-spectral-optics-v5';
     materials.top.defaultAttributeValues = {
       ...materials.top.defaultAttributeValues,
       notoSeaEdge: [0, 0, 0, 0]
@@ -157,49 +260,108 @@
         vSeaWorldPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
       // The base sampler declaration must precede seaNoise, which references it.
       shader.fragmentShader = shader.fragmentShader.replace('uniform float uNotoWaterScale;', 'uniform float uNotoWaterScale;\n' + GLSL + SURFACE_GLSL);
+      shader.fragmentShader = shader.fragmentShader.replace('#include <shadowmap_pars_fragment>', '#include <shadowmap_pars_fragment>\n#include <shadowmask_pars_fragment>');
       shader.fragmentShader = shader.fragmentShader.replace('vNotoWaterXZ / uNotoWaterScale', '(vNotoWaterXZ + vec2(uSeaTime*0.7, uSeaTime*0.25)) / uNotoWaterScale');
       shader.fragmentShader = shader.fragmentShader.replace('vec3 notoWaterTangent = notoWaterDetail.rgb * 2.0 - 1.0;', `
         vec2 p = vNotoWaterXZ;
-        vec2 smallUV = seaRotation * (p + vec2(-uSeaTime*0.42,uSeaTime*0.28)) / 31.0;
-        vec2 swellUV = swellRotation * (p + vec2(uSeaTime*2.1,uSeaTime*0.9)) / 576.0;
-        vec2 capillaryUV = (p + vec2(uSeaTime*0.16,-uSeaTime*0.12)) / 7.0;
-        vec2 slopes = seaSlope(notoWaterDetail.rgb)*0.72;
-        slopes += seaSlope(texture2D(uNotoWaterDetail,smallUV).rgb)*seaRotation*0.32;
-        slopes += seaSlope(texture2D(uNotoWaterDetail,swellUV).rgb)*swellRotation*0.48;
-        slopes += seaSlope(texture2D(uNotoWaterDetail,capillaryUV).rgb)*0.18;
+        vec2 smallUV = seaRotation * (p + vec2(-uSeaTime*0.42,uSeaTime*0.28)) / 37.0;
+        vec2 capillaryUV = (p + vec2(uSeaTime*0.16,-uSeaTime*0.12)) / 9.0;
+        float microFilter = 1.0-smoothstep(0.8,8.0,seaFootprint);
+        vec2 microSlopes = seaSlope(notoWaterDetail.rgb)*0.52;
+        microSlopes += seaSlope(texture2D(uNotoWaterDetail,smallUV).rgb)*seaRotation*0.30;
+        microSlopes += seaSlope(texture2D(uNotoWaterDetail,capillaryUV).rgb)*0.18*microFilter;
+        vec2 slopes = microSlopes*uSeaWeather;
+        if(uOceanSpectrumEnabled>0.5) {
+          // Spectrum RG stores physical height gradients; normal components have the opposite sign.
+          // A bounded facet gain keeps sub-grid wind waves legible on the regional terrain mesh.
+          slopes = -(oceanLarge.rg*1.6+oceanSmall.rg*2.2) + microSlopes*0.30*microFilter;
+        }
         vec3 nSea = normalize(vSeaNormal);
-        // Subgrid waves remain in the normal field; mipmaps filter fine detail according to the pixel footprint.
-        slopes *= uSeaWeather * (1.0 - foam*0.6);
+        // Filter subpixel facets while keeping their unresolved energy in roughness.
+        slopes *= 1.0-foam*0.72;
         vec3 notoWaterTangent = normalize(vec3(nSea.x + slopes.x, nSea.z + slopes.y, nSea.y));`);
-      shader.fragmentShader = shader.fragmentShader.replace('roughnessFactor = clamp(notoWaterDetail.a, 0.18, 0.34);', `
+      shader.fragmentShader = shader.fragmentShader.replace('normal = normalize(mix(normal, notoWaterNormal, 0.85));', 'normal = notoWaterNormal;');
+      shader.fragmentShader = shader.fragmentShader.replace('roughnessFactor = clamp(notoWaterDetail.a, 0.045, 0.12);', `
         float distanceToShore = shoreDistance(vNotoWaterXZ);
         vec2 foamP = vNotoWaterXZ;
-        float foamPatch = seaNoise(foamP/310.0 + vec2(uSeaTime*0.002,0.0));
-        float breakup = seaNoise(seaRotation*foamP/83.0 + vec2(0.0,uSeaTime*0.004));
-        float bubbles = seaNoise(foamP/17.0 + vec2(uSeaTime*0.007,-uSeaTime*0.005));
-        // Increasing phase moves crests shoreward. Large-scale warping and coverage noise break them into unequal surf patches.
+        float seaFootprint = max(length(dFdx(foamP)),length(dFdy(foamP)));
+        vec4 oceanLarge = vec4(0.0), oceanSmall = vec4(0.0);
+        if(uOceanSpectrumEnabled>0.5) {
+          oceanLarge = texture2D(uOceanSpectrumLarge,foamP/uOceanSpectrumSize.x);
+          oceanSmall = texture2D(uOceanSpectrumSmall,foamP/uOceanSpectrumSize.y);
+        }
+        float foamPatch = seaNoise((foamP-vec2(uSeaTime*1.35,uSeaTime*0.55))/197.0);
+        float breakup = seaNoise(seaRotation*(foamP-vec2(uSeaTime*0.8,uSeaTime*0.35))/53.0);
+        float bubbles = seaNoise((foamP+vec2(uSeaTime*0.45,-uSeaTime*0.27))/8.0);
+        // Breaker energy follows the same moving crest as geometry, but foam coverage advects and tears.
         float phase = surfPhase(foamP,distanceToShore);
-        float crest = pow(0.5+0.5*sin(phase),6.0);
-        float footprint = max(fwidth(distanceToShore),1.0);
-        float shoreZone = smoothstep(-0.5,2.0,distanceToShore) * (1.0-smoothstep(28.0,70.0,distanceToShore));
-        float coverage = smoothstep(0.32,0.68,foamPatch*0.65+breakup*0.35);
-        float lace = smoothstep(0.28,0.64,bubbles*0.7+breakup*0.3);
-        // Blend subpixel surf into low-coverage residual foam to avoid jagged white lines in distant views.
-        crest = mix(crest,0.2,smoothstep(10.0,45.0,footprint));
-        float residue = (1.0-smoothstep(6.0,35.0,distanceToShore))*pow(0.5+0.5*sin(phase-0.8),2.0)*breakup*0.32;
-        float foam = clamp(shoreZone*(crest*(0.35+coverage*0.65)*lace*1.65+residue),0.0,0.9);
-        diffuseColor.rgb = mix(diffuseColor.rgb,vec3(0.72,0.82,0.79),foam);
-        roughnessFactor = mix(clamp(notoWaterDetail.a,0.18,0.34),0.65,foam);`);
+        float crest = pow(0.5+0.5*sin(phase),4.5);
+        float shoreZone = smoothstep(0.0,2.0,distanceToShore) * (1.0-smoothstep(44.0,85.0,distanceToShore));
+        float coverage = smoothstep(0.31,0.64,foamPatch*0.58+breakup*0.42);
+        float lace = smoothstep(0.25,0.64,bubbles*0.65+breakup*0.35);
+        float distantSurf = smoothstep(7.0,32.0,max(fwidth(distanceToShore),seaFootprint));
+        crest = mix(crest,0.12,distantSurf);
+        float wake = pow(0.5+0.5*sin(phase-0.95),3.0);
+        float residue = (1.0-smoothstep(14.0,49.0,distanceToShore))*wake*coverage*0.30;
+        float surfFoam = shoreZone*(crest*(0.16+coverage*0.84)*lace*2.15+residue);
+        float oceanCrest = max(oceanLarge.b,oceanSmall.b*0.80);
+        // Only compressed positive crests aerate; the proxy is deliberately sparse in calm weather.
+        float whitecaps = smoothstep(0.045,0.16,oceanCrest)*smoothstep(0.35,0.70,breakup*0.6+bubbles*0.4);
+        whitecaps *= smoothstep(60.0,150.0,distanceToShore)*(0.32+0.58*max(0.0,uSeaWeather-0.7));
+        float foam = clamp(max(surfFoam,whitecaps),0.0,0.94);
+        // Shore distance is an optical-depth proxy, not surveyed bathymetry. Beer-Lambert attenuation
+        // reveals a subdued coastal bed tint while offshore water keeps a deep blue-green body.
+        float opticalDepth = clamp(0.6+max(distanceToShore,0.0)*0.10,0.6,70.0);
+        vec3 transmission = exp(-vec3(0.38,0.085,0.048)*opticalDepth);
+        vec3 deepBody = vec3(0.0025,0.028,0.047);
+        vec3 shallowBed = vec3(0.11,0.145,0.105);
+        vec3 waterBody = mix(deepBody,shallowBed,transmission);
+        waterBody += vec3(0.001,0.011,0.014)*clamp(oceanLarge.a+oceanSmall.a,0.0,1.8);
+        diffuseColor.rgb = mix(waterBody,vec3(0.68,0.77,0.73),foam);
+        float unresolvedFacets = smoothstep(0.5,20.0,seaFootprint)*0.045;
+        roughnessFactor = mix(clamp(notoWaterDetail.a+unresolvedFacets+uSeaCloudiness*0.025,0.055,0.17),0.55,foam);`);
+      shader.fragmentShader = shader.fragmentShader.replace('#include <lights_physical_fragment>', `
+        #include <lights_physical_fragment>
+        material.specularColor = vec3(0.0204);`);
       shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `
-        // Approximate sky reflection without an extra scene pass; follow day/night and weather colors. Standard lighting supplies sun highlights.
+        // The same sky/sun state drives Fresnel reflection, directional glint and crest scattering.
+        // Terrain shadows and point-light highlights remain in the standard PBR lighting result.
         vec3 worldNormal = inverseTransformDirection(normal, viewMatrix);
         vec3 toCamera = normalize(cameraPosition-vSeaWorldPosition);
         vec3 reflected = reflect(-toCamera,worldNormal);
-        float fresnel = 0.02+0.98*pow(1.0-clamp(dot(worldNormal,toCamera),0.0,1.0),5.0);
-        float skyHeight = pow(clamp(reflected.y,0.0,1.0),0.4);
-        vec3 skyReflection = uSeaSky * mix(vec3(1.15),vec3(0.32,0.52,0.72),skyHeight);
-        float reflectionWeight = fresnel*(1.0-foam*0.95);
-        outgoingLight = outgoingLight*(1.0-reflectionWeight)+skyReflection*reflectionWeight;
+        float fresnel = 0.0204+0.9796*pow(1.0-clamp(dot(worldNormal,toCamera),0.0,1.0),5.0);
+        vec3 skyReflection = seaSkyColor(reflected);
+        float reflectedLandCoverage = 0.0;
+        // A small cached coarse-terrain pass supplies actual coastal silhouettes; sky fills empty texels.
+        if(uSeaReflectionEnabled>0.5) {
+          vec4 projectedReflection = uSeaReflectionMatrix*vec4(vSeaWorldPosition,1.0);
+          if(projectedReflection.w>0.0) {
+            vec2 reflectionUv = projectedReflection.xy/projectedReflection.w;
+            reflectionUv += worldNormal.xz*(0.005+roughnessFactor*0.018);
+            if(all(greaterThan(reflectionUv,vec2(0.0))) && all(lessThan(reflectionUv,vec2(1.0)))) {
+              // Mip-filter the coarse capture to suppress its raster/grid steps on a rough surface.
+              vec4 terrainReflection = textureLod(uSeaReflection,reflectionUv,1.0+roughnessFactor*8.0);
+              float reflectionEdge = smoothstep(0.0,0.035,min(min(reflectionUv.x,reflectionUv.y),min(1.0-reflectionUv.x,1.0-reflectionUv.y)));
+              reflectedLandCoverage = terrainReflection.a*reflectionEdge;
+              // Transparent clear texels have zero RGB: filtering already weights RGB by coverage.
+              vec3 reflectedLand = terrainReflection.rgb/max(terrainReflection.a,0.0001);
+              skyReflection = mix(skyReflection,reflectedLand,reflectedLandCoverage*0.94);
+            }
+          }
+        }
+        float sunAlignment = max(dot(reflected,uSeaSunDirection),0.0);
+        float sunDisk = pow(sunAlignment,mix(1450.0,180.0,roughnessFactor));
+        float sunHalo = pow(sunAlignment,24.0)*0.035;
+        float shadowVisibility = getShadowMask();
+        vec3 reflectedSun = uSeaSunColor*uSeaSunIntensity*(sunDisk*5.0+sunHalo)*shadowVisibility*(1.0-reflectedLandCoverage);
+        float forwardLight = pow(max(dot(toCamera,-uSeaSunDirection),0.0),4.0);
+        float crestLight = clamp(oceanLarge.a*0.40+oceanSmall.a+0.15,0.0,1.0);
+        vec3 scattering = vec3(0.004,0.055,0.062)*forwardLight*crestLight*uSeaSunIntensity*shadowVisibility;
+        vec3 directHighlights = reflectedLight.directSpecular;
+        vec3 bodyLighting = max(outgoingLight-directHighlights-reflectedLight.indirectSpecular,vec3(0.0));
+        float reflectionWeight = fresnel*(1.0-foam*0.96);
+        outgoingLight = bodyLighting*(1.0-reflectionWeight)
+          +(skyReflection+reflectedSun)*reflectionWeight+directHighlights+scattering*(1.0-foam);
         #include <opaque_fragment>`);
       materials.top.userData.notoShader = shader;
     };
@@ -214,6 +376,7 @@
       /* Bilinearly query shore distance on the CPU using the same pixel-centre convention as the texture.
 Parameters: x/z are unexaggerated model metres.
 Convert to pixel indices, clamp and interpolate four samples. Returns approximate metres, positive on the sea side. */
+      if (Math.abs(x) > source.widthM / 2 || Math.abs(z) > source.heightM / 2) return 2048;
       const u = Math.max(0, Math.min(source.cols - 1, (x + source.widthM / 2) / source.cellM - 0.5));
       const v = Math.max(0, Math.min(source.rows - 1, (z + source.heightM / 2) / source.cellM - 0.5));
       const c = Math.floor(u),
@@ -246,7 +409,7 @@ Convert to pixel indices, clamp and interpolate four samples. Returns approximat
       }
       const distance = shoreAt(x, z);
       const phase = 2 * Math.PI * (distance / 48 + time * 0.16 + Math.sin(x * 0.019 + z * 0.013) * 0.16 + Math.sin(x * 0.047 - z * 0.031) * 0.09);
-      out[1] += 0.95 * uniforms.uSeaWeather.value * Math.pow(0.5 + 0.5 * Math.sin(phase), 4) * smooth(16, 24, distance) * (1 - smooth(25, 65, distance)) * smooth(0, 80, Math.min(source.widthM / 2 - Math.abs(x), source.heightM / 2 - Math.abs(z)));
+      out[1] += 1.30 * uniforms.uSeaWeather.value * Math.pow(0.5 + 0.5 * Math.sin(phase), 4) * smooth(16, 24, distance) * (1 - smooth(25, 65, distance)) * smooth(0, 80, Math.min(source.widthM / 2 - Math.abs(x), source.heightM / 2 - Math.abs(z)));
       return out;
     }
     function decorateLand(shader) {
@@ -274,6 +437,11 @@ Convert to pixel indices, clamp and interpolate four samples. Returns approximat
     return {
       uniforms,
       shaderDeclarations: GLSL,
+      skyShaderDeclarations: SKY_GLSL,
+      setReflection(controller) {
+        // Uniform objects are shared by the main sea and its offshore horizon material.
+        if (controller?.uniforms) Object.assign(uniforms, controller.uniforms);
+      },
       decorateLand,
       advance: seconds => {
         uniforms.uSeaTime.value += seconds;
@@ -284,19 +452,47 @@ Convert to pixel indices, clamp and interpolate four samples. Returns approximat
       },
       setWeather: weather => {
         uniforms.uSeaWeather.value = weather === 'rainy' ? 1.3 : weather === 'cloudy' ? 1.05 : 0.85;
+        uniforms.uSeaCloudiness.value = weather === 'rainy' ? 1 : weather === 'cloudy' ? 0.65 : 0;
+        spectrum?.setWeather(weather);
       },
       // skyColor: the environment's current linear THREE.Color, including day/night brightness.
       setSky: skyColor => uniforms.uSeaSky.value.copy(skyColor),
+      setLighting(state) {
+        /* Synchronize model-space sun direction, linear color and irradiance with the environment.
+         * The date/time approximation remains owned by environment.js; this controller only shades water.
+         */
+        const direction = state.sunDirection || state.direction;
+        if (Array.isArray(direction) && direction.length === 3 && direction.every(Number.isFinite)) {
+          uniforms.uSeaSunDirection.value.fromArray(direction).normalize();
+        }
+        const daylight = Number.isFinite(state.elevation) ? smooth(-6, 10, state.elevation) : 1;
+        uniforms.uSeaDaylight.value = daylight;
+        if (Array.isArray(state.sunColor) && state.sunColor.length === 3) {
+          uniforms.uSeaSunColor.value.fromArray(state.sunColor);
+        } else {
+          uniforms.uSeaSunColor.value.set(0xffbe85).lerp(new THREE.Color(0xfff4e3), smooth(0, 30, state.elevation ?? 45));
+        }
+        const strength = state.weather === 'rainy' ? 0.35 : state.weather === 'cloudy' ? 0.9 : 3;
+        uniforms.uSeaSunIntensity.value = Number.isFinite(state.sunIntensity)
+          ? Math.max(0, state.sunIntensity)
+          : strength * Math.max(0, Math.min(1, uniforms.uSeaSunDirection.value.y * 5));
+        uniforms.uSeaCloudiness.value = state.weather === 'rainy' ? 1 : state.weather === 'cloudy' ? 0.65 : 0;
+      },
       getState: () => ({
         time: uniforms.uSeaTime.value,
         gridM: uniforms.uSeaGrid.value,
         scaleY: uniforms.uSeaScaleY.value,
-        maxAmplitudeM: 3.2 * uniforms.uSeaWeather.value,
-        shoreCellM: source.cellM
+        maxAmplitudeM: 3.55 * uniforms.uSeaWeather.value,
+        shoreCellM: source.cellM,
+        shading: 'Fresnel reflection, spectral slopes, absorption and breaking foam',
+        spectrum: spectrum?.getState() ?? { active: false, reason: 'No spectrum controller' }
       }),
       shoreAt,
       sample,
-      dispose: () => texture.dispose()
+      dispose: () => {
+        texture.dispose();
+        neutralSpectrum.dispose();
+      }
     };
   }
   global.NotoWaterMotion = {
