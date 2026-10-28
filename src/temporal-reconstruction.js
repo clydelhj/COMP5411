@@ -5,6 +5,7 @@
   const INTERNAL_SCALE = 0.75;
   const HISTORY_LIMIT = 8;
   const MAX_OUTPUT_PIXELS = 4 * 1024 * 1024;
+  const MAX_DIRECT_EFFECT_PIXELS = 8 * 1024 * 1024;
   const STABLE_MEMBERSHIP_REASONS = new Set(['lighting', 'flashlight', 'vertical-scale', 'visibility', 'resize', 'vegetation-visibility']);
   // A fixed scale keeps previous depth independent of the camera's changing far plane.
   const DEPTH_SCALE = 65536;
@@ -180,10 +181,12 @@
     const supported = supportReason === null;
     let enabled = true, active = false, disposed = false, failureReason = null, budgetReason = null;
     let currentTarget = null, historyTargets = [], readIndex = 0;
+    let postProcessor = null, directTarget = null, postFailureReason = null, postBudgetReason = null;
     let historyFrames = 0, settleRemaining = HISTORY_LIMIT, frames = 0, directFrames = 0;
     let resets = 0, lastResetReason = 'startup', sceneDirty = true, reactiveRecords = [], reactiveDiscoveries = 0;
     const resetCounts = {};
     const outputSize = new THREE.Vector2(), internalSize = new THREE.Vector2();
+    const zeroJitter = new THREE.Vector2();
     const previousViewProjection = new THREE.Matrix4(), previousView = new THREE.Matrix4();
     const savedProjection = new THREE.Matrix4(), savedInverseProjection = new THREE.Matrix4();
     const currentViewProjection = new THREE.Matrix4(), inverseViewProjection = new THREE.Matrix4();
@@ -223,6 +226,104 @@
     const quadScene = new THREE.Scene();
     quadScene.add(quad);
     const quadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+    function releaseDirectTarget() {
+      directTarget?.dispose();
+      directTarget = null;
+    }
+
+    function postProcess(colorTexture, depthTexture, camera, jitterUv) {
+      if (!postProcessor || postFailureReason) return colorTexture;
+      try {
+        return postProcessor.render({
+          colorTexture, depthTexture, camera, jitterUv,
+          outputSize, sceneRevision: resets
+        }) || colorTexture;
+      } catch (error) {
+        postFailureReason = error?.message || String(error);
+        console.warn('Scene post-processing unavailable; retaining the scene image:', postFailureReason);
+        return colorTexture;
+      }
+    }
+
+    function renderDirect(scene, camera) {
+      active = false;
+      directFrames++;
+      postBudgetReason = null;
+      if (postProcessor) camera.updateMatrixWorld();
+      if (!postProcessor || postFailureReason || disposed || postProcessor.hasVisibleVolume?.(camera) === false) {
+        renderer.render(scene, camera);
+        return;
+      }
+      const saved = {
+        target: renderer.getRenderTarget(), cubeFace: renderer.getActiveCubeFace?.() || 0,
+        mipmap: renderer.getActiveMipmapLevel?.() || 0,
+        viewport: renderer.getViewport(new THREE.Vector4()), scissor: renderer.getScissor(new THREE.Vector4()),
+        scissorTest: renderer.getScissorTest(), autoClear: renderer.autoClear,
+        infoReset: renderer.info.autoReset, frame: renderer.info.render.frame
+      };
+      let captured = false;
+      try {
+        renderer.getDrawingBufferSize(outputSize);
+        if (saved.target) outputSize.set(saved.target.width, saved.target.height);
+        const width = Math.max(1, Math.floor(outputSize.x)), height = Math.max(1, Math.floor(outputSize.y));
+        if (width * height > MAX_DIRECT_EFFECT_PIXELS || Math.max(width, height) > renderer.capabilities.maxTextureSize) {
+          postBudgetReason = 'Native world-effect capture exceeds its pixel or texture-size budget';
+          releaseDirectTarget();
+          renderer.render(scene, camera);
+          return;
+        }
+        if (!directTarget || directTarget.width !== width || directTarget.height !== height) {
+          releaseDirectTarget();
+          directTarget = new THREE.WebGLRenderTarget(width, height, {
+            type: gl.getExtension('EXT_color_buffer_float') ? THREE.HalfFloatType : THREE.UnsignedByteType,
+            format: THREE.RGBAFormat, colorSpace: THREE.LinearSRGBColorSpace,
+            minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+            depthBuffer: true, stencilBuffer: false, generateMipmaps: false,
+            samples: Math.min(width * height <= 2 * 1024 * 1024 ? 4 : width * height <= 4 * 1024 * 1024 ? 2 : 0,
+              gl.getParameter(gl.MAX_SAMPLES) || 0)
+          });
+          directTarget.texture.name = 'Native scene color for depth-aware world effects';
+          directTarget.depthTexture = new THREE.DepthTexture(width, height, THREE.UnsignedIntType);
+          directTarget.depthTexture.minFilter = directTarget.depthTexture.magFilter = THREE.NearestFilter;
+        }
+        camera.updateMatrixWorld();
+        if (saved.infoReset) renderer.info.reset();
+        renderer.info.autoReset = false;
+        renderer.setRenderTarget(directTarget);
+        // Binding the owned target selects its physical-pixel viewport, independent of canvas DPR.
+        renderer.setScissorTest(false);
+        renderer.autoClear = true;
+        // Capture the existing scene draw once; effects reuse its depth and linear color.
+        renderer.render(scene, camera);
+        captured = true;
+        presentMaterial.uniforms.uResolved.value = postProcess(directTarget.texture, directTarget.depthTexture, camera, zeroJitter);
+        quad.material = presentMaterial;
+        renderer.setRenderTarget(saved.target, saved.cubeFace, saved.mipmap);
+        renderer.setViewport(saved.viewport);
+        renderer.setScissor(saved.scissor);
+        renderer.setScissorTest(saved.scissorTest);
+        renderer.autoClear = saved.autoClear;
+        renderer.render(quadScene, quadCamera);
+      } catch (error) {
+        postFailureReason = error?.message || String(error);
+        console.warn('World-effect scene capture unavailable; retaining direct rendering:', postFailureReason);
+        renderer.setRenderTarget(saved.target, saved.cubeFace, saved.mipmap);
+        renderer.setViewport(saved.viewport);
+        renderer.setScissor(saved.scissor);
+        renderer.setScissorTest(saved.scissorTest);
+        renderer.autoClear = saved.autoClear;
+        renderer.render(scene, camera);
+      } finally {
+        renderer.setRenderTarget(saved.target, saved.cubeFace, saved.mipmap);
+        renderer.setViewport(saved.viewport);
+        renderer.setScissor(saved.scissor);
+        renderer.setScissorTest(saved.scissorTest);
+        renderer.autoClear = saved.autoClear;
+        renderer.info.autoReset = saved.infoReset;
+        if (captured) renderer.info.render.frame = saved.frame + 1;
+      }
+    }
 
     function resetHistory(reason, rearm = true, rediscover = true) {
       historyFrames = 0;
@@ -350,9 +451,7 @@
     function render(scene, camera, context = {}) {
       // Preserve the caller's target and unjittered camera for navigation, picking and shadows.
       if (!enabled || !supported || disposed || failureReason) {
-        active = false;
-        directFrames++;
-        renderer.render(scene, camera);
+        renderDirect(scene, camera);
         return;
       }
       const savedTarget = renderer.getRenderTarget();
@@ -362,6 +461,9 @@
       const savedInfoReset = renderer.info.autoReset;
       const savedFrame = renderer.info.render.frame;
       const savedShaderError = renderer.debug.onShaderError;
+      const savedViewport = renderer.getViewport(new THREE.Vector4());
+      const savedScissor = renderer.getScissor(new THREE.Vector4());
+      const savedScissorTest = renderer.getScissorTest();
       let failure = null, rendered = false;
       savedProjection.copy(camera.projectionMatrix);
       savedInverseProjection.copy(camera.projectionMatrixInverse);
@@ -370,12 +472,13 @@
         if (savedTarget) outputSize.set(savedTarget.width, savedTarget.height);
         if (!ensureTargets()) {
           renderer.setRenderTarget(savedTarget, savedCubeFace, savedMipmap);
-          directFrames++;
-          renderer.render(scene, camera);
+          renderDirect(scene, camera);
           rendered = true;
           return;
         }
         active = true;
+        postBudgetReason = null;
+        releaseDirectTarget();
         camera.updateMatrixWorld();
         camera.getWorldPosition(position);
         camera.getWorldDirection(direction);
@@ -421,6 +524,7 @@
           throw new Error('Temporal rendering encountered a shader compilation or link error');
         };
         renderer.setRenderTarget(currentTarget);
+        renderer.setScissorTest(false);
         // 1. Shade the scene once, storing static eligibility in alpha without changing RGB.
         try {
           maskReactiveMaterials();
@@ -434,8 +538,14 @@
         renderer.render(quadScene, quadCamera);
         quad.material = presentMaterial;
         // 3. Present linear history through the normal output color/tone conversion.
-        presentMaterial.uniforms.uResolved.value = write.textures[0];
+        // World effects consume this frame's depth after history; moving clouds never enter static history.
+        camera.projectionMatrix.copy(savedProjection);
+        camera.projectionMatrixInverse.copy(savedInverseProjection);
+        presentMaterial.uniforms.uResolved.value = postProcess(write.textures[0], currentTarget.depthTexture, camera, resolveUniforms.uJitterUv.value);
         renderer.setRenderTarget(savedTarget, savedCubeFace, savedMipmap);
+        renderer.setViewport(savedViewport);
+        renderer.setScissor(savedScissor);
+        renderer.setScissorTest(savedScissorTest);
         renderer.autoClear = savedAutoClear;
         renderer.render(quadScene, quadCamera);
         readIndex = 1 - readIndex;
@@ -457,6 +567,9 @@
         camera.projectionMatrix.copy(savedProjection);
         camera.projectionMatrixInverse.copy(savedInverseProjection);
         renderer.setRenderTarget(savedTarget, savedCubeFace, savedMipmap);
+        renderer.setViewport(savedViewport);
+        renderer.setScissor(savedScissor);
+        renderer.setScissorTest(savedScissorTest);
         renderer.autoClear = savedAutoClear;
         renderer.info.autoReset = savedInfoReset;
         renderer.debug.onShaderError = savedShaderError;
@@ -468,13 +581,17 @@
         releaseTargets();
         resetHistory('fallback', false);
         console.warn('Temporal reconstruction disabled; using direct rendering:', failureReason);
-        directFrames++;
-        renderer.render(scene, camera);
+        renderDirect(scene, camera);
       }
     }
 
     return {
       render,
+      setPostProcessor(processor) {
+        postProcessor = processor && typeof processor.render === 'function' ? processor : null;
+        postFailureReason = null;
+        if (!postProcessor) releaseDirectTarget();
+      },
       invalidate(reason = 'scene') { resetHistory(reason, true, !STABLE_MEMBERSHIP_REASONS.has(reason)); },
       setEnabled(value) {
         const next = Boolean(value);
@@ -484,6 +601,7 @@
         else releaseTargets();
         resetHistory(next ? 'enabled' : 'disabled');
         hasPreviousCamera = false;
+        if (next) releaseDirectTarget();
         lastNow = null;
       },
       needsFrame: () => enabled && supported && active && !failureReason && settleRemaining > 0,
@@ -494,11 +612,13 @@
         frames, directFrames, historyFrames, settleRemaining, resets, lastResetReason,
         resetCounts: { ...resetCounts }, outputSize: outputSize.toArray(), internalSize: internalSize.toArray(),
         reactiveMaterials: reactiveRecords.length, reactiveDiscoveries, internalScale: INTERNAL_SCALE,
+        postProcessing: { requested: Boolean(postProcessor), reason: postFailureReason || postBudgetReason, directCapture: Boolean(directTarget), maximumDirectPixels: MAX_DIRECT_EFFECT_PIXELS },
         estimatedTargetMiB: currentTarget ? (internalSize.x * internalSize.y * 12 + outputSize.x * outputSize.y * 32) / 1048576 : 0,
         maximumHistoryFrames: HISTORY_LIMIT, maximumOutputPixels: MAX_OUTPUT_PIXELS
       }),
       dispose() {
         releaseTargets();
+        releaseDirectTarget();
         quadGeometry.dispose();
         resolveMaterial.dispose();
         presentMaterial.dispose();

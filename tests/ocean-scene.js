@@ -49,8 +49,10 @@
     materials.top.userData.temporalReactive = true;
     const spectrum = window.NotoOceanSpectrum?.create({ THREE, renderer }) || null;
     const atmosphere = window.NotoSkyAtmosphere?.create({ THREE, renderer }) || null;
+    const clouds = window.NotoCloudLayers?.create({ THREE, renderer }) || null;
     const motion = await window.NotoWaterMotion.create(THREE, source, materials, { distances: values }, spectrum);
     motion.setAtmosphere?.(atmosphere);
+    motion.setCloudLayers?.(clouds);
     const reflection = window.NotoOceanReflection?.create({
       THREE, renderer, camera, terrain: group,
       metadata: { width_m: widthM, height_m: heightM, elevation_max_m: 400, source_width: 8193, source_height: 8193, source_spacing_m: [1, 1] }
@@ -369,50 +371,6 @@
       temporal.invalidate('lighting');
       return direction;
     }
-    async function measureAtmosphereCost() {
-      const gl = renderer.getContext();
-      const timer = gl.getExtension('EXT_disjoint_timer_query_webgl2');
-      const debug = gl.getExtension('WEBGL_debug_renderer_info');
-      const result = {
-        renderer: debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
-        gpuTimerAvailable: Boolean(timer), cases: []
-      };
-      // Time only atlas generation, excluding the scene, readback, PNG encoding and first compilation.
-      for (const mode of ['clear', 'rainy']) {
-        solarLighting(5, mode);
-        skyTime += 1;
-        atmosphere.update(skyTime);
-        const samples = { weather: mode, cpuSubmitMs: [], gpuMs: [], timerResults: [] };
-        for (let index = 0; index < 3; index++) {
-          skyTime += 1;
-          const query = timer ? gl.createQuery() : null;
-          try {
-            if (query) gl.beginQuery(timer.TIME_ELAPSED_EXT, query);
-            const start = performance.now();
-            const updated = atmosphere.update(skyTime);
-            samples.cpuSubmitMs.push(performance.now() - start);
-            if (query) gl.endQuery(timer.TIME_ELAPSED_EXT);
-            if (!updated) throw new Error('Timed sky sample was suppressed rather than rendered');
-            if (!query) { samples.timerResults.push('unavailable'); continue; }
-            let completed = false;
-            // Yield for command submission and query completion; never call finish or spin on the GPU.
-            for (let attempt = 0; attempt < 30; attempt++) {
-              await new Promise(resolve => setTimeout(resolve, 8));
-              if (gl.getParameter(timer.GPU_DISJOINT_EXT)) {
-                samples.timerResults.push('disjoint'); completed = true; break;
-              }
-              if (gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE)) {
-                samples.gpuMs.push(gl.getQueryParameter(query, gl.QUERY_RESULT) / 1e6);
-                samples.timerResults.push('available'); completed = true; break;
-              }
-            }
-            if (!completed) samples.timerResults.push('pending-timeout');
-          } finally { if (query) gl.deleteQuery(query); }
-        }
-        result.cases.push(samples);
-      }
-      return result;
-    }
     function skyLongitudeSeam() {
       const width = 254, height = 8;
       const previous = renderer.getRenderTarget();
@@ -681,56 +639,33 @@
         skyTime = 100;
         frame();
         const noon = snapshot();
-        capture('clouds-noon');
+        capture('atmosphere-noon');
         const noonProbes = skyProbes(horizonDirections);
-        const frozenWaterTime = motion.getState().time;
-        const shortBefore = snapshot();
-        skyTime += 0.11;
-        frame();
-        const shortAfter = snapshot();
+        const beforeTimeChange = atmosphere.getState().updates;
         skyTime += 60;
         frame();
-        const drifted = snapshot();
-        capture('clouds-drifted-60s');
+        const afterTimeChange = atmosphere.getState().updates;
         const beforeSameTime = atmosphere.getState().updates;
         frame();
         const afterSameTime = atmosphere.getState().updates;
-        const frozenImage = snapshot();
-        const frozenState = atmosphere.getState();
+        const frozenImage = snapshot(), frozenState = atmosphere.getState();
         await new Promise(resolve => setTimeout(resolve, 150));
         const idleSkyState = atmosphere.getState();
         const idleSkyImage = snapshot();
-        const enabled = atmosphere.uniforms.uSkyAtmosphereEnabled.value;
-        atmosphere.uniforms.uSkyAtmosphereEnabled.value = 0;
-        frame();
-        const fallbackImage = snapshot();
-        capture('without-cloud-atlas');
-        atmosphere.uniforms.uSkyAtmosphereEnabled.value = enabled;
         const sunriseDirection = solarLighting(3, 'clear', -0.1);
         frame();
         const sunrise = snapshot();
         const sunriseProbes = skyProbes(horizonDirections);
-        capture('clouds-sunrise');
+        capture('atmosphere-sunrise');
         const sunsetDirection = solarLighting(3, 'clear', 0.1);
         frame();
         const sunset = snapshot();
         const sunsetProbes = skyProbes(horizonDirections);
-        capture('clouds-sunset');
-        const sunOcclusion = [];
-        solarLighting(7, 'cloudy');
-        const sunDirection = [0, Math.sin(7 * Math.PI / 180), -Math.cos(7 * Math.PI / 180)];
-        for (const time of [0, 90, 240, 480, 900, 1600]) {
-          skyTime = time;
-          frame();
-          const probe = skyProbes([sunDirection])[0];
-          sunOcclusion.push({ time, rgb: probe.rgba.slice(0, 3), transmission: probe.rgba[3],
-            waterGlintRGB: imageRegion(snapshot(), [0.43, 0.06, 0.57, 0.40]).rgb });
-        }
-        capture('clouds-cloudy-sun');
+        capture('atmosphere-sunset');
         solarLighting(-20);
         frame();
         const nightSky = snapshot();
-        capture('clouds-night');
+        capture('atmosphere-night');
         const priorTarget = renderer.getRenderTarget(), originalState = rendererSnapshot();
         const sentinel = new THREE.WebGLRenderTarget(24, 24, { depthBuffer: false });
         let stateRestoration;
@@ -743,6 +678,7 @@
           renderer.autoClear = false;
           renderer.shadowMap.autoUpdate = false;
           renderer.shadowMap.needsUpdate = true;
+          atmosphere.setLighting({ direction: [0.2, 0.1, -0.97], elevation: 6, weather: 'cloudy', sunColor: [1, 0.7, 0.4] });
           const before = rendererSnapshot();
           atmosphere.update(skyTime + 1);
           stateRestoration = { before, after: rendererSnapshot(), sameTarget: renderer.getRenderTarget() === sentinel };
@@ -759,26 +695,42 @@
         }
         report.atmosphere = {
           state: atmosphere.getState(), backdrop: backdrop?.getState(), noonProbes, sunriseProbes, sunsetProbes,
-          drift: { sky: regionDifference(shortAfter, drifted, skyRegion), water: regionDifference(shortAfter, drifted, waterRegion),
-            shortStep: regionDifference(shortBefore, shortAfter, skyRegion), waveTimeBefore: frozenWaterTime, waveTimeAfter: motion.getState().time },
-          ablation: { sky: regionDifference(drifted, fallbackImage, skyRegion), water: regionDifference(drifted, fallbackImage, waterRegion) },
+          timeOnly: { before: beforeTimeChange, after: afterTimeChange },
           sameTime: { before: beforeSameTime, after: afterSameTime },
           idle: { before: frozenState, after: idleSkyState, difference: regionDifference(frozenImage, idleSkyImage, skyRegion) },
           sunrise: { direction: sunriseDirection.toArray(), skyRGB: imageRegion(sunrise, skyRegion).rgb, waterRGB: imageRegion(sunrise, waterRegion).rgb },
           sunset: { direction: sunsetDirection.toArray(), skyRGB: imageRegion(sunset, skyRegion).rgb, waterRGB: imageRegion(sunset, waterRegion).rgb },
           noon: { skyRGB: imageRegion(noon, skyRegion).rgb, waterRGB: imageRegion(noon, waterRegion).rgb },
           night: { skyRGB: imageRegion(nightSky, skyRegion).rgb, waterRGB: imageRegion(nightSky, waterRegion).rgb },
-          sunOcclusion, stateRestoration
+          stateRestoration
         };
         report.atmosphere.seam = checkLongitudeSeam();
-        capture('clouds-west-longitude-seam');
-        report.atmosphere.performance = await measureAtmosphereCost();
+        capture('atmosphere-west-longitude-seam');
+      }
+      if (clouds) {
+        temporal.setEnabled(false);
+        setView(0);
+        applyLighting('cloudy', true);
+        clouds.setLighting({ direction: [0.42, 0.39, -0.8], elevation: 23, weather: 'cloudy', sunColor: sun.color.toArray() });
+        frame();
+        const clearWater = snapshot();
+        const fixedWaveTime = motion.getState().time;
+        clouds.setTime(20); clouds.update(20);
+        frame();
+        const reflectedClouds = snapshot();
+        capture('world-cloud-reflection');
+        clouds.setTime(80); clouds.update(80);
+        frame();
+        report.worldCloudReflection = {
+          state: clouds.getState(), effect: compare(clearWater, reflectedClouds), drift: compare(reflectedClouds, snapshot()),
+          waveTimeBefore: fixedWaveTime, waveTimeAfter: motion.getState().time
+        };
       }
       window.oceanStressImages = images;
       window.oceanStressReport = report;
       return report;
     }
-    window.oceanStress = { THREE, renderer, scene, camera, motion, spectrum, reflection, atmosphere, backdrop, temporal, setView, setScale, applyLighting, frame, snapshot, checkLongitudeSeam, runChecks };
+    window.oceanStress = { THREE, renderer, scene, camera, motion, spectrum, reflection, atmosphere, clouds, backdrop, temporal, setView, setScale, applyLighting, frame, snapshot, checkLongitudeSeam, runChecks };
     applyLighting(); setScale(1); setView(0); frame();
     for (const button of document.querySelectorAll('button')) button.disabled = false;
     document.querySelector('#advance').onclick = () => frame(1);

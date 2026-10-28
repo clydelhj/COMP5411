@@ -58,7 +58,7 @@
     status.textContent = `Unable to load terrain: ${error.message}`;
   }
   try {
-    if (!tileset || !window.NotoSkyAtmosphere || !window.NotoOceanReflection || !window.NotoOceanSpectrum || !window.NotoOceanBackdrop || !window.NotoTemporalReconstruction || !window.NotoTerrainRefinement || !window.NotoGeometryWorker || !window.NotoTileGeometry || !window.NotoRockMaterials || !window.NotoWaterMaterials || !window.NotoWaterMotion || !window.NotoEnvironment || !window.NotoVegetation) {
+    if (!tileset || !window.NotoCloudLayers || !window.NotoSkyAtmosphere || !window.NotoOceanReflection || !window.NotoOceanSpectrum || !window.NotoOceanBackdrop || !window.NotoTemporalReconstruction || !window.NotoTerrainRefinement || !window.NotoGeometryWorker || !window.NotoTileGeometry || !window.NotoRockMaterials || !window.NotoWaterMaterials || !window.NotoWaterMotion || !window.NotoEnvironment || !window.NotoVegetation) {
       throw new Error('Missing local terrain assets. Keep the data, src and vendor folders together.');
     }
     const libraries = window.NOTO_LIBRARIES;
@@ -253,6 +253,8 @@
     temporal = window.NotoTemporalReconstruction.create({ THREE, renderer });
     const oceanSpectrum = window.NotoOceanSpectrum.create({ THREE, renderer });
     const skyAtmosphere = window.NotoSkyAtmosphere.create({ THREE, renderer });
+    const cloudLayers = window.NotoCloudLayers.create({ THREE, renderer });
+    temporal.setPostProcessor(cloudLayers);
     temporal.setEnabled(temporalCheckbox.checked);
     temporalCheckbox.addEventListener('change', () => {
       temporal.setEnabled(temporalCheckbox.checked);
@@ -276,6 +278,7 @@
     });
     const waterMotion = await window.NotoWaterMotion.create(THREE, window.NOTO_SHORELINE, waterMaterials, coastalField, oceanSpectrum);
     waterMotion.setAtmosphere(skyAtmosphere);
+    waterMotion.setCloudLayers(cloudLayers);
     materialFactory.shared.waterMotion = waterMotion;
     const waterTop = waterMaterials.top;
     const waterCut = waterMaterials.cut;
@@ -305,6 +308,7 @@
         waterMotion.setSky(scene.fog.color);
         waterMotion.setLighting(environment.getState());
         skyAtmosphere.setLighting(environment.getState());
+        cloudLayers.setLighting(environment.getState());
         oceanReflection.setLighting(environment.getState());
         vegetation?.setLighting(environment.getState().cardBrightness);
         wakeRendering();
@@ -333,6 +337,7 @@
     waterMotion.setSky(scene.fog.color);
     waterMotion.setLighting(environment.getState());
     skyAtmosphere.setLighting(environment.getState());
+    cloudLayers.setLighting(environment.getState());
     oceanReflection.setLighting(environment.getState());
     const oceanBackdrop = window.NotoOceanBackdrop.create({ THREE, scene, terrain, camera, controls, metadata: m, motion: waterMotion, materials: waterMaterials });
 
@@ -1296,6 +1301,7 @@
     let lastAnimationFrame = null,
       waterVisible = false,
       skyInView = false,
+      cloudsInView = false,
       skyTime = 0,
       vegetationRevision = -1;
     let previousFlashlight = null;
@@ -1361,6 +1367,7 @@
         environment.updateView(terrain.scale.y);
         oceanBackdrop.update();
         waterVisible ||= oceanBackdrop.getState().horizonInView;
+        cloudsInView = cloudLayers.hasVisibleVolume(camera);
         camera.getWorldDirection(skyDirection);
         const halfFov = camera.fov * Math.PI / 360;
         // Conservatively include the top of the frustum; no synchronous occlusion/readback test.
@@ -1381,7 +1388,7 @@
       const animate = !navigationPaused() && stayAwake(now);
       const animationDelta = animate && lastAnimationFrame !== null ? Math.min(0.05, Math.max(0, (now - lastAnimationFrame) / 1000)) : 0;
       if (animate) {
-        if (waterVisible || skyInView) skyTime += animationDelta;
+        if (waterVisible || skyInView || cloudsInView) skyTime += animationDelta;
         if (waterVisible) waterMotion.advance(animationDelta);
         environment.animate(animationDelta);
       }
@@ -1392,6 +1399,7 @@
       // The small FFT passes share the visible-water clock, GPU budget measurement and idle scheduler.
       if (waterVisible) oceanSpectrum.update(waterMotion.uniforms.uSeaTime.value);
       if (waterVisible || skyInView) skyAtmosphere.update(skyTime);
+      if (waterVisible || cloudsInView) cloudLayers.update(skyTime);
       oceanReflection.update({ now, waterVisible });
       temporal.render(scene, camera, { now });
       displayedFrames++;
@@ -1410,7 +1418,7 @@
       if (updateScene) updateResolution();
       if (pressed.size || pendingZoom || pendingPlants) {
         requestRender();
-      } else if (!navigationPaused() && stayAwake(now) && (skyInView || waterVisible || environment.hasAnimation() || vegetation?.hasAnimation())) {
+      } else if (!navigationPaused() && stayAwake(now) && (cloudsInView || skyInView || waterVisible || environment.hasAnimation() || vegetation?.hasAnimation())) {
         requestRender(false);
       } else if (!navigationPaused() && (temporal.needsFrame() || oceanReflection.needsFrame())) {
         // A bounded settling sequence improves a still image without an independent animation loop.
@@ -1519,6 +1527,7 @@
         water: waterMotion.getState(),
         oceanSpectrum: oceanSpectrum.getState(),
         skyAtmosphere: { ...skyAtmosphere.getState(), clockTime: skyTime, skyInView },
+        cloudLayers: { ...cloudLayers.getState(), clockTime: skyTime, inView: cloudsInView },
         oceanBackdrop: oceanBackdrop.getState(),
         oceanReflection: oceanReflection.getState(),
         surf: surf.getState(),

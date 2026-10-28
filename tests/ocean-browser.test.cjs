@@ -11,7 +11,7 @@ try { ({ chromium } = require('playwright')); } catch { /* Explicitly optional o
 const root = path.resolve(__dirname, '..');
 const required = process.env.REQUIRE_OCEAN_GPU === '1';
 
-test('ocean, moving clouds, sunset shading and idle behavior run in actual WebGL2', {
+test('ocean surface, atmosphere, sunset shading and idle behavior run in actual WebGL2', {
   skip: !chromium && !required ? 'Playwright is optional; configure NODE_PATH to run the ocean GPU test.' : false,
   timeout: 120000
 }, async t => {
@@ -113,15 +113,9 @@ test('ocean, moving clouds, sunset shading and idle behavior run in actual WebGL
       assert(sky, 'shared atmosphere renderer is present');
       assert(sky.state.updates > 0, 'sky atlas is actually rendered');
       assert(sky.state.width * sky.state.height <= 1536 * 384, 'sky lookup resolution is bounded');
-      assert(sky.state.estimatedTextureMiB <= 8, 'sky lookup and noise storage stay bounded');
-      assert(sky.state.updateHz <= 10, 'sky lookup cannot update on every display frame');
-      assert.equal(sky.state.cloudSamples, 24, 'cloud volume uses the accepted 24-step integration budget');
-      assert.equal(sky.state.noiseVolumeSize, 64, 'cloud density uses the bounded three-dimensional noise volume');
-      assert(sky.drift.sky.changedPixels > 200 && sky.drift.sky.mean > 0.05, 'clouds visibly drift when only their clock advances');
-      assert(sky.drift.water.changedPixels > 200 && sky.drift.water.mean > 0.02, 'moving clouds change their reflection without moving the water clock');
-      assert.equal(sky.drift.waveTimeAfter, sky.drift.waveTimeBefore, 'cloud drift test keeps geometric waves frozen');
-      assert(sky.drift.shortStep.mean < sky.drift.sky.mean, 'a 0.11 second step changes clouds less than a 60 second drift');
-      assert(sky.ablation.sky.changedPixels > 200 && sky.ablation.water.changedPixels > 200, 'visible sky and reflected water both use the atmosphere atlas');
+      assert(sky.state.estimatedTextureMiB <= 8, 'sky lookup storage stays bounded');
+      assert.equal(sky.state.updatePolicy, 'lighting-change', 'clear atmosphere only regenerates when its lighting changes');
+      assert.equal(sky.timeOnly.after, sky.timeOnly.before, 'elapsed cloud time does not regenerate the clear atmosphere');
       assert.equal(sky.sameTime.after, sky.sameTime.before, 'same-time frames do not regenerate the sky');
       assert.equal(sky.idle.after.updates, sky.idle.before.updates, 'sky GPU updates stop without requested frames');
       assert.equal(sky.idle.after.time, sky.idle.before.time, 'sky time freezes while idle');
@@ -136,18 +130,15 @@ test('ocean, moving clouds, sunset shading and idle behavior run in actual WebGL
       assert(luminance(sky.night.skyRGB) < luminance(sky.noon.skyRGB) * 0.5, 'night sky is not a bright daytime cloud layer');
       assert.equal(sky.stateRestoration.sameTarget, true, 'sky renderer restores the caller target');
       assert.deepEqual(sky.stateRestoration.after, sky.stateRestoration.before, 'sky pass restores renderer settings exactly');
-      const transmissions = sky.sunOcclusion.map(sample => sample.transmission);
-      assert(Math.max(...transmissions) - Math.min(...transmissions) > 0.05, 'drifting clouds modulate transmission along the sun ray');
-      const sunSamples = [...sky.sunOcclusion].sort((a, b) => a.transmission - b.transmission);
-      assert(luminance(sunSamples.at(-1).rgb) > luminance(sunSamples[0].rgb) * 1.1, 'the rendered solar disk dims behind denser clouds');
       assert(sky.seam.legacyError > 0.02, 'legacy implicit wrapped-UV sampling exposes the longitude mip seam');
       assert(sky.seam.actualError < 0.005, 'actual sky and transmission sampling stay continuous across the longitude seam');
       assert(sky.seam.actualNeighborJump < 0.005, 'the longitude seam does not create a bright or colored column');
-      for (const sample of sky.performance.cases) {
-        assert.equal(sample.cpuSubmitMs.length, 3, 'three warmed atlas submissions are timed per weather');
-        assert(sample.cpuSubmitMs.every(value => Number.isFinite(value) && value >= 0), 'CPU submission timings are finite');
-        assert(sample.gpuMs.every(value => Number.isFinite(value) && value >= 0), 'available GPU query timings are finite');
-      }
+    }
+    if (process.env.REQUIRE_WORLD_CLOUDS === '1') {
+      assert(report.worldCloudReflection?.state.active, 'world cloud columns are active in the actual water shader');
+      assert(report.worldCloudReflection.effect.changedPixels > 200, 'world cloud columns visibly alter the water reflection');
+      assert(report.worldCloudReflection.drift.changedPixels > 200, 'drifting world clouds move the water reflection');
+      assert.equal(report.worldCloudReflection.waveTimeAfter, report.worldCloudReflection.waveTimeBefore, 'world cloud reflection drift does not advance the sea geometry clock');
     }
   } finally {
     await browser?.close();

@@ -1,4 +1,4 @@
-/* Shared moving-cloud sky and a bounded offshore horizon; no external textures or scene renderer. */
+/* Shared atmospheric illumination and a bounded offshore horizon. */
 (function registerOceanBackdrop(global) {
   'use strict';
 
@@ -15,7 +15,7 @@
       uSkyCameraWorld: { value: new THREE.Matrix4() }
     };
     const skyMaterial = new THREE.ShaderMaterial({
-      name: 'Ocean-coherent moving cloud sky',
+      name: 'Ocean-coherent atmospheric sky',
       uniforms: skyUniforms,
       depthTest: false,
       depthWrite: false,
@@ -32,7 +32,7 @@
           float alignment=dot(direction,uSeaSunDirection);
           float disk=smoothstep(0.99997,0.999992,alignment);
           float halo=pow(max(alignment,0.0),96.0)*0.025;
-          // The shared atmosphere includes its cloud-occluded sun at full angular resolution.
+          // The clear environment owns the angular sun; elevated clouds occlude it in the depth-aware pass.
           if(uSkyAtmosphereEnabled<0.5) color += uSeaSunColor*uSeaSunIntensity*(disk*2.0+halo);
           gl_FragColor=vec4(color,1.0);
           #include <tonemapping_fragment>

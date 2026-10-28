@@ -145,13 +145,18 @@
       return mix(sky,sky*vec3(1.16,0.94,0.78),warmth*(1.0-skyHeight)*0.45);
     }
   `;
-  const SURFACE_GLSL = SKY_GLSL + /* glsl */`
+  const CLOUD_GLSL = global.NotoCloudLayers?.shaderDeclarations || /* glsl */`
+    vec3 worldCloudReflection(vec3 origin,vec3 ray,vec3 background) { return background; }
+    float worldCloudSunTransmission(vec3 origin,vec3 ray) { return 1.0; }
+  `;
+  const SURFACE_GLSL = SKY_GLSL + CLOUD_GLSL + /* glsl */`
     uniform vec3 uSeaSunColor;
     uniform float uSeaSunIntensity;
     uniform sampler2D uOceanSpectrumLarge;
     uniform sampler2D uOceanSpectrumSmall;
     uniform vec2 uOceanSpectrumSize;
     uniform float uOceanSpectrumEnabled;
+    uniform vec4 uSeaPhaseCharts[44];
     uniform sampler2D uSeaReflection;
     uniform mat4 uSeaReflectionMatrix;
     uniform float uSeaReflectionEnabled;
@@ -165,7 +170,78 @@
       return n.xy / max(n.z, 0.25);
     }
     float seaNoise(vec2 uv) { return texture2D(uNotoWaterColor, uv).a; }
+    float seaHash(vec2 point) {
+      vec3 q = fract(vec3(point.xyx)*vec3(0.1031,0.1030,0.0973));
+      q += dot(q,q.yzx+33.33);
+      return fract((q.x+q.y)*q.z);
+    }
+    float seaWorldNoise(vec2 point) {
+      vec2 cell = floor(point), t = fract(point);
+      t = t*t*t*(t*(t*6.0-15.0)+10.0);
+      return mix(mix(seaHash(cell),seaHash(cell+vec2(1.0,0.0)),t.x),
+        mix(seaHash(cell+vec2(0.0,1.0)),seaHash(cell+1.0),t.x),t.y);
+    }
+    float seaFilteredWorldNoise(vec2 point) {
+      float footprint = max(length(dFdx(point)),length(dFdy(point)));
+      return mix(seaWorldNoise(point),0.5,smoothstep(0.35,1.1,footprint));
+    }
+    vec4 seaWindField(sampler2D field, vec2 point, float period, int chartBase, float seed) {
+      // A continuous world-space selector crossfades overlapping phase charts.
+      // At an index boundary the outgoing chart is exactly the incoming one.
+      float selector = seaFilteredWorldNoise(point/(period*7.3)+vec2(seed,seed*0.37))*9.0;
+      float phase = floor(selector), blend = smoothstep(0.15,0.85,fract(selector));
+      vec4 aChart = uSeaPhaseCharts[chartBase+int(phase)];
+      vec4 bChart = uSeaPhaseCharts[chartBase+int(phase)+1];
+      mat2 aRotation = mat2(aChart.x,aChart.y,-aChart.y,aChart.x);
+      mat2 bRotation = mat2(bChart.x,bChart.y,-bChart.y,bChart.x);
+      vec2 dx = dFdx(point)/period, dy = dFdy(point)/period;
+      // Explicit chart derivatives exclude discrete phase changes from mip selection.
+      vec4 a = textureGrad(field,aRotation*(point/period)+aChart.zw,aRotation*dx,aRotation*dy);
+      vec4 b = textureGrad(field,bRotation*(point/period)+bChart.zw,bRotation*dx,bRotation*dy);
+      // Sampled gradients belong to the rotated chart; return them to model X/Z.
+      a.rg = a.rg*aRotation;
+      b.rg = b.rg*bRotation;
+      return mix(a,b,blend);
+    }
+    vec3 seaMicroField(vec2 point, float period, int chartBase, float seed) {
+      float selector = seaFilteredWorldNoise(point/(period*8.9)+vec2(seed*0.13,seed))*8.0;
+      float phase = floor(selector), blend = smoothstep(0.15,0.85,fract(selector));
+      vec4 aChart = uSeaPhaseCharts[chartBase+int(phase)];
+      vec4 bChart = uSeaPhaseCharts[chartBase+int(phase)+1];
+      mat2 aRotation = mat2(aChart.x,aChart.y,-aChart.y,aChart.x);
+      mat2 bRotation = mat2(bChart.x,bChart.y,-bChart.y,bChart.x);
+      vec2 dx = dFdx(point)/period, dy = dFdy(point)/period;
+      vec3 a = textureGrad(uNotoWaterDetail,aRotation*(point/period)+aChart.zw,aRotation*dx,aRotation*dy).rgb*2.0-1.0;
+      vec3 b = textureGrad(uNotoWaterDetail,bRotation*(point/period)+bChart.zw,bRotation*dx,bRotation*dy).rgb*2.0-1.0;
+      vec2 slopeA = (a.xy/max(a.z,0.25))*aRotation;
+      vec2 slopeB = (b.xy/max(b.z,0.25))*bRotation;
+      // Averaged unit normals shorten as unresolved angular detail enters their mip.
+      float variance = mix(max(0.0,1.0-dot(a,a)),max(0.0,1.0-dot(b,b)),blend);
+      return vec3(mix(slopeA,slopeB,blend),variance);
+    }
   `;
+  function createPhaseCharts(THREE) {
+    // Four field groups share a small immutable table: cos, sin and a 2D phase offset.
+    // Preparing these 704 bytes once removes phase hashes and trigonometry from every fragment.
+    const fract = value => value - Math.floor(value);
+    const hash = (x, y) => {
+      let qx = fract(x * 0.1031), qy = fract(y * 0.1030), qz = fract(x * 0.0973);
+      const dot = qx * (qy + 33.33) + qy * (qz + 33.33) + qz * (qx + 33.33);
+      qx += dot;
+      qy += dot;
+      qz += dot;
+      return fract((qx + qy) * qz);
+    };
+    const charts = [];
+    for (const seed of [7.31, 29.17, 47.13, 83.71]) {
+      for (let phase = 0; phase < 11; phase++) {
+        const angle = (hash(phase, seed) - 0.5) * 0.70;
+        charts.push(new THREE.Vector4(Math.cos(angle), Math.sin(angle),
+          hash(phase + 17, seed) * 31, hash(phase + 83, seed) * 31));
+      }
+    }
+    return charts;
+  }
   async function create(THREE, source, materials, coastalField = null, spectrum = null) {
     /*
      * Connect the precomputed coast and shared animation to water materials. Parameters: THREE is
@@ -199,8 +275,12 @@
     const neutralSpectrum = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat);
     neutralSpectrum.needsUpdate = true;
     const uniforms = {
+      uSeaPhaseCharts: { value: createPhaseCharts(THREE) },
       uSkyAtmosphereMap: { value: neutralSpectrum },
       uSkyAtmosphereEnabled: { value: 0 },
+      uCloudColumnLow: { value: neutralSpectrum },
+      uCloudColumnHigh: { value: neutralSpectrum },
+      uWorldCloudsEnabled: { value: 0 },
       uSeaReflection: { value: neutralSpectrum },
       uSeaReflectionMatrix: { value: new THREE.Matrix4() },
       uSeaReflectionEnabled: { value: 0 },
@@ -246,7 +326,7 @@
     const original = materials.top.onBeforeCompile;
     materials.top.name = 'Noto spectral wind sea and long swell';
     materials.top.userData.temporalReactive = true;
-    materials.top.customProgramCacheKey = () => 'noto-water-spectral-optics-v6';
+    materials.top.customProgramCacheKey = () => 'noto-water-filtered-wind-v7';
     materials.top.defaultAttributeValues = {
       ...materials.top.defaultAttributeValues,
       notoSeaEdge: [0, 0, 0, 0]
@@ -268,15 +348,10 @@
       // The base sampler declaration must precede seaNoise, which references it.
       shader.fragmentShader = shader.fragmentShader.replace('uniform float uNotoWaterScale;', 'uniform float uNotoWaterScale;\n' + GLSL + SURFACE_GLSL);
       shader.fragmentShader = shader.fragmentShader.replace('#include <shadowmap_pars_fragment>', '#include <shadowmap_pars_fragment>\n#include <shadowmask_pars_fragment>');
+      // RGB in the legacy color texture is uniformly white; appearance now comes from optics.
+      shader.fragmentShader = shader.fragmentShader.replace('diffuseColor.rgb *= texture2D(uNotoWaterColor, notoWaterUV).rgb;', '');
       shader.fragmentShader = shader.fragmentShader.replace('vNotoWaterXZ / uNotoWaterScale', '(vNotoWaterXZ + vec2(uSeaTime*0.7, uSeaTime*0.25)) / uNotoWaterScale');
       shader.fragmentShader = shader.fragmentShader.replace('vec3 notoWaterTangent = notoWaterDetail.rgb * 2.0 - 1.0;', `
-        vec2 p = vNotoWaterXZ;
-        vec2 smallUV = seaRotation * (p + vec2(-uSeaTime*0.42,uSeaTime*0.28)) / 37.0;
-        vec2 capillaryUV = (p + vec2(uSeaTime*0.16,-uSeaTime*0.12)) / 9.0;
-        float microFilter = 1.0-smoothstep(0.8,8.0,seaFootprint);
-        vec2 microSlopes = seaSlope(notoWaterDetail.rgb)*0.35;
-        microSlopes += seaSlope(texture2D(uNotoWaterDetail,smallUV).rgb)*seaRotation*0.50;
-        microSlopes += seaSlope(texture2D(uNotoWaterDetail,capillaryUV).rgb)*0.35*microFilter;
         vec2 slopes = microSlopes*uSeaWeather;
         if(uOceanSpectrumEnabled>0.5) {
           // Spectrum RG stores physical height gradients; normal components have the opposite sign.
@@ -292,15 +367,20 @@
         float distanceToShore = shoreDistance(vNotoWaterXZ);
         vec2 foamP = vNotoWaterXZ;
         float seaFootprint = max(length(dFdx(foamP)),length(dFdy(foamP)));
-        float cloudSunTransmission = atmosphereCloudTransmission(uSeaSunDirection);
+        float cloudSunTransmission = worldCloudSunTransmission(vSeaWorldPosition,uSeaSunDirection);
         vec4 oceanLarge = vec4(0.0), oceanSmall = vec4(0.0);
         if(uOceanSpectrumEnabled>0.5) {
-          oceanLarge = texture2D(uOceanSpectrumLarge,foamP/uOceanSpectrumSize.x);
-          oceanSmall = texture2D(uOceanSpectrumSmall,foamP/uOceanSpectrumSize.y);
+          oceanLarge = seaWindField(uOceanSpectrumLarge,foamP,uOceanSpectrumSize.x,0,7.31);
+          oceanSmall = seaWindField(uOceanSpectrumSmall,foamP,uOceanSpectrumSize.y,11,29.17);
         }
-        float foamPatch = seaNoise((foamP-vec2(uSeaTime*1.35,uSeaTime*0.55))/197.0);
-        float breakup = seaNoise(seaRotation*(foamP-vec2(uSeaTime*0.8,uSeaTime*0.35))/53.0);
-        float bubbles = seaNoise((foamP+vec2(uSeaTime*0.45,-uSeaTime*0.27))/3.2);
+        vec3 microWide = seaMicroField(foamP+vec2(uSeaTime*0.70,uSeaTime*0.25),96.0,22,47.13);
+        vec3 microFine = seaMicroField(foamP+vec2(-uSeaTime*0.29,uSeaTime*0.18),13.7,33,83.71);
+        float microFilter = 1.0-smoothstep(0.6,12.0,seaFootprint);
+        vec2 microSlopes = microWide.xy*0.50+microFine.xy*0.50*microFilter;
+        float microVariance = microWide.z*0.25+microFine.z*0.25;
+        float foamPatch = seaFilteredWorldNoise((foamP-vec2(uSeaTime*1.35,uSeaTime*0.55))/197.0);
+        float breakup = seaFilteredWorldNoise(seaRotation*(foamP-vec2(uSeaTime*0.8,uSeaTime*0.35))/53.0);
+        float bubbles = seaFilteredWorldNoise((foamP+vec2(uSeaTime*0.45,-uSeaTime*0.27))/3.2);
         // Breaker energy follows the same moving crest as geometry, but foam coverage advects and tears.
         float phase = surfPhase(foamP,distanceToShore);
         float crest = pow(0.5+0.5*sin(phase),4.5);
@@ -314,7 +394,8 @@
         float surfFoam = shoreZone*(crest*(0.05+coverage*0.95)*lace*1.85+residue);
         float oceanCrest = max(oceanLarge.b,oceanSmall.b*0.80);
         // Only compressed positive crests aerate; the proxy is deliberately sparse in calm weather.
-        float whitecaps = smoothstep(0.045,0.16,oceanCrest)*smoothstep(0.35,0.70,breakup*0.6+bubbles*0.4);
+        float crestWidth = max(fwidth(oceanCrest),0.002);
+        float whitecaps = smoothstep(0.045-crestWidth,0.16+crestWidth,oceanCrest)*smoothstep(0.35,0.70,breakup*0.6+bubbles*0.4);
         whitecaps *= smoothstep(60.0,150.0,distanceToShore)*(0.32+0.58*max(0.0,uSeaWeather-0.7));
         float foam = clamp(max(surfFoam,whitecaps),0.0,0.94);
         // Shore distance is an optical-depth proxy, not surveyed bathymetry. Beer-Lambert attenuation
@@ -326,11 +407,24 @@
         vec3 waterBody = mix(deepBody,shallowBed,transmission);
         waterBody += vec3(0.001,0.011,0.014)*clamp(oceanLarge.a+oceanSmall.a,0.0,1.8);
         diffuseColor.rgb = mix(waterBody,vec3(0.68,0.77,0.73),foam);
-        // Resolved capillary facets break up broad highlights. Their subpixel variation
-        // becomes roughness rather than a bright, unstable stripe at grazing angles.
-        float unresolvedFacets = smoothstep(0.5,20.0,seaFootprint)*0.035;
-        float slopeVariance = clamp(length(dFdx(oceanSmall.rg))+length(dFdy(oceanSmall.rg)),0.0,0.3);
-        roughnessFactor = mix(clamp(notoWaterDetail.a+0.018+unresolvedFacets+slopeVariance*0.16+uSeaCloudiness*0.025,0.075,0.21),0.55,foam);`);
+        // Preserve unresolved angular energy in the microfacet lobe instead of aliasing
+        // the filtered mean normal into repeated highlights. Nearby resolved waves stay crisp.
+        // Differentiate the normal that actually shades the pixel: spectrum gains,
+        // capillary detail and the geometric swell all contribute to solar aliasing.
+        vec2 shadingSlopes = microSlopes*uSeaWeather;
+        if(uOceanSpectrumEnabled>0.5) {
+          shadingSlopes = -(oceanLarge.rg*1.25+oceanSmall.rg*2.35)+microSlopes*0.85*microFilter;
+        }
+        shadingSlopes *= 1.0-foam*0.72;
+        vec3 shadingNormal = normalize(normalize(vSeaNormal)+vec3(shadingSlopes.x,0.0,shadingSlopes.y));
+        vec3 normalDx = dFdx(shadingNormal), normalDy = dFdy(shadingNormal);
+        float resolvedVariance = max(dot(normalDx,normalDx),dot(normalDy,normalDy))/12.0;
+        float lostVariance = smoothstep(0.8,18.0,seaFootprint)*0.00085
+          +smoothstep(20.0,150.0,seaFootprint)*0.00075
+          +min(microVariance*0.10,0.0015)+min(resolvedVariance,0.0045);
+        float baseRoughness = 0.078+breakup*0.028+uSeaCloudiness*0.025;
+        float filteredRoughness = pow(pow(baseRoughness,4.0)+lostVariance,0.25);
+        roughnessFactor = mix(clamp(filteredRoughness,0.075,0.32),0.55,foam);`);
       shader.fragmentShader = shader.fragmentShader.replace('#include <lights_physical_fragment>', `
         #include <lights_physical_fragment>
         material.specularColor = vec3(0.0204);`);
@@ -349,7 +443,7 @@
         vec3 toCamera = normalize(cameraPosition-vSeaWorldPosition);
         vec3 reflected = reflect(-toCamera,worldNormal);
         float fresnel = 0.0204+0.9796*pow(1.0-clamp(dot(worldNormal,toCamera),0.0,1.0),5.0);
-        vec3 skyReflection = seaSkyColor(reflected);
+        vec3 skyReflection = worldCloudReflection(vSeaWorldPosition,reflected,seaSkyColor(reflected));
         float reflectedLandCoverage = 0.0;
         // A small cached coarse-terrain pass supplies actual coastal silhouettes; sky fills empty texels.
         if(uSeaReflectionEnabled>0.5) {
@@ -456,6 +550,10 @@ Convert to pixel indices, clamp and interpolate four samples. Returns approximat
       uniforms,
       shaderDeclarations: GLSL,
       skyShaderDeclarations: SKY_GLSL,
+      setCloudLayers(controller) {
+        // Optical columns share the elevated cloud field, with world-position parallax on water.
+        if (controller?.uniforms) Object.assign(uniforms, controller.uniforms);
+      },
       setAtmosphere(controller) {
         // Sky and reflected clouds sample one shared linear environment atlas.
         if (controller?.uniforms) Object.assign(uniforms, controller.uniforms);

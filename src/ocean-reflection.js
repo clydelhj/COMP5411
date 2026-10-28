@@ -240,7 +240,7 @@
         renderer.info.autoReset = false;
         renderer.autoClear = true;
         renderer.setRenderTarget(renderTarget);
-        renderer.setViewport(0, 0, WIDTH, HEIGHT);
+        // Render-target viewports are already physical pixels; setViewport would apply canvas DPR again.
         renderer.setScissorTest(false);
         renderer.setClearColor(0x000000, 0);
         renderer.render(scene, reflectedCamera);
