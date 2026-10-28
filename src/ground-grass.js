@@ -1,9 +1,12 @@
-// Visual grass cover on soil; source classes, strata and DEM are unchanged.
+// Visual thin-soil grass cover; source classes, strata and DEM are unchanged.
 (function registerGroundGrass(global) {
   'use strict';
 
   const HERBS = new Set([5, 6, 7, 10, 12, 13, 14, 15, 16, 17]);
   const WOODS = new Set([8, 9, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]);
+  // A geological bedrock label does not resolve the thin weathered mantle at the surface.
+  // Loose sand/gravel and fresh igneous categories remain excluded from illustrative bare-ground cover.
+  const WEATHERABLE_BARE_IDS = new Set([8, 10, 11, 13, 18, 23, 24, 25, 27, 28]);
   const SPACING_M = 0.8,
     RADIUS_M = 80,
     LIMIT = 34000;
@@ -16,12 +19,40 @@
     n = Math.imul(n ^ n >>> 13, 1274126177);
     return ((n ^ n >>> 16) >>> 0) / 4294967296;
   }
+  function patchNoise(x, z, salt) {
+    const i = Math.floor(x), j = Math.floor(z);
+    const tx = smooth(0, 1, x - i), tz = smooth(0, 1, z - j);
+    return (seed(i, j, salt) * (1 - tx) + seed(i + 1, j, salt) * tx) * (1 - tz)
+      + (seed(i, j + 1, salt) * (1 - tx) + seed(i + 1, j + 1, salt) * tx) * tz;
+  }
+  function patchCoverage(x, z) {
+    const field = patchNoise(x / 84, z / 84, 11) * 0.66 + patchNoise(x / 23, z / 23, 29) * 0.34;
+    return 0.18 + 0.82 * smooth(0.22, 0.70, field);
+  }
+  const shaderDeclarations = /* glsl */`
+    float grassPatchSeed(ivec2 point,uint salt) {
+      uint value=((uint(point.x)^0x045d9f3bu)*374761393u)
+        ^((uint(point.y)+salt*1013u)*668265263u);
+      value=(value^(value>>13u))*1274126177u;
+      return float(value^(value>>16u))/4294967296.0;
+    }
+    float grassPatchNoise(vec2 point,uint salt) {
+      ivec2 cell=ivec2(floor(point));
+      vec2 blend=smoothstep(vec2(0.0),vec2(1.0),fract(point));
+      return mix(mix(grassPatchSeed(cell,salt),grassPatchSeed(cell+ivec2(1,0),salt),blend.x),
+        mix(grassPatchSeed(cell+ivec2(0,1),salt),grassPatchSeed(cell+ivec2(1),salt),blend.x),blend.y);
+    }
+    float grassPatchCoverage(vec2 point) {
+      float field=grassPatchNoise(point/84.0,11u)*0.66+grassPatchNoise(point/23.0,29u)*0.34;
+      return 0.18+0.82*smoothstep(0.22,0.70,field);
+    }
+  `;
   async function prepare(THREE, vegetation, strata) {
     /*
      * Inputs: vegetation lookup, first stratum and material families. Returns shared grass textures
-     * and coverage queries. Retain the observed herb/woodland extent; bare class 3 receives
-     * illustrative grass only for the soil family. This appearance layer is not written to GIS and
-     * does not convert rock, beaches or urban areas to grassland.
+     * and coverage queries. Observed herb/woodland classes retain cover; bare class 3 receives
+     * illustrative thin-soil cover on soil and selected weatherable/unclassified bedrock.
+     * This appearance layer does not modify GIS, loose beaches, hard-rock classes or urban areas.
      */
     const {
       width,
@@ -37,14 +68,17 @@
       levels
     } = strata.metadata;
     const soils = new Set(strata.palette.filter(p => p.family === 'soil').map(p => p.id));
-    function soilAt(u, v) {
+    function surfaceSuitability(u, v) {
       const x = Math.max(0, Math.min(cols - 1.000001, u * (cols - 1)));
       const z = Math.max(0, Math.min(layerRows - 1.000001, v * (layerRows - 1)));
       const c = Math.floor(x),
         r = Math.floor(z),
         tx = smooth(0, 1, x - c),
         tz = smooth(0, 1, z - r);
-      const at = (a, b) => soils.has(strata.ids[b * levels * cols + a]) ? 1 : 0;
+      const at = (a, b) => {
+        const id = strata.ids[b * levels * cols + a];
+        return soils.has(id) ? 1 : WEATHERABLE_BARE_IDS.has(id) ? 0.82 : 0;
+      };
       return (at(c, r) * (1 - tx) + at(c + 1, r) * tx) * (1 - tz) + (at(c, r + 1) * (1 - tx) + at(c + 1, r + 1) * tx) * tz;
     }
     for (let r = 0; r < rows; r++) for (let c = 0; c < columns; c++) {
@@ -52,8 +86,8 @@
         v = (r + 0.5) / rows;
       const category = vegetation.categoryAt((u - 0.5) * width, (v - 0.5) * height);
       const i = r * columns + c;
-      allowed[i] = HERBS.has(category) || WOODS.has(category) ? 1 : category === 3 ? soilAt(u, v) : 0;
-      values[i] = HERBS.has(category) ? 0.94 : WOODS.has(category) ? 0.62 : 0.68 * allowed[i];
+      allowed[i] = HERBS.has(category) || WOODS.has(category) ? 1 : category === 3 ? surfaceSuitability(u, v) : 0;
+      values[i] = (HERBS.has(category) ? 0.98 : WOODS.has(category) ? 0.76 : 0.96) * allowed[i];
     }
     // Use an approximately 40 m continuous grass transition, independently of the broader geological material blend.
     const scratch = new Float32Array(values.length);
@@ -67,7 +101,8 @@
         values[i] = (scratch[i] * 2 + scratch[Math.max(0, r - 1) * columns + c] + scratch[Math.min(rows - 1, r + 1) * columns + c]) / 4;
       }
     }
-    const bytes = Uint8Array.from(values, (v, i) => Math.round(v * allowed[i] * 255));
+    // Suitability is already included above; do not square fractional weathering weights at boundaries.
+    const bytes = Uint8Array.from(values, (value, i) => Math.round(Math.min(value, allowed[i]) * 255));
     const mask = new THREE.DataTexture(bytes, columns, rows, THREE.RedFormat);
     mask.minFilter = THREE.LinearMipmapLinearFilter;
     mask.magFilter = THREE.LinearFilter;
@@ -95,12 +130,17 @@
         tx = u - c,
         tz = v - r,
         i = r * columns + c;
-      return ((bytes[i] * (1 - tx) + bytes[i + 1] * tx) * (1 - tz) + (bytes[i + columns] * (1 - tx) + bytes[i + columns + 1] * tx) * tz) / 255;
+      return ((bytes[i] * (1 - tx) + bytes[i + 1] * tx) * (1 - tz) + (bytes[i + columns] * (1 - tx) + bytes[i + columns + 1] * tx) * tz) / 255
+        * patchCoverage(x, z);
     }
     return {
       mask,
       color,
       normal,
+      phases: Array.from({ length: 9 }, (_, index) => {
+        const angle = seed(index, 37) * Math.PI * 2;
+        return new THREE.Vector4(Math.cos(angle), Math.sin(angle), seed(index, 13) * 37, seed(index, 29) * 37);
+      }),
       coverageAt,
       width,
       height
@@ -325,6 +365,8 @@
   }
   global.NotoGroundGrass = {
     prepare,
-    create
+    create,
+    patchCoverage,
+    shaderDeclarations
   };
 })(window);

@@ -19,7 +19,7 @@ Keep runtime paths relative to the root. Asset distribution instructions govern 
 - Local distance-adaptive terrain patches, dedicated Worker geometry construction and boundary-normal averaging, retained coverage, mixed-detail stitching, bounded caches and camera safety.
 - Continuous coastline clipping independent of display spacing, closed exposed walls and a −100 m model bottom.
 - Geological PBR categories with triplanar projection, continuous boundary blending and randomized texture sampling.
-- Real-classification-driven representative plants, deterministic locations and tree-shape variants; soil grass texture and nearby instanced blades, with independent grass/tree visibility settings and cooperative placement preparation.
+- Real-classification-driven representative plants, deterministic locations and tree-shape variants; patchy grass texture on suitable soil/weatherable bare ground and nearby instanced blades, with independent grass/tree visibility settings and cooperative placement preparation.
 - Hybrid geometric swells and two GPU FFT wind-wave fields, Fresnel/absorption shading, irregular breaking foam, wetness and GPU spray with a shared clock.
 - Cached coarse terrain reflections, matching analytic sky and an illustrative offshore horizon in low coastal views.
 - Two slowly advected world-height cloud layers, depth-aware views from above/inside/below, spatial water reflections and directional sunrise/sunset grading.
@@ -34,6 +34,8 @@ The English interface shows title, one-line two-decimal latitude/longitude bound
 The terrain setting limits the finest permitted spacing, default 5 m, with 1–8 m and 16/32/64/128 m choices. It is not a resolution lock. `Near grid` reports the finest visible land patch. Window render resolution and plant detail default to Auto; their manual modes remain under user control. Settings are session-only.
 
 `Show grass` and `Show trees` both default to enabled. Grass visibility includes ground-cover shading, blades and herb/fern models; tree visibility applies to every mesh/card detail level. Vegetation detail Off hides all 3D plants without overriding the ground-cover visibility setting.
+
+Grass uses an illustrative thin-soil mask on soil-family and selected weatherable/unclassified bare categories; preserve the loose sand/gravel, fresh igneous, urban, water/facility/NoData/reef and steep-slope exclusions. Keep the shared deterministic 84/23 m patch field consistent between GPU cover and CPU tuft placement. Retain precomputed grass texture phases, fixed positions, the 0.8 m candidate grid, 80 m radius and 12/6/3-blade representations. Original GIS and DEM data remain unchanged.
 
 Forest broadleaf trees use 12–22 m heights and conifers 18–30 m; orchard and other low woody forms use 4–8 m and 6–11 m. Preserve deterministic placement and crown variation. Each shape aligns all mesh levels to the root derived from the bottom 0.1 m of its near-detail trunk, then bakes its cards from that alignment. Root placement uses the active displayed surface with 0.12 m embedding. Do not attach trees by the crown-centered source origin or multiply natural plant dimensions by terrain exaggeration.
 
@@ -59,7 +61,7 @@ The renderer requests high performance, but browser/driver/system policy chooses
 
 The displayed region spans 33,225 × 23,135 m and approximately 37.33–37.54° N, 137.00–137.38° E. The DEM has 1 m source spacing; geological categories have roughly 150 m horizontal display spacing, and real vegetation classification is approximately 10 m for 2024. These resolutions are not interchangeable.
 
-The coast comes from an 8 m sampled/smoothed distance field. A 64 m display profile joins land to mean sea level, with the nearest 16 m held at sea level. This is a visual contact treatment, not a surveyed shore profile. The bottom is a truncation surface, not real seabed. Geological extrapolation, borehole influence areas, blended boundaries, representative plants, extra soil grass and water/weather effects are visualization approximations. Original DEM and source GIS categories remain unchanged.
+The coast comes from an 8 m sampled/smoothed distance field. A 64 m display profile joins land to mean sea level, with the nearest 16 m held at sea level. This is a visual contact treatment, not a surveyed shore profile. The bottom is a truncation surface, not real seabed. Geological extrapolation, borehole influence areas, blended boundaries, representative plants, illustrative thin-soil grass and water/weather effects are visualization approximations. Original DEM and source GIS categories remain unchanged.
 
 Asset terms differ: CC0 material/model assets do not make the complete project CC0. Consult the supplied source records before distribution beyond the course context.
 

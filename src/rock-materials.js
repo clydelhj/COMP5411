@@ -121,18 +121,24 @@
       return mix(mix(notoHash(i).x,notoHash(i+vec2(1,0)).x,f.x),
                  mix(notoHash(i+vec2(0,1)).x,notoHash(i+vec2(1,1)).x,f.x),f.y);
     }
+    float notoFilteredNoise(vec2 p, vec2 dx, vec2 dy) {
+      float footprint = max(length(dx),length(dy));
+      return mix(notoNoise(p),0.5,smoothstep(0.35,1.1,footprint));
+    }
     vec4 notoTextureTap(sampler2DArray textureSampler, vec2 uv, int layer, vec2 dx, vec2 dy, float seed, bool detail) {
       vec2 random=notoHash(vec2(seed,float(layer)+13.0));
       float angle=random.x*6.2831853, c=cos(angle), s=sin(angle);
       mat2 rotation=mat2(c,-s,s,c);
-      vec4 value=textureGrad(textureSampler,vec3(rotation*uv+random*37.0,float(layer)),rotation*dx*1.25,rotation*dy*1.25);
+      // Overlapping regions vary orientation, phase and scale while retaining paired PBR coordinates.
+      float frequency=0.82+0.41*fract(random.y*13.37);
+      vec4 value=textureGrad(textureSampler,vec3(rotation*(uv*frequency)+random*37.0,float(layer)),rotation*dx*frequency*1.25,rotation*dy*frequency*1.25);
       // Rotate tangent slopes back to the projection plane; color and detail
       // use identical stochastic coordinates and interpolation weights.
       if(detail) value.xy=((value.xy*2.0-1.0)*rotation)*0.5+0.5;
       return value;
     }
     vec4 notoTextureSample(sampler2DArray textureSampler, vec2 uv, int layer, vec2 dx, vec2 dy, bool detail) {
-      float k=notoNoise(uv*0.09+float(layer)*3.7)*7.0;
+      float k=notoFilteredNoise(uv*0.32+float(layer)*3.7,dx*0.32,dy*0.32)*7.0;
       float cell=floor(k), blend=smoothstep(0.15,0.85,fract(k));
       return mix(notoTextureTap(textureSampler,uv,layer,dx,dy,cell,detail),
                  notoTextureTap(textureSampler,uv,layer,dx,dy,cell+1.0,detail),blend);
@@ -195,6 +201,13 @@
       // Texture variation provides the main surface structure; category color is a tint hint.
       vec3 result = sampled * mix(vec3(1.0), paletteTint, 0.34);
       result *= 0.82 + 0.18 * normalizedLuminance;
+      if (uNotoSurfaceMode<0.5 && abs(uNotoPaletteFamily[paletteIndex]-1.0)<0.1) {
+        // Broad soil moisture/color variation separates bare patches from the photograph's tile period.
+        float finePatch=notoFilteredNoise(objectPosition.xz/23.0,notoPositionDx.xz/23.0,notoPositionDy.xz/23.0);
+        float broadPatch=notoFilteredNoise(objectPosition.xz/137.0,notoPositionDx.xz/137.0,notoPositionDy.xz/137.0);
+        float soilVariation=finePatch*0.36+broadPatch*0.64;
+        result *= mix(vec3(0.86,0.91,0.83),vec3(1.07,1.04,0.98),soilVariation);
+      }
 
       // These are tonal cues only; categorical boundaries still come solely
       // from the volume and borehole intervals.
@@ -710,7 +723,7 @@
     material.userData.notoShared = shared;
     material.userData.notoTile = tile;
     material.name = mode === 0 ? 'Noto strata top' : mode === 1 ? 'Noto strata cut' : 'Noto strata bottom';
-    material.customProgramCacheKey = () => `noto-strata-v9-grass-${mode}-${shared.maxBlendMaterials}-${palette.capacity}-${borehole.boreholeCount}-${borehole.maxLayers}-${Boolean(shared.groundCover)}-${Boolean(shared.grass)}`;
+    material.customProgramCacheKey = () => `noto-strata-v10-grass-${mode}-${shared.maxBlendMaterials}-${palette.capacity}-${borehole.boreholeCount}-${borehole.maxLayers}-${Boolean(shared.groundCover)}-${Boolean(shared.grass)}`;
     material.onBeforeCompile = shader => {
       /*
        * Inject uniforms and rock-material chunks into a Three.js standard shader. Pass unscaled
@@ -731,8 +744,10 @@
         shader.uniforms.uGrassMask = { value: shared.grass.mask };
         shader.uniforms.uGrassColor = { value: shared.grass.color };
         shader.uniforms.uGrassNormal = { value: shared.grass.normal };
+        shader.uniforms.uGrassPhases = { value: shared.grass.phases };
         shader.fragmentShader = shader.fragmentShader.replace('void main() {',
-          'uniform float uGrassVisibility;\nuniform sampler2D uGrassMask;\nuniform sampler2D uGrassColor;\nuniform sampler2D uGrassNormal;\nvoid main() {');
+          'uniform float uGrassVisibility;\nuniform sampler2D uGrassMask;\nuniform sampler2D uGrassColor;\nuniform sampler2D uGrassNormal;\nuniform vec4 uGrassPhases[9];\n'
+          + global.NotoGroundGrass.shaderDeclarations + '\nvoid main() {');
       }
       shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>\n${VERTEX_DECLARATIONS}`);
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\n  vNotoObjectPosition = position;\n  vNotoObjectNormal = normalize( normal );\n  vNotoViewBasisX = normalMatrix * vec3( 1.0, 0.0, 0.0 );\n  vNotoViewBasisY = normalMatrix * vec3( 0.0, 1.0, 0.0 );\n  vNotoViewBasisZ = normalMatrix * vec3( 0.0, 0.0, 1.0 );`);
@@ -764,21 +779,30 @@
           diffuseColor.rgb = mix(diffuseColor.rgb, cover.rgb * grain * clamp(dot(notoSurfaceColor,vec3(0.299,0.587,0.114))*2.0,0.65,1.25), cover.a * slopeCoverage ${shared.grass ? '* uGrassVisibility' : ''});
           ${shared.grass ? `
             // Grass covers only land tops; explicit gradients and mipmaps stabilize minification at grazing views.
-            float grassCoverage = uGrassVisibility * texture2D(uGrassMask, coverUV).r * slopeCoverage
+            float grassPatch = grassPatchCoverage(vNotoObjectPosition.xz);
+            float grassCoverage = uGrassVisibility * texture2D(uGrassMask, coverUV).r * grassPatch * slopeCoverage
               * smoothstep(1.5, 3.0, vNotoObjectPosition.y);
             if (grassCoverage > 0.001) {
             vec2 grassUV = vNotoObjectPosition.xz / 3.5;
             vec2 grassDx = notoPositionDx.xz / 3.5, grassDy = notoPositionDy.xz / 3.5;
             float grassNoise = notoNoise(vNotoObjectPosition.xz / 29.0) * 7.0;
             float grassCell = floor(grassNoise), grassBlend = smoothstep(0.1, 0.9, fract(grassNoise));
-            vec2 grassA = vec2(sin(grassCell * 12.7), cos(grassCell * 9.3)) * 37.0;
-            vec2 grassB = vec2(sin((grassCell+1.0) * 12.7), cos((grassCell+1.0) * 9.3)) * 37.0;
-            vec3 grassColor = mix(textureGrad(uGrassColor, grassUV + grassA, grassDx, grassDy).rgb,
-              textureGrad(uGrassColor, grassUV + grassB, grassDx, grassDy).rgb, grassBlend);
-            vec3 grassNormal = mix(textureGrad(uGrassNormal, grassUV + grassA, grassDx, grassDy).rgb,
-              textureGrad(uGrassNormal, grassUV + grassB, grassDx, grassDy).rgb, grassBlend) * 2.0 - 1.0;
-            grassCoverage *= 0.83 + 0.17 * notoNoise(vNotoObjectPosition.xz / 13.0);
-            diffuseColor.rgb = mix(diffuseColor.rgb, grassColor * vec3(0.84, 1.12, 0.78) * grain, grassCoverage);
+            vec4 grassA = uGrassPhases[int(grassCell)], grassB = uGrassPhases[int(grassCell)+1];
+            mat2 grassRotationA = mat2(grassA.x,grassA.y,-grassA.y,grassA.x);
+            mat2 grassRotationB = mat2(grassB.x,grassB.y,-grassB.y,grassB.x);
+            vec3 grassColor = mix(textureGrad(uGrassColor,grassRotationA*grassUV+grassA.zw,grassRotationA*grassDx,grassRotationA*grassDy).rgb,
+              textureGrad(uGrassColor,grassRotationB*grassUV+grassB.zw,grassRotationB*grassDx,grassRotationB*grassDy).rgb,grassBlend);
+            vec3 grassNormalA = textureGrad(uGrassNormal,grassRotationA*grassUV+grassA.zw,grassRotationA*grassDx,grassRotationA*grassDy).rgb*2.0-1.0;
+            vec3 grassNormalB = textureGrad(uGrassNormal,grassRotationB*grassUV+grassB.zw,grassRotationB*grassDx,grassRotationB*grassDy).rgb*2.0-1.0;
+            grassNormalA.xy = grassNormalA.xy*grassRotationA;
+            grassNormalB.xy = grassNormalB.xy*grassRotationB;
+            vec3 grassNormal = normalize(mix(grassNormalA,grassNormalB,grassBlend));
+            // Grade living blades within the retained hay/soil texture; dry patches reveal the original earth.
+            float grassLuminance = dot(grassColor,vec3(0.2126,0.7152,0.0722));
+            vec3 livingGrass = grassLuminance*vec3(0.48,0.94,0.29);
+            grassColor = mix(grassColor*0.88,livingGrass,0.50+0.34*grassPatch);
+            grassColor *= 0.90+0.16*notoNoise(vNotoObjectPosition.xz/7.9);
+            diffuseColor.rgb = mix(diffuseColor.rgb,grassColor*grain,grassCoverage);
             notoSurfaceDetail.xyz = normalize(mix(notoSurfaceDetail.xyz,
               normalize(faceNormal + vec3(grassNormal.x, 0.0, grassNormal.y) * 0.28), grassCoverage));
             notoSurfaceRoughness = mix(notoSurfaceRoughness, 0.95, grassCoverage);
