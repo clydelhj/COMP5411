@@ -157,6 +157,7 @@
     uniform vec2 uOceanSpectrumSize;
     uniform float uOceanSpectrumEnabled;
     uniform vec4 uSeaPhaseCharts[44];
+    uniform float uSeaMicroMeanVariance;
     uniform sampler2D uSeaReflection;
     uniform mat4 uSeaReflectionMatrix;
     uniform float uSeaReflectionEnabled;
@@ -181,38 +182,43 @@
       return mix(mix(seaHash(cell),seaHash(cell+vec2(1.0,0.0)),t.x),
         mix(seaHash(cell+vec2(0.0,1.0)),seaHash(cell+1.0),t.x),t.y);
     }
-    float seaFilteredWorldNoise(vec2 point) {
-      float footprint = max(length(dFdx(point)),length(dFdy(point)));
+    float seaFilteredWorldNoise(vec2 point, vec2 pointDx, vec2 pointDy) {
+      float footprint = max(length(pointDx),length(pointDy));
       return mix(seaWorldNoise(point),0.5,smoothstep(0.35,1.1,footprint));
     }
-    vec4 seaWindField(sampler2D field, vec2 point, float period, int chartBase, float seed) {
+    vec4 seaWindField(sampler2D field, vec2 point, float period, int chartBase, float seed, vec2 pointDx, vec2 pointDy) {
       // A continuous world-space selector crossfades overlapping phase charts.
       // At an index boundary the outgoing chart is exactly the incoming one.
-      float selector = seaFilteredWorldNoise(point/(period*7.3)+vec2(seed,seed*0.37))*9.0;
+      float selector = seaFilteredWorldNoise(point/(period*7.3)+vec2(seed,seed*0.37),pointDx/(period*7.3),pointDy/(period*7.3))*9.0;
       float phase = floor(selector), blend = smoothstep(0.15,0.85,fract(selector));
       vec4 aChart = uSeaPhaseCharts[chartBase+int(phase)];
       vec4 bChart = uSeaPhaseCharts[chartBase+int(phase)+1];
       mat2 aRotation = mat2(aChart.x,aChart.y,-aChart.y,aChart.x);
       mat2 bRotation = mat2(bChart.x,bChart.y,-bChart.y,bChart.x);
-      vec2 dx = dFdx(point)/period, dy = dFdy(point)/period;
-      // Explicit chart derivatives exclude discrete phase changes from mip selection.
-      vec4 a = textureGrad(field,aRotation*(point/period)+aChart.zw,aRotation*dx,aRotation*dy);
-      vec4 b = textureGrad(field,bRotation*(point/period)+bChart.zw,bRotation*dx,bRotation*dy);
-      // Sampled gradients belong to the rotated chart; return them to model X/Z.
-      a.rg = a.rg*aRotation;
-      b.rg = b.rg*bRotation;
+      vec2 dx = pointDx/period, dy = pointDy/period;
+      // Gradients are supplied before branching. A zero-weight chart needs no texture fetch.
+      vec4 a = vec4(0.0), b = vec4(0.0);
+      if(blend<1.0) {
+        a = textureGrad(field,aRotation*(point/period)+aChart.zw,aRotation*dx,aRotation*dy);
+        a.rg = a.rg*aRotation;
+      }
+      if(blend>0.0) {
+        b = textureGrad(field,bRotation*(point/period)+bChart.zw,bRotation*dx,bRotation*dy);
+        b.rg = b.rg*bRotation;
+      }
       return mix(a,b,blend);
     }
-    vec3 seaMicroField(vec2 point, float period, int chartBase, float seed) {
-      float selector = seaFilteredWorldNoise(point/(period*8.9)+vec2(seed*0.13,seed))*8.0;
+    vec3 seaMicroField(vec2 point, float period, int chartBase, float seed, vec2 pointDx, vec2 pointDy) {
+      float selector = seaFilteredWorldNoise(point/(period*8.9)+vec2(seed*0.13,seed),pointDx/(period*8.9),pointDy/(period*8.9))*8.0;
       float phase = floor(selector), blend = smoothstep(0.15,0.85,fract(selector));
       vec4 aChart = uSeaPhaseCharts[chartBase+int(phase)];
       vec4 bChart = uSeaPhaseCharts[chartBase+int(phase)+1];
       mat2 aRotation = mat2(aChart.x,aChart.y,-aChart.y,aChart.x);
       mat2 bRotation = mat2(bChart.x,bChart.y,-bChart.y,bChart.x);
-      vec2 dx = dFdx(point)/period, dy = dFdy(point)/period;
-      vec3 a = textureGrad(uNotoWaterDetail,aRotation*(point/period)+aChart.zw,aRotation*dx,aRotation*dy).rgb*2.0-1.0;
-      vec3 b = textureGrad(uNotoWaterDetail,bRotation*(point/period)+bChart.zw,bRotation*dx,bRotation*dy).rgb*2.0-1.0;
+      vec2 dx = pointDx/period, dy = pointDy/period;
+      vec3 a = vec3(0.0,0.0,1.0), b = vec3(0.0,0.0,1.0);
+      if(blend<1.0) a = textureGrad(uNotoWaterDetail,aRotation*(point/period)+aChart.zw,aRotation*dx,aRotation*dy).rgb*2.0-1.0;
+      if(blend>0.0) b = textureGrad(uNotoWaterDetail,bRotation*(point/period)+bChart.zw,bRotation*dx,bRotation*dy).rgb*2.0-1.0;
       vec2 slopeA = (a.xy/max(a.z,0.25))*aRotation;
       vec2 slopeB = (b.xy/max(b.z,0.25))*bRotation;
       // Averaged unit normals shorten as unresolved angular detail enters their mip.
@@ -241,6 +247,20 @@
       }
     }
     return charts;
+  }
+  function meanNormalVariance(texture) {
+    // The linear RGBA8 source remains on the CPU. Its mean normal supplies unresolved angular
+    // energy when fine micro-detail is skipped; it is not an extra texture or GPU readback.
+    const pixels = texture?.image?.data;
+    if (!pixels?.length) return 0;
+    let x = 0, y = 0, z = 0;
+    for (let i = 0; i < pixels.length; i += 4) {
+      x += pixels[i] / 127.5 - 1;
+      y += pixels[i + 1] / 127.5 - 1;
+      z += pixels[i + 2] / 127.5 - 1;
+    }
+    const count = pixels.length / 4;
+    return Math.max(0, 1 - (x * x + y * y + z * z) / (count * count));
   }
   async function create(THREE, source, materials, coastalField = null, spectrum = null) {
     /*
@@ -276,6 +296,7 @@
     neutralSpectrum.needsUpdate = true;
     const uniforms = {
       uSeaPhaseCharts: { value: createPhaseCharts(THREE) },
+      uSeaMicroMeanVariance: { value: meanNormalVariance(materials.textures?.detail) },
       uSkyAtmosphereMap: { value: neutralSpectrum },
       uSkyAtmosphereEnabled: { value: 0 },
       uCloudColumnLow: { value: neutralSpectrum },
@@ -326,7 +347,7 @@
     const original = materials.top.onBeforeCompile;
     materials.top.name = 'Noto spectral wind sea and long swell';
     materials.top.userData.temporalReactive = true;
-    materials.top.customProgramCacheKey = () => 'noto-water-filtered-wind-v7';
+    materials.top.customProgramCacheKey = () => 'noto-water-filtered-wind-v8';
     materials.top.defaultAttributeValues = {
       ...materials.top.defaultAttributeValues,
       notoSeaEdge: [0, 0, 0, 0]
@@ -366,32 +387,44 @@
       shader.fragmentShader = shader.fragmentShader.replace('roughnessFactor = clamp(notoWaterDetail.a, 0.045, 0.12);', `
         float distanceToShore = shoreDistance(vNotoWaterXZ);
         vec2 foamP = vNotoWaterXZ;
-        float seaFootprint = max(length(dFdx(foamP)),length(dFdy(foamP)));
+        // Derivatives must be evaluated by the whole fragment quad before any LOD/surf branch.
+        vec2 seaDx = dFdx(foamP), seaDy = dFdy(foamP);
+        float seaFootprint = max(length(seaDx),length(seaDy));
+        float shoreFootprint = fwidth(distanceToShore);
         float cloudSunTransmission = worldCloudSunTransmission(vSeaWorldPosition,uSeaSunDirection);
         vec4 oceanLarge = vec4(0.0), oceanSmall = vec4(0.0);
         if(uOceanSpectrumEnabled>0.5) {
-          oceanLarge = seaWindField(uOceanSpectrumLarge,foamP,uOceanSpectrumSize.x,0,7.31);
-          oceanSmall = seaWindField(uOceanSpectrumSmall,foamP,uOceanSpectrumSize.y,11,29.17);
+          oceanLarge = seaWindField(uOceanSpectrumLarge,foamP,uOceanSpectrumSize.x,0,7.31,seaDx,seaDy);
+          oceanSmall = seaWindField(uOceanSpectrumSmall,foamP,uOceanSpectrumSize.y,11,29.17,seaDx,seaDy);
         }
-        vec3 microWide = seaMicroField(foamP+vec2(uSeaTime*0.70,uSeaTime*0.25),96.0,22,47.13);
-        vec3 microFine = seaMicroField(foamP+vec2(-uSeaTime*0.29,uSeaTime*0.18),13.7,33,83.71);
         float microFilter = 1.0-smoothstep(0.6,12.0,seaFootprint);
+        vec3 microWide = seaMicroField(foamP+vec2(uSeaTime*0.70,uSeaTime*0.25),96.0,22,47.13,seaDx,seaDy);
+        // Fine slopes already vanish at 12 m/pixel. Skip their fetches there, while smoothly
+        // retaining source-derived normal variance so the far sea does not acquire sharp glitter.
+        vec3 microFine = vec3(0.0,0.0,uSeaMicroMeanVariance);
+        if(microFilter>0.0) {
+          microFine = seaMicroField(foamP+vec2(-uSeaTime*0.29,uSeaTime*0.18),13.7,33,83.71,seaDx,seaDy);
+          microFine.z = mix(microFine.z,uSeaMicroMeanVariance,smoothstep(8.0,12.0,seaFootprint));
+        }
         vec2 microSlopes = microWide.xy*0.50+microFine.xy*0.50*microFilter;
         float microVariance = microWide.z*0.25+microFine.z*0.25;
-        float foamPatch = seaFilteredWorldNoise((foamP-vec2(uSeaTime*1.35,uSeaTime*0.55))/197.0);
-        float breakup = seaFilteredWorldNoise(seaRotation*(foamP-vec2(uSeaTime*0.8,uSeaTime*0.35))/53.0);
-        float bubbles = seaFilteredWorldNoise((foamP+vec2(uSeaTime*0.45,-uSeaTime*0.27))/3.2);
+        float breakup = seaFilteredWorldNoise(seaRotation*(foamP-vec2(uSeaTime*0.8,uSeaTime*0.35))/53.0,seaRotation*seaDx/53.0,seaRotation*seaDy/53.0);
+        float bubbles = seaFilteredWorldNoise((foamP+vec2(uSeaTime*0.45,-uSeaTime*0.27))/3.2,seaDx/3.2,seaDy/3.2);
         // Breaker energy follows the same moving crest as geometry, but foam coverage advects and tears.
-        float phase = surfPhase(foamP,distanceToShore);
-        float crest = pow(0.5+0.5*sin(phase),4.5);
         float shoreZone = smoothstep(0.0,2.0,distanceToShore) * (1.0-smoothstep(44.0,85.0,distanceToShore));
-        float coverage = smoothstep(0.36,0.67,foamPatch*0.58+breakup*0.42);
-        float lace = smoothstep(0.24,0.66,bubbles*0.70+breakup*0.30);
-        float distantSurf = smoothstep(7.0,32.0,max(fwidth(distanceToShore),seaFootprint));
-        crest = mix(crest,0.12,distantSurf);
-        float wake = pow(0.5+0.5*sin(phase-0.95),3.0);
-        float residue = (1.0-smoothstep(14.0,49.0,distanceToShore))*wake*coverage*0.30;
-        float surfFoam = shoreZone*(crest*(0.05+coverage*0.95)*lace*1.85+residue);
+        float surfFoam = 0.0;
+        if(shoreZone>0.0) {
+          float foamPatch = seaFilteredWorldNoise((foamP-vec2(uSeaTime*1.35,uSeaTime*0.55))/197.0,seaDx/197.0,seaDy/197.0);
+          float phase = surfPhase(foamP,distanceToShore);
+          float crest = pow(0.5+0.5*sin(phase),4.5);
+          float coverage = smoothstep(0.36,0.67,foamPatch*0.58+breakup*0.42);
+          float lace = smoothstep(0.24,0.66,bubbles*0.70+breakup*0.30);
+          float distantSurf = smoothstep(7.0,32.0,max(shoreFootprint,seaFootprint));
+          crest = mix(crest,0.12,distantSurf);
+          float wake = pow(0.5+0.5*sin(phase-0.95),3.0);
+          float residue = (1.0-smoothstep(14.0,49.0,distanceToShore))*wake*coverage*0.30;
+          surfFoam = shoreZone*(crest*(0.05+coverage*0.95)*lace*1.85+residue);
+        }
         float oceanCrest = max(oceanLarge.b,oceanSmall.b*0.80);
         // Only compressed positive crests aerate; the proxy is deliberately sparse in calm weather.
         float crestWidth = max(fwidth(oceanCrest),0.002);

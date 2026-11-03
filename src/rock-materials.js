@@ -73,6 +73,7 @@
     // Explicit texture gradients preserve mip selection inside the blend loops.
     vec3 notoPositionDx;
     vec3 notoPositionDy;
+    float notoPixelFootprint;
 
     float notoHeightAt(ivec2 cell) {
       ivec2 lastCell = ivec2(uNotoHeightCols - 1, uNotoHeightRows - 1);
@@ -140,6 +141,9 @@
     vec4 notoTextureSample(sampler2DArray textureSampler, vec2 uv, int layer, vec2 dx, vec2 dy, bool detail) {
       float k=notoFilteredNoise(uv*0.32+float(layer)*3.7,dx*0.32,dy*0.32)*7.0;
       float cell=floor(k), blend=smoothstep(0.15,0.85,fract(k));
+      // Smoothstep plateaus have one contributor. Explicit gradients keep these coherent branches mip-safe.
+      if(blend<=0.0) return notoTextureTap(textureSampler,uv,layer,dx,dy,cell,detail);
+      if(blend>=1.0) return notoTextureTap(textureSampler,uv,layer,dx,dy,cell+1.0,detail);
       return mix(notoTextureTap(textureSampler,uv,layer,dx,dy,cell,detail),
                  notoTextureTap(textureSampler,uv,layer,dx,dy,cell+1.0,detail),blend);
     }
@@ -147,6 +151,10 @@
     // Project textures in unscaled model coordinates so vertical exaggeration does not change physical material scale.
     vec3 notoTriplanarColor(int layer, vec3 objectPosition, vec3 objectNormal) {
       float scale = max(uNotoMaterialScale[layer], 0.001);
+      // A photograph covering less than one pixel contributes its mip-averaged color. Branch
+      // before projection/phase work; the continuous interval avoids distance-tier popping.
+      float meanWeight = smoothstep(0.5,1.0,notoPixelFootprint/scale);
+      if(meanWeight>=1.0) return textureLod(uNotoColorTexture,vec3(0.5,0.5,float(layer)),20.0).rgb;
       vec3 p = objectPosition / scale;
       vec3 weights = max(pow(abs(normalize(objectNormal)),vec3(4.0))-0.01,vec3(0.0));
       weights /= max(weights.x + weights.y + weights.z, 0.001);
@@ -155,7 +163,9 @@
       vec3 xProjection = (weights.x > 0.0 ? notoTextureSample(uNotoColorTexture, p.yz, layer, dx.yz, dy.yz, false).rgb : vec3(0.0));
       vec3 yProjection = (weights.y > 0.0 ? notoTextureSample(uNotoColorTexture, p.xz, layer, dx.xz, dy.xz, false).rgb : vec3(0.0));
       vec3 zProjection = (weights.z > 0.0 ? notoTextureSample(uNotoColorTexture, p.xy, layer, dx.xy, dy.xy, false).rgb : vec3(0.0));
-      return xProjection * weights.x + yProjection * weights.y + zProjection * weights.z;
+      vec3 color = xProjection * weights.x + yProjection * weights.y + zProjection * weights.z;
+      if(meanWeight>0.0) color=mix(color,textureLod(uNotoColorTexture,vec3(0.5,0.5,float(layer)),20.0).rgb,meanWeight);
+      return color;
     }
 
     // Rotate OpenGL tangent-space normals back into object space for each projection. The projection plane matches the color texture;
@@ -170,6 +180,11 @@
       float scale = max(uNotoMaterialScale[layer], 0.001);
       vec3 p = objectPosition / scale;
       vec3 normalizedNormal = normalize(objectNormal);
+      // Normal influence already vanishes at 16 m/pixel. Preserve the material's mean
+      // roughness with one coarsest-mip fetch instead of evaluating invisible normal charts.
+      float meanWeight = smoothstep(8.0,16.0,notoPixelFootprint);
+      if(meanWeight>=1.0) return vec4(normalizedNormal,
+        textureLod(uNotoDetailTexture,vec3(0.5,0.5,float(layer)),20.0).a);
       vec3 weights = max(pow(abs(normalizedNormal),vec3(4.0))-0.01,vec3(0.0));
       weights /= max(weights.x + weights.y + weights.z, 0.001);
       vec3 dx = notoPositionDx / scale;
@@ -182,6 +197,8 @@
       vec3 zNormal = notoAxisNormal(zSample.rgb * 2.0 - 1.0, 2, normalizedNormal.z < 0.0 ? -1.0 : 1.0);
       vec3 objectDetailNormal = normalize(xNormal * weights.x + yNormal * weights.y + zNormal * weights.z);
       float roughness = xSample.a * weights.x + ySample.a * weights.y + zSample.a * weights.z;
+      if(meanWeight>0.0) roughness=mix(roughness,
+        textureLod(uNotoDetailTexture,vec3(0.5,0.5,float(layer)),20.0).a,meanWeight);
       return vec4(objectDetailNormal, roughness);
     }
 
@@ -723,7 +740,7 @@
     material.userData.notoShared = shared;
     material.userData.notoTile = tile;
     material.name = mode === 0 ? 'Noto strata top' : mode === 1 ? 'Noto strata cut' : 'Noto strata bottom';
-    material.customProgramCacheKey = () => `noto-strata-v10-grass-${mode}-${shared.maxBlendMaterials}-${palette.capacity}-${borehole.boreholeCount}-${borehole.maxLayers}-${Boolean(shared.groundCover)}-${Boolean(shared.grass)}`;
+    material.customProgramCacheKey = () => `noto-strata-v11-shader-lod-${mode}-${shared.maxBlendMaterials}-${palette.capacity}-${borehole.boreholeCount}-${borehole.maxLayers}-${Boolean(shared.groundCover)}-${Boolean(shared.grass)}`;
     material.onBeforeCompile = shader => {
       /*
        * Inject uniforms and rock-material chunks into a Three.js standard shader. Pass unscaled
@@ -758,6 +775,7 @@
         float notoSurfaceRoughness;
         notoPositionDx = dFdx(vNotoObjectPosition);
         notoPositionDy = dFdy(vNotoObjectPosition);
+        notoPixelFootprint = max(length(notoPositionDx),length(notoPositionDy));
         notoSurfaceProperties(
           vNotoObjectPosition, vNotoObjectNormal,
           notoSurfaceColor, notoSurfaceDetail, notoSurfaceRoughness
@@ -792,11 +810,14 @@
             mat2 grassRotationB = mat2(grassB.x,grassB.y,-grassB.y,grassB.x);
             vec3 grassColor = mix(textureGrad(uGrassColor,grassRotationA*grassUV+grassA.zw,grassRotationA*grassDx,grassRotationA*grassDy).rgb,
               textureGrad(uGrassColor,grassRotationB*grassUV+grassB.zw,grassRotationB*grassDx,grassRotationB*grassDy).rgb,grassBlend);
-            vec3 grassNormalA = textureGrad(uGrassNormal,grassRotationA*grassUV+grassA.zw,grassRotationA*grassDx,grassRotationA*grassDy).rgb*2.0-1.0;
-            vec3 grassNormalB = textureGrad(uGrassNormal,grassRotationB*grassUV+grassB.zw,grassRotationB*grassDx,grassRotationB*grassDy).rgb*2.0-1.0;
-            grassNormalA.xy = grassNormalA.xy*grassRotationA;
-            grassNormalB.xy = grassNormalB.xy*grassRotationB;
-            vec3 grassNormal = normalize(mix(grassNormalA,grassNormalB,grassBlend));
+            vec3 grassNormal = vec3(0.0,0.0,1.0);
+            if(notoPixelFootprint<16.0) {
+              vec3 grassNormalA = textureGrad(uGrassNormal,grassRotationA*grassUV+grassA.zw,grassRotationA*grassDx,grassRotationA*grassDy).rgb*2.0-1.0;
+              vec3 grassNormalB = textureGrad(uGrassNormal,grassRotationB*grassUV+grassB.zw,grassRotationB*grassDx,grassRotationB*grassDy).rgb*2.0-1.0;
+              grassNormalA.xy = grassNormalA.xy*grassRotationA;
+              grassNormalB.xy = grassNormalB.xy*grassRotationB;
+              grassNormal = normalize(mix(grassNormalA,grassNormalB,grassBlend));
+            }
             // Grade living blades within the retained hay/soil texture; dry patches reveal the original earth.
             float grassLuminance = dot(grassColor,vec3(0.2126,0.7152,0.0722));
             vec3 livingGrass = grassLuminance*vec3(0.48,0.94,0.29);
@@ -823,8 +844,7 @@
           vNotoViewBasisY * notoSurfaceDetail.y +
           vNotoViewBasisZ * notoSurfaceDetail.z
         ) * faceDirection;
-        float pixelFootprint=max(length(notoPositionDx),length(notoPositionDy));
-        float resolvedDetail=1.0-smoothstep(2.0,16.0,pixelFootprint);
+        float resolvedDetail=1.0-smoothstep(2.0,16.0,notoPixelFootprint);
         normal = normalize(mix(normal, notoDetailViewNormal, 0.55*resolvedDetail));
       `;
       if (shader.fragmentShader.includes('#include <normal_fragment_begin>')) {

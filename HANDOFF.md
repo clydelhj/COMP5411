@@ -1,6 +1,6 @@
 # Maintenance handoff
 
-Baseline date: October 28, 2026. Project: **Noto Peninsula: An Interactive 3D Landscape**, COMP5411 Group 12, LEE Hyunjin and TAN Jiming.
+Baseline date: November 3, 2026. Project: **Noto Peninsula: An Interactive 3D Landscape**, COMP5411 Group 12, LEE Hyunjin and TAN Jiming.
 
 ## Entry and documentation
 
@@ -18,7 +18,7 @@ Keep runtime paths relative to the root. Asset distribution instructions govern 
 
 - Local distance-adaptive terrain patches, dedicated Worker geometry construction and boundary-normal averaging, retained coverage, mixed-detail stitching, bounded caches and camera safety.
 - Continuous coastline clipping independent of display spacing, closed exposed walls and a −100 m model bottom.
-- Geological PBR categories with triplanar projection, continuous boundary blending and randomized texture sampling.
+- Geological PBR categories with triplanar projection, continuous boundary blending, randomized texture sampling and projected-footprint shader LOD.
 - Real-classification-driven representative plants, deterministic locations and tree-shape variants; patchy grass texture on suitable soil/weatherable bare ground and nearby instanced blades, with independent grass/tree visibility settings and cooperative placement preparation.
 - Hybrid geometric swells and two GPU FFT wind-wave fields, Fresnel/absorption shading, irregular breaking foam, wetness and GPU spray with a shared clock.
 - Cached coarse terrain reflections, matching analytic sky and an illustrative offshore horizon in low coastal views.
@@ -52,6 +52,8 @@ Keep shared material arrays, water resources and plant resources owned by their 
 Clear atmosphere, elevated cloud integration and reflection columns have separate ownership. `cloud-layers.js` owns physical Y bands 1800–3200/5000–5700 m and a 128³ density field; never multiply these heights by terrain exaggeration. Water uses the same world-aligned optical columns. Camera/world matrices, current scene depth and its jitter offset govern view integration. Keep clouds after the static temporal resolve and invalidate their depth cache when the scene revision changes. Stationary cloud integration/column maps update at most 5 Hz; moving cameras refresh immediately. Cloud, water and rain clocks follow the main scheduler and freeze during sleep/dialogs/hidden pages. Preserve the single scene draw in direct and temporal modes, native-capture budgets and no-volume bypass. Cloud density, self-shadow and reflection columns are visual approximations; there is no terrain cloud-shadow map.
 
 Configure texture wrap/color metadata before first binding. Preserve longitude-unwrapped gradients for the atmospheric lookup. Render-target sizes are physical pixels, while `renderer.setViewport()` applies the canvas pixel ratio: use the target viewport or convert dimensions correctly. Keep fractional-DPR regression coverage. Water phase-chart blending must remain continuous, rotate sampled slopes back correctly and retain footprint/variance filtering; shared phase parameters are initialized once, not recalculated per fragment.
+
+Material shader LOD is independent of the selected terrain grid. Preserve smooth geological color-to-mean blending over 0.5–1 tiles/pixel and roughness-to-mean blending over 8–16 m/pixel; skip geological/grass normals only once their influence is zero at 16 m/pixel. Fine water normals stop sampling at 12 m/pixel, with variance blended to the CPU-source mean over 8–12 m/pixel. Retain wide micro normals for the analytic fallback and offshore whitecap noise outside the surf band. Compute derivatives before nonuniform branches and use explicit gradients within them. Zero-weight stochastic charts require no fetch, but both charts are needed through the blend interval.
 
 `temporal-reconstruction.js` owns its color/depth/history targets. Keep its camera jitter inside the render call and restore the projection/inverse afterward. History is valid only for static opaque surfaces: water tops, coastal land with animated wetness, instanced vegetation, transparent objects and custom shader effects are reactive. Invalidate history after committed geometry/plant snapshots, lighting or flashlight changes, scale and visibility changes. Do not invalidate ordinary camera motion or every shadow-frustum update. Settling is finite and must leave water/rain/wind frozen after the sleep deadline. Preserve direct fallback and the settings checkbox; do not claim dynamic motion vectors or universal ghost-free reconstruction.
 
