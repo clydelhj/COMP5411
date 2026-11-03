@@ -141,9 +141,6 @@
     vec4 notoTextureSample(sampler2DArray textureSampler, vec2 uv, int layer, vec2 dx, vec2 dy, bool detail) {
       float k=notoFilteredNoise(uv*0.32+float(layer)*3.7,dx*0.32,dy*0.32)*7.0;
       float cell=floor(k), blend=smoothstep(0.15,0.85,fract(k));
-      // Smoothstep plateaus have one contributor. Explicit gradients keep these coherent branches mip-safe.
-      if(blend<=0.0) return notoTextureTap(textureSampler,uv,layer,dx,dy,cell,detail);
-      if(blend>=1.0) return notoTextureTap(textureSampler,uv,layer,dx,dy,cell+1.0,detail);
       return mix(notoTextureTap(textureSampler,uv,layer,dx,dy,cell,detail),
                  notoTextureTap(textureSampler,uv,layer,dx,dy,cell+1.0,detail),blend);
     }
