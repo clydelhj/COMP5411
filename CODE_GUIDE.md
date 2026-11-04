@@ -1,6 +1,6 @@
 # Code guide
 
-Current runtime baseline: October 28, 2026. All paths below are relative to the directory containing `index-1m.html`.
+Current runtime baseline: November 4, 2026. All paths below are relative to the directory containing `index-1m.html`.
 
 ## Structure
 
@@ -61,7 +61,7 @@ Large runtime/source assets may be distributed separately; their paths after ins
 | `geometry-worker.js` | Dedicated Worker, transferable geometry buffers, compact seam/normal messages and main-thread reconstruction |
 | `tile-geometry.js` | Land/water classification, terrain triangles, mixed-detail edges and shared normals |
 | `coastal-geometry.js` | Continuous shoreline clipping, coastal refinement and display contact profile |
-| `model-volume.js` | Exposed outer walls and the −100 m bottom |
+| `model-volume.js` | Exposed outer walls, the −100 m bottom and compact index storage |
 | `material-textures.js` | Shared color/detail texture arrays and file/HTTP loading |
 | `rock-materials.js` | Geological queries, triplanar PBR, categorical blending and ground cover |
 | `water-materials.js`, `water-motion.js` | Filtered micro normals, geometric waves, spectral shading, Fresnel/absorption and foam |
@@ -116,6 +116,10 @@ The initial base-cell budget is approximately 2 × 1024² on the higher starting
 Land and sea are clipped against the same zero contour of an 8 m sampled and smoothed shoreline-distance field. Shared edge intersection rules prevent independent boundary estimates from opening gaps. Coastal contour segments are refined to at most 8 m, with a 0.03 m distance-field residual target and a 0.5 m recursion floor. These values describe approximation to the display field, not survey accuracy.
 
 Inside the coast, the nearest 16 m is held at mean sea level. A smooth transition restores the original displayed height over the following 48 m. A 72 m coastal band retains fine triangles for local wave/contact effects. This display contact profile is separate from the unchanged source DEM. The outer model boundary closes at −100 m; no real seabed bathymetry is inferred.
+
+## Compact geometry indices
+
+Generated index buffers use `Uint16Array` only when the largest referenced index is at most 65534; 65535 is WebGL2's fixed primitive-restart value for unsigned-short indices. Larger references retain `Uint32Array`. Existing 16-bit buffers keep their original interpretation. Compaction preserves vertex arrays, index order, winding and triangle count, and runs again after seam conformity rebuilds indices. Worker transfer and reconstruction preserve the selected typed-array format. Index storage is halved for eligible buffers; overall geometry memory also includes vertex attributes and other data.
 
 ## Geological shading and grass
 
@@ -212,6 +216,8 @@ See [REBUILD.md](REBUILD.md) for source locations, dependencies and portable reb
 The dated [progress report](docs/COMP5411_Progress_Report_EN.md) preserves October 18 measurements. Its uniform-visible-LOD description is historical; this guide describes the current local selection. Targeted October 19 checks covered all 12 detail limits, selection coverage/budget/fallback, mixed land/water edges, stable small camera turns, grass attachment, sleep and file/HTTP loading. October 20 checks covered tree attachment across representative detail limits and 1/5/10 height scales, independent grass/tree visibility combinations, sleep and both entry modes. Full device coverage, long navigation sessions and final presentation acceptance remain incomplete.
 
 ## Focused regression tests
+
+Run `node --test tests/model-volume.test.cjs` for index-storage fixtures. They cover the 65534/65535/65536 index boundary, existing restart values and invalid generated references, plus exact triangle winding, holes and computed normals. The Worker tests also check small-index transfer and preservation of vertex 65535 in a large mesh.
 
 Run `node --test tests/geometry-worker.test.cjs tests/terrain-refinement.test.cjs tests/terrain-refinement-geometry.test.cjs` with Node.js 22 or newer. Tests use real worker threads, the bundled Three.js core and generated terrain/coast fixtures. They cover transferred topology and attribute parity, height queries, mixed-detail water edges, boundary normals, caller buffer ownership, stale commits and compatibility fallback. No DEM download or npm installation is required. Progressive tests also check full coverage throughout local transitions, selection priority, merging and stale-topology rejection. Browser rendering and interaction still need separate checks.
 

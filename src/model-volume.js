@@ -3,6 +3,27 @@
 window.NotoVolume = (function createNotoVolume() {
   // BASE_ELEVATION: physical model-base elevation, in metres.
   const BASE_ELEVATION = -100;
+  function compactIndices(indices) {
+    /* Keep index order and use 16-bit storage only below WebGL2's fixed restart value.
+     * Existing Uint16 buffers retain their type and restart semantics. Ordinary arrays contain
+     * generated vertex references; reject invalid values instead of silently truncating them.
+     */
+    if (indices instanceof Uint16Array) return indices;
+    if (indices instanceof Uint32Array) {
+      for (let i = 0; i < indices.length; i++) if (indices[i] >= 65535) return indices;
+      return Uint16Array.from(indices);
+    }
+    let maximum = 0;
+    for (let i = 0; i < indices.length; i++) {
+      const value = indices[i];
+      if (!Number.isInteger(value) || value < 0 || value > 0xffffffff) {
+        throw new RangeError('Geometry indices must be unsigned 32-bit integers');
+      }
+      maximum = Math.max(maximum, value);
+    }
+    return maximum < 65535 ? Uint16Array.from(indices) : Uint32Array.from(indices);
+  }
+
   function makeGeometry(THREE, positions, indices) {
     /* Create a Three.js BufferGeometry with normals and a bounding sphere.
 Parameters: THREE is the namespace; positions is a flat XYZ array in metres; indices optionally supplies triangle indices.
@@ -10,7 +31,7 @@ Assign attributes, compute vertex normals and bounds, and return the geometry. *
 
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    if (indices) geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+    if (indices) geometry.setIndex(new THREE.BufferAttribute(compactIndices(indices), 1));
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
     return geometry;
@@ -517,6 +538,7 @@ Split each valid quad along a fixed diagonal. Returns a Uint32Array containing s
   }
   return {
     closeSurface,
+    compactIndices,
     makeGeometry,
     synchronizeNormals,
     seaMask,

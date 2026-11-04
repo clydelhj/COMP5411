@@ -211,11 +211,28 @@ test('worker geometry preserves regular land, internal NoData and ocean ownershi
     t.after(() => client.dispose());
     const actual = await client.build(tile, raw, [], []);
     compareGeometry(actual, expected);
+    assert.equal((actual.land || actual.water).top.index.array.BYTES_PER_ELEMENT, 2, 'small mesh indices remain compact after transfer');
     compareArray(raw, snapshot, 'caller height array remains owned and unchanged');
     assert.equal(raw.byteLength, snapshot.byteLength);
     actual.dispose();
     expected.dispose();
   });
+});
+
+test('large worker meshes preserve vertex 65535 instead of converting it to restart', async t => {
+  const runtime = loadRuntime();
+  const input = fixture(256, 255);
+  const tile = descriptor('wide-indices', 0, 256, 0, 255, 1);
+  const raw = heightsFor(tile, (c, r) => 20 + c * 0.03 + r * 0.02);
+  const expected = runtime.NotoTileGeometry.build(THREE, input.tileset, tile, raw, [], input.oceanAt);
+  const client = await createWorker(runtime, input);
+  t.after(() => client.dispose());
+  const actual = await client.build(tile, raw, [], []);
+  compareGeometry(actual, expected);
+  assert.equal(actual.land.top.index.array.BYTES_PER_ELEMENT, 4);
+  assert.ok(actual.land.top.index.array.includes(65535), 'vertex 65535 remains an ordinary Uint32 reference');
+  actual.dispose();
+  expected.dispose();
 });
 
 test('continuous coastal topology and displayed height queries survive the worker boundary', async t => {

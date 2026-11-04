@@ -365,7 +365,7 @@
 
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    if (indices && indices.length) geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+    if (indices && indices.length) geometry.setIndex(new THREE.BufferAttribute(global.NotoVolume?.compactIndices ? global.NotoVolume.compactIndices(indices) : indices, 1));
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
     return geometry;
@@ -1252,7 +1252,7 @@
       // Coastal height queries store triangle ranges per original cell; remap those ranges after topology insertion.
       if (kind === 'land' && result.shoreQueryRanges) for (let i = 0; i < result.shoreQueryRanges.length; i++) result.shoreQueryRanges[i] = offsets[result.shoreQueryRanges[i]];
       top.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(positions), 3));
-      top.setIndex(new THREE.BufferAttribute(Uint32Array.from(indices), 1));
+      top.setIndex(new THREE.BufferAttribute(global.NotoVolume?.compactIndices ? global.NotoVolume.compactIndices(indices) : Uint32Array.from(indices), 1));
       top.computeVertexNormals();
       top.computeBoundingBox();
       top.computeBoundingSphere();

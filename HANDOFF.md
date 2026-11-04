@@ -1,6 +1,6 @@
 # Maintenance handoff
 
-Baseline date: November 3, 2026. Project: **Noto Peninsula: An Interactive 3D Landscape**, COMP5411 Group 12, LEE Hyunjin and TAN Jiming.
+Baseline date: November 4, 2026. Project: **Noto Peninsula: An Interactive 3D Landscape**, COMP5411 Group 12, LEE Hyunjin and TAN Jiming.
 
 ## Entry and documentation
 
@@ -18,6 +18,7 @@ Keep runtime paths relative to the root. Asset distribution instructions govern 
 
 - Local distance-adaptive terrain patches, dedicated Worker geometry construction and boundary-normal averaging, retained coverage, mixed-detail stitching, bounded caches and camera safety.
 - Continuous coastline clipping independent of display spacing, closed exposed walls and a −100 m model bottom.
+- Compact index buffers for eligible meshes, preserving topology and Worker transfer types.
 - Geological PBR categories with triplanar projection, continuous boundary blending, randomized texture sampling and projected-footprint shader LOD.
 - Real-classification-driven representative plants, deterministic locations and tree-shape variants; patchy grass texture on suitable soil/weatherable bare ground and nearby instanced blades, with independent grass/tree visibility settings and cooperative placement preparation.
 - Hybrid geometric swells and two GPU FFT wind-wave fields, Fresnel/absorption shading, irregular breaking foam, wetness and GPU spray with a shared clock.
@@ -42,6 +43,8 @@ Forest broadleaf trees use 12–22 m heights and conifers 18–30 m; orchard and
 `terrain-lod.js` selects complete, nonoverlapping nested display patches with up to 128 cells per edge, using a doubling sequence from the selected detail limit. Near terrain receives priority; far terrain can be coarser. Selection has split/merge hysteresis, a view buffer and a camera neighborhood, with requests coalesced at 80 ms. Use `terrain-refinement.js` to commit bounded local parent/descendant groups and affected seams as they become ready. Prioritize near refinement within actual allocated cell/object budgets, then reclaim distant oversampling. Keep existing coverage during construction; camera movement must not invalidate a still-applicable local transaction. A user-grid change must reject incompatible work. Input tile levels and display patch levels have distinct roles; do not combine nonaligned source-file rectangles as display leaves.
 
 Mixed-detail land edges match the actual coarse surface, including shoreline subdivisions. Preserve the conservative coastal cache qualification: original ownership fully resolved and no coarser context; ordinary shells and dependent coastal patches retain full neighbor signatures. Animated water edges interpolate the same coarse endpoint wave displacements. Plant roots and collision queries use the displayed surface. Water-wave filtering follows the user detail setting, rather than changing its global parameters whenever patch arrangement changes.
+
+Generated 16-bit indices must stay below 65535 because WebGL2 reserves that value for primitive restart. Preserve triangle order, exact attributes and the Worker's typed-array transfers; compact indices again after seam topology changes. Larger references retain 32-bit storage, and existing 16-bit buffers keep their original restart interpretation.
 
 Ocean geometry retains long swells and CPU/GPU displacement parity. The two 128-square GPU FFT fields supply filtered slopes/crest shading; do not describe them as a fully spectral displaced mesh or fluid solver. Preserve FFT sign consistency: positive crests compress, and normals use choppy tangent derivatives. Shared clock updates are capped at 20 Hz; no-water/unchanged-time frames do not transform the fields. Float-target failure keeps analytic water active. Retain the MIT notice in `src/ocean-spectrum.js` and `vendor/ocean/dli-waves-LICENSE.txt`.
 
