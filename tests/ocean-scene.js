@@ -451,6 +451,24 @@
       const points = [[500, 200], [100, -300], [-250, 0], [4096, 0]];
       report.probes = gpuOffsets(points);
       report.normalProbes = gpuOffsets(points, true);
+      // Consecutive crests at one coast location should form sets instead of identical
+      // pulses. Probe the real GLSL and its analytic normal at each set strength.
+      const groupTime = motion.uniforms.uSeaTime.value;
+      const groupPoint = [coast(0) + 25, 0];
+      const groupDistance = motion.shoreAt(...groupPoint);
+      const phaseOffset = groupDistance / 48 + Math.sin(groupPoint[0] * 0.019) * 0.16
+        + Math.sin(groupPoint[0] * 0.047) * 0.09;
+      const firstCrest = (0.25 - (phaseOffset - Math.floor(phaseOffset)) + 1) / 0.16;
+      report.surfGroups = { heights: [], contact: [], periodSeconds: 1 / 0.16 };
+      for (let cycle = 0; cycle < 8; cycle++) {
+        motion.uniforms.uSeaTime.value = firstCrest + cycle / 0.16;
+        const offset = gpuOffsets([groupPoint]);
+        report.surfGroups.heights.push(offset[0].gpu[1]);
+        report.probes.push(...offset);
+        report.normalProbes.push(...gpuOffsets([groupPoint], true));
+        report.surfGroups.contact.push(motion.sample(coast(0), 0)[1]);
+      }
+      motion.uniforms.uSeaTime.value = groupTime;
       if (spectrum?.getState().active) {
         const largeBefore = readSpectrum(spectrum.uniforms.uOceanSpectrumLarge.value);
         const smallBefore = readSpectrum(spectrum.uniforms.uOceanSpectrumSmall.value, spectrum.uniforms.uOceanSpectrumSize.value.y);

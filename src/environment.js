@@ -124,7 +124,8 @@ Returns view, animation, diagnostics and cleanup interfaces. */
     // RAIN_COUNT: fixed number of rain segments; no per-frame JavaScript particle allocation or movement.
     const RAIN_COUNT = capable ? 2200 : 1200;
     const positions = new Float32Array(RAIN_COUNT * 6),
-      ends = new Float32Array(RAIN_COUNT * 2);
+      ends = new Float32Array(RAIN_COUNT * 2),
+      motion = new Float32Array(RAIN_COUNT * 6);
     let seed = 5411;
     const random = () => {
       seed = Math.imul(seed, 1664525) + 1013904223 >>> 0;
@@ -135,20 +136,33 @@ Returns view, animation, diagnostics and cleanup interfaces. */
       positions.set(p, i * 6);
       positions.set(p, i * 6 + 3);
       ends[i * 2 + 1] = 1;
+      // Each streak has a stable fall speed, exposure length and wind response.
+      const drop = [9 + random() * 6, 0.035 + random() * 0.02, 0.8 + random() * 0.4];
+      motion.set(drop, i * 6);
+      motion.set(drop, i * 6 + 3);
     }
     const rainGeometry = new THREE.BufferGeometry();
     rainGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     rainGeometry.setAttribute('aEnd', new THREE.BufferAttribute(ends, 1));
+    rainGeometry.setAttribute('aRainMotion', new THREE.BufferAttribute(motion, 3));
     const rainMaterial = new THREE.ShaderMaterial({
       uniforms: rainUniforms,
       transparent: true,
       depthWrite: false,
-      vertexShader: `attribute float aEnd; uniform float uRainTime; uniform vec3 uRainAnchor; varying float vRainAlpha;
+      vertexShader: `attribute float aEnd; attribute vec3 aRainMotion;
+        uniform float uRainTime; uniform vec3 uRainAnchor; varying float vRainAlpha;
         void main(){
-          vec3 p=position; p.y=70.0-mod(position.y+uRainTime*32.0,130.0);
-          p.x += sin(position.y)*2.0; p += vec3(aEnd*0.16,-aEnd*1.8,0.0);
-          vec4 view=modelViewMatrix*vec4(p+uRainAnchor,1.0);
-          vRainAlpha=(1.0-smoothstep(60.0,110.0,length(p.xz)))*smoothstep(1.0,8.0,-view.z)*0.45;
+          vec3 velocity=vec3(3.6*aRainMotion.z,-aRainMotion.x,-1.8*aRainMotion.z);
+          vec3 extent=vec3(180.0,130.0,180.0);
+          // Wrap a world-space trajectory into the visible local volume. Subtracting
+          // the camera before wrapping keeps the same drop fixed in the world while panning.
+          vec3 relative=mod(position+velocity*uRainTime-uRainAnchor+extent*0.5,extent)-extent*0.5;
+          vec3 p=relative+uRainAnchor-velocity*(aRainMotion.y*aEnd);
+          vec4 view=modelViewMatrix*vec4(p,1.0);
+          // Fade before every wrap boundary, including the top/bottom recycle planes.
+          float volume=(1.0-smoothstep(55.0,86.0,length(relative.xz)))
+            *(1.0-smoothstep(45.0,62.0,abs(relative.y)));
+          vRainAlpha=volume*smoothstep(1.0,8.0,-view.z)*mix(0.42,0.08,aEnd);
           gl_Position=projectionMatrix*view;
         }`,
       fragmentShader: `uniform vec3 uRainColor; uniform float uRainBrightness; varying float vRainAlpha;
@@ -255,7 +269,7 @@ Updates the rain anchor, light position and shadow flags in place. */
         shadowDirty = true;
       },
       animate: seconds => {
-        if (rain.visible) rainUniforms.uRainTime.value += seconds;
+        if (rain.visible && Number.isFinite(seconds) && seconds > 0) rainUniforms.uRainTime.value += seconds;
       },
       hasAnimation: () => rain.visible,
       getState: () => ({
@@ -273,7 +287,10 @@ Updates the rain anchor, light position and shadow flags in place. */
         shadowSpanM: span * 2,
         shadowMapSize: sun.shadow.mapSize.x,
         rainCount: rain.visible ? RAIN_COUNT : 0,
-        rainTime: rainUniforms.uRainTime.value
+        rainTime: rainUniforms.uRainTime.value,
+        rainMotion: 'world-anchored-wind-streaks',
+        rainFallSpeedMps: [9, 15],
+        rainExposureSeconds: [0.035, 0.055]
       }),
       dispose: () => {
         rainGeometry.dispose();

@@ -1,0 +1,649 @@
+{
+  "report_blocks": [
+    {
+      "type": "p",
+      "text": "A controlled evaluation used Microsoft Edge 157.0.4341.46 and the browser-reported Intel Graphics device through ANGLE/D3D11. Output was 1280 x 800 pixels, with 960 x 600 temporal input, a 5 m finest-detail limit, 1:1 elevation scale and high vegetation detail. Lighting was clear noon; rain was validated separately. Automatic quality feedback and tree-wind phase were frozen; water/cloud clocks advanced deterministically. Each settled view, with cached shadows/reflections and no continuous lighting changes, used two repetitions of 16 warm-up and 32 sampled frames; no screen recorder was involved."
+    },
+    {
+      "type": "table",
+      "widths": [
+        1.25,
+        1.55,
+        1.2,
+        1,
+        1.3
+      ],
+      "rows": [
+        [
+          "View",
+          "GPU total<br/>before / after (ms)",
+          "Main scene<br/>after (ms)",
+          "FFT<br/>after (ms)",
+          "CPU submit<br/>after (ms)"
+        ],
+        [
+          "Soil slope",
+          "29.01 / 26.20",
+          "24.56",
+          "0.16",
+          "3.90"
+        ],
+        [
+          "Coast",
+          "7.22 / 7.51",
+          "6.18",
+          "0.16",
+          "1.62"
+        ],
+        [
+          "Regional",
+          "29.59 / 29.28",
+          "27.77",
+          "0.16",
+          "2.69"
+        ]
+      ]
+    },
+    {
+      "type": "p",
+      "text": "GPU values are means of asynchronous WebGL timer-query measurements summed over render passes. The FFT value is amortized over every sampled frame, including frames between its 20 Hz updates; water shading remains part of the main scene. CPU values measure render submission and exclude asynchronous LOD construction. These settled measurements are not end-to-end interaction latency or video frame rate. The short single-device before/after runs establish cost and variability, not a statistically demonstrated speedup. Before is ef9b960; after includes grouped surf and revised rain."
+    },
+    {
+      "type": "table",
+      "widths": [
+        1.25,
+        0.8,
+        1.15,
+        1.3,
+        1.0
+      ],
+      "rows": [
+        [
+          "View",
+          "Patches",
+          "Grid range (m)",
+          "Triangles drawn",
+          "Draw calls"
+        ],
+        [
+          "Soil slope",
+          "130",
+          "5-160",
+          "7.13 M",
+          "209"
+        ],
+        [
+          "Coast",
+          "100",
+          "5-160",
+          "1.47 M",
+          "100"
+        ],
+        [
+          "Regional",
+          "35",
+          "40",
+          "5.81 M",
+          "134"
+        ]
+      ]
+    },
+    {
+      "type": "p",
+      "text": "Terrain detail stayed spatially adaptive: the regional view used coarser patches, while nearby terrain reached the permitted fine spacing. The full pose-to-settled sequence took 18.7-28.9 s in this ordered route, including tile access, Worker construction, cache changes and stability waits. This is the time until all requested refinements finish, not time with a blocked interface; coarser coverage remains during progressive commits. Slow completion on large jumps remains a limitation."
+    },
+    {
+      "type": "p",
+      "text": "The dominant GPU cost was main-scene rendering rather than the spectral update alone. Therefore, reducing FFT size is unlikely to address the largest cost in these views. The measured rendering workload can contribute to perceived sluggishness independently of recording; this experiment does not isolate how much Zoom affected the earlier video. The final integration completed without page/shader errors, and the frame counter and animation clocks stopped during the idle check."
+    }
+  ],
+  "baselineCommit": "ef9b960",
+  "measurements": {
+    "baseline": {
+      "browser": "157.0.4341.46",
+      "hardware": {
+        "renderer": "ANGLE (Intel, Intel(R) Graphics (0x00007D67) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "powerPreference": "high-performance"
+      },
+      "methodology": {
+        "viewport": [
+          1280,
+          800
+        ],
+        "deviceScaleFactor": 1,
+        "temporalScale": 0.75,
+        "detailLimitM": 5,
+        "verticalScale": 1,
+        "vegetation": "high",
+        "budgetFeedback": "disabled for repeatable settled comparisons",
+        "timing": "Two repetitions of 16 warm-up and 32 sampled settled frames per view; EXT_disjoint_timer_query_webgl2 per render pass; CPU submission excludes LOD construction; rAF intervals include headless scheduling and are not user-facing FPS"
+      },
+      "views": {
+        "soil": {
+          "samples": 64,
+          "gpu_ms_mean": 29.014829624999997,
+          "repeat_gpu_medians_ms": [
+            28.163800000000002,
+            29.682706000000003
+          ],
+          "repeat_gpu_p95_ms": [
+            30.485986999999998,
+            31.230551999999992
+          ],
+          "cpu_submit_ms_mean": 3.054687499996362,
+          "raf_interval_ms_mean": 29.731250000000045,
+          "draw_calls": 209,
+          "triangles": 7128350,
+          "grid_spacings_m": [
+            5,
+            10,
+            20,
+            40,
+            80,
+            160
+          ],
+          "active_patches": 130,
+          "estimated_geometry_mib": 2047.2389221191406,
+          "worker": {
+            "mode": "worker",
+            "fallbackReason": null,
+            "completedBuilds": 767,
+            "workerBuildMs": 14.699999999953434,
+            "mainAttachMs": 0,
+            "normalSyncMs": 9,
+            "pending": 0
+          },
+          "refinement": {
+            "commits": 30,
+            "lastType": "merge",
+            "lastCommitMs": 3277.3000000000466,
+            "pendingPatches": 0,
+            "selectionDelayMs": 80,
+            "active": false,
+            "desiredPatches": 0
+          },
+          "stages": {
+            "temporal_resolve": {
+              "mean_ms_per_frame": 0.82878615625,
+              "total_passes": 64
+            },
+            "cloud_integrate": {
+              "mean_ms_per_frame": 0.022123984375000003,
+              "total_passes": 4
+            },
+            "cloud_columns": {
+              "mean_ms_per_frame": 0.08469718749999999,
+              "total_passes": 8
+            },
+            "spectrum": {
+              "mean_ms_per_frame": 0.169811375,
+              "total_passes": 640
+            },
+            "main_scene": {
+              "mean_ms_per_frame": 27.152488843750007,
+              "total_passes": 64
+            },
+            "cloud_composite": {
+              "mean_ms_per_frame": 0.362288734375,
+              "total_passes": 64
+            },
+            "present": {
+              "mean_ms_per_frame": 0.3946333437499999,
+              "total_passes": 64
+            }
+          },
+          "lod_settle_ms": 29258
+        },
+        "coast": {
+          "samples": 64,
+          "gpu_ms_mean": 7.22441359375,
+          "repeat_gpu_medians_ms": [
+            6.921717,
+            7.037081
+          ],
+          "repeat_gpu_p95_ms": [
+            9.770449000000001,
+            9.853003000000001
+          ],
+          "cpu_submit_ms_mean": 1.1156249999985448,
+          "raf_interval_ms_mean": 7.2687499999999545,
+          "draw_calls": 100,
+          "triangles": 1468543,
+          "grid_spacings_m": [
+            5,
+            10,
+            20,
+            40,
+            80,
+            160
+          ],
+          "active_patches": 100,
+          "estimated_geometry_mib": 2010.525478363037,
+          "worker": {
+            "mode": "worker",
+            "fallbackReason": null,
+            "completedBuilds": 1194,
+            "workerBuildMs": 14.700000000186265,
+            "mainAttachMs": 0,
+            "normalSyncMs": 2.800000000046566,
+            "pending": 0
+          },
+          "refinement": {
+            "commits": 48,
+            "lastType": "merge",
+            "lastCommitMs": 371.60000000009313,
+            "pendingPatches": 0,
+            "selectionDelayMs": 80,
+            "active": false,
+            "desiredPatches": 0
+          },
+          "stages": {
+            "temporal_resolve": {
+              "mean_ms_per_frame": 0.30820996874999995,
+              "total_passes": 64
+            },
+            "cloud_integrate": {
+              "mean_ms_per_frame": 0.09343014062499999,
+              "total_passes": 4
+            },
+            "cloud_columns": {
+              "mean_ms_per_frame": 0.07177975,
+              "total_passes": 8
+            },
+            "spectrum": {
+              "mean_ms_per_frame": 0.15615215624999995,
+              "total_passes": 640
+            },
+            "main_scene": {
+              "mean_ms_per_frame": 5.971653953124998,
+              "total_passes": 64
+            },
+            "cloud_composite": {
+              "mean_ms_per_frame": 0.300739296875,
+              "total_passes": 64
+            },
+            "present": {
+              "mean_ms_per_frame": 0.322448328125,
+              "total_passes": 64
+            }
+          },
+          "lod_settle_ms": 16225
+        },
+        "regional": {
+          "samples": 64,
+          "gpu_ms_mean": 29.593158234374997,
+          "repeat_gpu_medians_ms": [
+            28.338852,
+            28.640348000000003
+          ],
+          "repeat_gpu_p95_ms": [
+            31.579617000000006,
+            37.897743
+          ],
+          "cpu_submit_ms_mean": 2.2937500000007276,
+          "raf_interval_ms_mean": 30.815625000000182,
+          "draw_calls": 134,
+          "triangles": 5805097,
+          "grid_spacings_m": [
+            40
+          ],
+          "active_patches": 35,
+          "estimated_geometry_mib": 2047.6463470458984,
+          "worker": {
+            "mode": "worker",
+            "fallbackReason": null,
+            "completedBuilds": 1573,
+            "workerBuildMs": 486,
+            "mainAttachMs": 0,
+            "normalSyncMs": 11,
+            "pending": 0
+          },
+          "refinement": {
+            "commits": 60,
+            "lastType": "merge",
+            "lastCommitMs": 858.6000000000931,
+            "pendingPatches": 0,
+            "selectionDelayMs": 80,
+            "active": false,
+            "desiredPatches": 0
+          },
+          "stages": {
+            "temporal_resolve": {
+              "mean_ms_per_frame": 0.5347408124999999,
+              "total_passes": 64
+            },
+            "cloud_integrate": {
+              "mean_ms_per_frame": 0.1543236875,
+              "total_passes": 4
+            },
+            "cloud_columns": {
+              "mean_ms_per_frame": 0.07236403125,
+              "total_passes": 8
+            },
+            "spectrum": {
+              "mean_ms_per_frame": 0.163027609375,
+              "total_passes": 640
+            },
+            "main_scene": {
+              "mean_ms_per_frame": 28.012588093749997,
+              "total_passes": 64
+            },
+            "cloud_composite": {
+              "mean_ms_per_frame": 0.31151726562499993,
+              "total_passes": 64
+            },
+            "present": {
+              "mean_ms_per_frame": 0.34459673437499994,
+              "total_passes": 64
+            }
+          },
+          "lod_settle_ms": 24423
+        }
+      },
+      "measurement_samples_complete": true
+    },
+    "final": {
+      "browser": "157.0.4341.46",
+      "hardware": {
+        "renderer": "ANGLE (Intel, Intel(R) Graphics (0x00007D67) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "powerPreference": "high-performance"
+      },
+      "methodology": {
+        "viewport": [
+          1280,
+          800
+        ],
+        "deviceScaleFactor": 1,
+        "temporalScale": 0.75,
+        "detailLimitM": 5,
+        "verticalScale": 1,
+        "vegetation": "high",
+        "budgetFeedback": "disabled for repeatable settled comparisons",
+        "timing": "Two repetitions of 16 warm-up and 32 sampled settled frames per view; EXT_disjoint_timer_query_webgl2 per render pass; CPU submission excludes LOD construction; rAF intervals include headless scheduling and are not user-facing FPS"
+      },
+      "views": {
+        "soil": {
+          "samples": 64,
+          "gpu_ms_mean": 26.200316531249996,
+          "repeat_gpu_medians_ms": [
+            26.247654,
+            25.72505
+          ],
+          "repeat_gpu_p95_ms": [
+            27.568055,
+            27.265675
+          ],
+          "cpu_submit_ms_mean": 3.8953124999898137,
+          "raf_interval_ms_mean": 27.017187499999864,
+          "draw_calls": 209,
+          "triangles": 7128350,
+          "grid_spacings_m": [
+            5,
+            10,
+            20,
+            40,
+            80,
+            160
+          ],
+          "active_patches": 130,
+          "estimated_geometry_mib": 2047.2389221191406,
+          "worker": {
+            "mode": "worker",
+            "fallbackReason": null,
+            "completedBuilds": 767,
+            "workerBuildMs": 20.800000000279397,
+            "mainAttachMs": 0,
+            "normalSyncMs": 13.599999999627471,
+            "pending": 0
+          },
+          "refinement": {
+            "commits": 30,
+            "lastType": "merge",
+            "lastCommitMs": 3685.899999999907,
+            "pendingPatches": 0,
+            "selectionDelayMs": 80,
+            "active": false,
+            "desiredPatches": 0
+          },
+          "stages": {
+            "temporal_resolve": {
+              "mean_ms_per_frame": 0.7137967812499999,
+              "total_passes": 64
+            },
+            "cloud_integrate": {
+              "mean_ms_per_frame": 0.010524078125000001,
+              "total_passes": 4
+            },
+            "cloud_columns": {
+              "mean_ms_per_frame": 0.06987625,
+              "total_passes": 8
+            },
+            "spectrum": {
+              "mean_ms_per_frame": 0.15623478124999998,
+              "total_passes": 640
+            },
+            "main_scene": {
+              "mean_ms_per_frame": 24.5610013125,
+              "total_passes": 64
+            },
+            "cloud_composite": {
+              "mean_ms_per_frame": 0.30458453125000007,
+              "total_passes": 64
+            },
+            "present": {
+              "mean_ms_per_frame": 0.384298796875,
+              "total_passes": 64
+            }
+          },
+          "lod_settle_ms": 28902
+        },
+        "coast": {
+          "samples": 64,
+          "gpu_ms_mean": 7.511944000000001,
+          "repeat_gpu_medians_ms": [
+            7.320503000000001,
+            7.311337
+          ],
+          "repeat_gpu_p95_ms": [
+            9.730971000000007,
+            9.755969
+          ],
+          "cpu_submit_ms_mean": 1.6218750000407454,
+          "raf_interval_ms_mean": 7.923437500000091,
+          "draw_calls": 100,
+          "triangles": 1468543,
+          "grid_spacings_m": [
+            5,
+            10,
+            20,
+            40,
+            80,
+            160
+          ],
+          "active_patches": 100,
+          "estimated_geometry_mib": 2010.525478363037,
+          "worker": {
+            "mode": "worker",
+            "fallbackReason": null,
+            "completedBuilds": 1194,
+            "workerBuildMs": 17.700000000186265,
+            "mainAttachMs": 0,
+            "normalSyncMs": 3.6000000000931323,
+            "pending": 0
+          },
+          "refinement": {
+            "commits": 48,
+            "lastType": "merge",
+            "lastCommitMs": 434.39999999990687,
+            "pendingPatches": 0,
+            "selectionDelayMs": 80,
+            "active": false,
+            "desiredPatches": 0
+          },
+          "stages": {
+            "temporal_resolve": {
+              "mean_ms_per_frame": 0.29765985937500006,
+              "total_passes": 64
+            },
+            "cloud_integrate": {
+              "mean_ms_per_frame": 0.09323075,
+              "total_passes": 4
+            },
+            "cloud_columns": {
+              "mean_ms_per_frame": 0.075973265625,
+              "total_passes": 8
+            },
+            "spectrum": {
+              "mean_ms_per_frame": 0.15872645312499994,
+              "total_passes": 640
+            },
+            "main_scene": {
+              "mean_ms_per_frame": 6.177453140625,
+              "total_passes": 64
+            },
+            "cloud_composite": {
+              "mean_ms_per_frame": 0.38089071875,
+              "total_passes": 64
+            },
+            "present": {
+              "mean_ms_per_frame": 0.32800981249999994,
+              "total_passes": 64
+            }
+          },
+          "lod_settle_ms": 18735
+        },
+        "regional": {
+          "samples": 64,
+          "gpu_ms_mean": 29.27632965625,
+          "repeat_gpu_medians_ms": [
+            28.061233,
+            29.81505
+          ],
+          "repeat_gpu_p95_ms": [
+            31.460191000000002,
+            33.369981999999986
+          ],
+          "cpu_submit_ms_mean": 2.6859375000130967,
+          "raf_interval_ms_mean": 29.621875000000045,
+          "draw_calls": 134,
+          "triangles": 5805097,
+          "grid_spacings_m": [
+            40
+          ],
+          "active_patches": 35,
+          "estimated_geometry_mib": 2047.6463470458984,
+          "worker": {
+            "mode": "worker",
+            "fallbackReason": null,
+            "completedBuilds": 1573,
+            "workerBuildMs": 467.89999999990687,
+            "mainAttachMs": 0.10000000009313226,
+            "normalSyncMs": 3.1999999997206032,
+            "pending": 0
+          },
+          "refinement": {
+            "commits": 60,
+            "lastType": "merge",
+            "lastCommitMs": 869.1999999997206,
+            "pendingPatches": 0,
+            "selectionDelayMs": 80,
+            "active": false,
+            "desiredPatches": 0
+          },
+          "stages": {
+            "temporal_resolve": {
+              "mean_ms_per_frame": 0.45726195312500006,
+              "total_passes": 64
+            },
+            "cloud_integrate": {
+              "mean_ms_per_frame": 0.15353104687500002,
+              "total_passes": 4
+            },
+            "cloud_columns": {
+              "mean_ms_per_frame": 0.06950435937499999,
+              "total_passes": 8
+            },
+            "spectrum": {
+              "mean_ms_per_frame": 0.16330095312499998,
+              "total_passes": 640
+            },
+            "main_scene": {
+              "mean_ms_per_frame": 27.76862421875,
+              "total_passes": 64
+            },
+            "cloud_composite": {
+              "mean_ms_per_frame": 0.3037788281250001,
+              "total_passes": 64
+            },
+            "present": {
+              "mean_ms_per_frame": 0.360328296875,
+              "total_passes": 64
+            }
+          },
+          "lod_settle_ms": 26846
+        }
+      },
+      "measurement_samples_complete": true
+    }
+  },
+  "surfValidation": {
+    "heights": [
+      0.8801783919334412,
+      0.9816151857376099,
+      0.5757282376289368,
+      0.36199280619621277,
+      0.3685176968574524,
+      0.43412768840789795,
+      0.40369924902915955,
+      0.36809104681015015
+    ],
+    "contact": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "periodSeconds": 6.25,
+    "maximumDisplacementErrorM": 1.9219642227730205e-06,
+    "maximumNormalComponentError": 0.0002076403575067944
+  },
+  "integration": {
+    "complete": true,
+    "errors": [],
+    "sleep": {
+      "frames": [
+        406,
+        406
+      ],
+      "clock": [
+        10,
+        10
+      ]
+    },
+    "rainProbe": {
+      "vertexCount": 4400,
+      "checkedVertices": 2317,
+      "maxAnchorErrorM": 7.62939453125e-06,
+      "maxVelocityErrorM": 2.1051168441782453e-05,
+      "anchorShiftM": [
+        1.25,
+        0.5,
+        -0.75
+      ],
+      "timeStepSeconds": 0.05,
+      "source": "actual rain material vertex shader",
+      "edgePolicy": "only samples safely inside wrap volume"
+    }
+  },
+  "evidence": [
+    "baseline-profile.json",
+    "final-profile.json",
+    "figures-profile.json",
+    "ocean-final/ocean-report.json"
+  ],
+  "scope": "Single-device headless real-driver WebGL2 experiment; no FPS or universal performance claim."
+}

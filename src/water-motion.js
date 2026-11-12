@@ -7,6 +7,14 @@
 
   // WAVES: [direction in radians, wavelength in metres, amplitude in metres, initial phase in radians]. Horizontal orbit amplitude is 0.55 times vertical amplitude.
   const WAVES = [[0.45, 512, 1.2, 0], [1.35, 192, 0.7, 1.7], [-0.55, 72, 0.35, 3.1]];
+  // Slowly travelling wave sets modulate breaking energy. X/Z coefficients are radians/metre;
+  // the time coefficient is radians/second. The shared envelope stays within [0.25, 1].
+  const SURF_GROUPS = [[0.013, 0.009, -0.13, 0.28], [0.023, -0.017, 0.21, 0.22]];
+  function surfStrength(x, z, time) {
+    let envelope = 0.5;
+    for (const [kx, kz, speed, weight] of SURF_GROUPS) envelope += weight * Math.sin(x * kx + z * kz + time * speed);
+    return 0.25 + 0.75 * envelope * envelope;
+  }
   const smooth = (a, b, x) => {
     const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
     return t * t * (3 - 2 * t);
@@ -31,11 +39,24 @@
       return 6.28318530718 * (distance / 48.0 + uSeaTime * 0.16
         + sin(p.x*0.019+p.y*0.013)*0.16 + sin(p.x*0.047-p.y*0.031)*0.09);
     }
+    float surfStrength(vec2 p, float time) {
+      float envelope = 0.5;
+      ${SURF_GROUPS.map(([kx, kz, speed, weight]) => `envelope += ${weight} * sin(dot(p,vec2(${kx},${kz}))+time*${speed});`).join('\n      ')}
+      return 0.25+0.75*envelope*envelope;
+    }
+    vec2 surfStrengthGradient(vec2 p) {
+      float envelope = 0.5;
+      vec2 gradient = vec2(0.0);
+      ${SURF_GROUPS.map(([kx, kz, speed, weight], i) => `float groupPhase${i}=dot(p,vec2(${kx},${kz}))+uSeaTime*${speed};
+      envelope += ${weight}*sin(groupPhase${i});
+      gradient += ${weight}*cos(groupPhase${i})*vec2(${kx},${kz});`).join('\n      ')}
+      return 1.5*envelope*gradient;
+    }
     // Keep nonlinear displacement outside the extra contour refinements (<16 m)
     // and inside the uniformly fine surf strip (<65 m).
     float breakerHeight(vec2 p, float distance) {
       float crest = pow(0.5 + 0.5*sin(surfPhase(p,distance)), 4.0);
-      return 1.30 * uSeaWeather * crest * smoothstep(16.0,24.0,distance)
+      return 1.30 * uSeaWeather * surfStrength(p,uSeaTime) * crest * smoothstep(16.0,24.0,distance)
         * (1.0-smoothstep(25.0,65.0,distance));
     }
     vec3 seaOffset(vec2 p) {
@@ -116,9 +137,9 @@
         float fall = 1.0-fallT*fallT*(3.0-2.0*fallT);
         float riseDerivative = 6.0*riseT*(1.0-riseT)/8.0;
         float fallDerivative = -6.0*fallT*(1.0-fallT)/40.0;
-        vec2 breakerGradient = 1.30*uSeaWeather*(edgeFade*(crestGradient*rise*fall
+        vec2 breakerGradient = 1.30*uSeaWeather*(surfStrength(p,uSeaTime)*(edgeFade*(crestGradient*rise*fall
           + crest*(riseDerivative*fall+rise*fallDerivative)*shoreGradient)
-          + crest*rise*fall*edgeFadeGradient);
+          + crest*rise*fall*edgeFadeGradient)+crest*rise*fall*edgeFade*surfStrengthGradient(p));
         tangentX.y += breakerGradient.x;
         tangentZ.y += breakerGradient.y;
       }
@@ -347,7 +368,7 @@
     const original = materials.top.onBeforeCompile;
     materials.top.name = 'Noto spectral wind sea and long swell';
     materials.top.userData.temporalReactive = true;
-    materials.top.customProgramCacheKey = () => 'noto-water-filtered-wind-v8';
+    materials.top.customProgramCacheKey = () => 'noto-water-grouped-surf-v9';
     materials.top.defaultAttributeValues = {
       ...materials.top.defaultAttributeValues,
       notoSeaEdge: [0, 0, 0, 0]
@@ -423,7 +444,8 @@
           crest = mix(crest,0.12,distantSurf);
           float wake = pow(0.5+0.5*sin(phase-0.95),3.0);
           float residue = (1.0-smoothstep(14.0,49.0,distanceToShore))*wake*coverage*0.30;
-          surfFoam = shoreZone*(crest*(0.05+coverage*0.95)*lace*1.85+residue);
+          // The same moving wave set controls displaced crests, breaking foam and spray.
+          surfFoam = surfStrength(foamP,uSeaTime)*shoreZone*(crest*(0.05+coverage*0.95)*lace*1.85+residue);
         }
         float oceanCrest = max(oceanLarge.b,oceanSmall.b*0.80);
         // Only compressed positive crests aerate; the proxy is deliberately sparse in calm weather.
@@ -554,7 +576,7 @@ Convert to pixel indices, clamp and interpolate four samples. Returns approximat
       }
       const distance = shoreAt(x, z);
       const phase = 2 * Math.PI * (distance / 48 + time * 0.16 + Math.sin(x * 0.019 + z * 0.013) * 0.16 + Math.sin(x * 0.047 - z * 0.031) * 0.09);
-      out[1] += 1.30 * uniforms.uSeaWeather.value * Math.pow(0.5 + 0.5 * Math.sin(phase), 4) * smooth(16, 24, distance) * (1 - smooth(25, 65, distance)) * smooth(0, 80, Math.min(source.widthM / 2 - Math.abs(x), source.heightM / 2 - Math.abs(z)));
+      out[1] += 1.30 * uniforms.uSeaWeather.value * surfStrength(x, z, time) * Math.pow(0.5 + 0.5 * Math.sin(phase), 4) * smooth(16, 24, distance) * (1 - smooth(25, 65, distance)) * smooth(0, 80, Math.min(source.widthM / 2 - Math.abs(x), source.heightM / 2 - Math.abs(z)));
       return out;
     }
     function decorateLand(shader) {
@@ -565,7 +587,8 @@ Convert to pixel indices, clamp and interpolate four samples. Returns approximat
       shader.fragmentShader = shader.fragmentShader.replace('#include <lights_physical_fragment>', `
         float shoreLandDistance = shoreDistance(vNotoObjectPosition.xz);
         if (shoreLandDistance > -10.0 && vNotoObjectPosition.y*uSeaScaleY < 2.2) {
-        float wash = pow(0.5+0.5*sin(surfPhase(vNotoObjectPosition.xz,0.0)-0.35),2.0);
+        float wash = surfStrength(vNotoObjectPosition.xz,uSeaTime)
+          *pow(0.5+0.5*sin(surfPhase(vNotoObjectPosition.xz,0.0)-0.35),2.0);
         float wet = (1.0-smoothstep(0.0,10.0,-shoreLandDistance))
           * (1.0-smoothstep(0.5,2.2,vNotoObjectPosition.y*uSeaScaleY));
         float washFront = (1.0-smoothstep(1.0+wash*3.0,2.5+wash*3.0,-shoreLandDistance))

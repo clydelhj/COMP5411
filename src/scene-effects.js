@@ -155,11 +155,13 @@
         void main() {
           float cycle=fract(surfPhase(position.xz,4.0)/6.28318530718-0.25+aSeed.x*0.12);
           float age=cycle/0.16, life=1.15+aSeed.y*0.35;
+          // Keep each emitted particle's wave-set strength fixed during its flight.
+          float strength=surfStrength(position.xz,uSeaTime-age);
           vec3 p=position;
           p.xz += aDirection*(3.0+aSeed.x*2.0-age*1.4);
-          p.y=(0.12+max(0.0,(3.5+aSeed.y)*age-3.4*age*age))*uSeaWeather/uSeaScaleY;
+          p.y=(0.12+max(0.0,(3.5+aSeed.y)*age-3.4*age*age)*sqrt(strength))*uSeaWeather/uSeaScaleY;
           vec4 view=modelViewMatrix*vec4(p,1.0);
-          vAlpha=(1.0-age/life)*(1.0-smoothstep(450.0,1500.0,-view.z))*0.65;
+          vAlpha=(1.0-age/life)*(1.0-smoothstep(450.0,1500.0,-view.z))*smoothstep(0.25,0.75,strength)*0.65;
           gl_Position=projectionMatrix*view;
           gl_PointSize=clamp((0.22+aSeed.x*0.3)*uSurfPixelScale/max(1.0,-view.z),1.0,8.0);
           if(age>life || view.z>-1.0) { vAlpha=0.0; gl_Position=vec4(2.0,2.0,2.0,1.0); }

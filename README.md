@@ -88,6 +88,8 @@ The renderer requests `powerPreference: "high-performance"`. The browser, operat
 
 See [CODE_GUIDE.md](CODE_GUIDE.md) for the current implementation, [HANDOFF.md](HANDOFF.md) for the maintenance baseline and [REBUILD.md](REBUILD.md) for offline generators. The [progress report](docs/COMP5411_Progress_Report_EN.md) is dated October 18, 2026; its measured results and implementation snapshot precede the current runtime baseline.
 
+The [project report](docs/COMP5411_Project_Report.pdf) describes the November 12 implementation, algorithms, representative technical challenges, performance measurements and AI/external-code contributions. Its editable text is in `docs/project-report-source.json`; regenerate the PDF with `python scripts/build_project_report.py` after installing ReportLab.
+
 The [progress presentation](docs/COMP5411_Project_Progress.pptx) and [timed narration](docs/COMP5411_Progress_Video_Script_EN.txt) describe the October 20 viewer. The recording plan targets 3:50, including a 70-second recap and 115 seconds of actual application footage. Slides 4–6 provide still-image cues; demonstrate animation and interaction in the running viewer when recording the video.
 
 ## Data interpretation and licensing

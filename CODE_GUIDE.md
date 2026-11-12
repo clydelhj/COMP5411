@@ -1,6 +1,6 @@
 # Code guide
 
-Current runtime baseline: November 4, 2026. All paths below are relative to the directory containing `index-1m.html`.
+Current runtime baseline: November 12, 2026. All paths below are relative to the directory containing `index-1m.html`.
 
 ## Structure
 
@@ -169,7 +169,11 @@ Owned render-target dimensions are physical pixels. Binding a target selects its
 
 `ocean-backdrop.js` draws the matching sky and four offshore strips totalling 2,304 triangles. The strips lie outside the DEM crop, extend only existing ocean edges, and fade out in regional/interior views. They are an illustrative distant horizon, not additional measured terrain or bathymetry. Sky and water remain reactive to temporal reconstruction. These water effects are parameterized visual animation, not a fluid solver or validated ocean prediction.
 
+Nearshore breaker height uses a deterministic moving wave-group envelope in the range 0.25-1. The same envelope scales foam and wet wash. Its analytic gradient contributes to water normals, and CPU height queries share the coefficient table used to generate GLSL. Spray samples wave strength at emission time and keeps it constant during flight. This varies successive crests without increasing the existing displacement bound or moving the exact shoreline contact; it is an illustrative surf treatment.
+
 The environment uses a NOAA-style solar approximation at the model center, selected date and fixed GMT+9 time. Clear/cloudy/rainy presets affect sky, fog, lights, waves and rain. Local PCF shadows follow the view and reuse their map when possible. The pointer flashlight ray-tests the displayed height field instead of traversing every terrain triangle. Rain, spray and wind use GPU animation and the shared scene clock.
+
+Rain has a fixed 1200/2200-drop population. World-space trajectories wrap into a 180 by 130 by 180 m volume centered on the camera: subtract the anchor before modulo and add it afterward, so camera motion does not translate an existing drop between wraps. Stable per-drop attributes vary fall speed (9-15 m/s), exposure (0.035-0.055 s) and wind response. Radial and vertical fades hide wrap boundaries; streak tails taper. Camera/clock updates change uniforms without rewriting particle buffers. Weather presets remain immediate, and rain does not simulate terrain/water impacts.
 
 ## Rendering and adaptation
 
@@ -216,6 +220,8 @@ See [REBUILD.md](REBUILD.md) for source locations, dependencies and portable reb
 The dated [progress report](docs/COMP5411_Progress_Report_EN.md) preserves October 18 measurements. Its uniform-visible-LOD description is historical; this guide describes the current local selection. Targeted October 19 checks covered all 12 detail limits, selection coverage/budget/fallback, mixed land/water edges, stable small camera turns, grass attachment, sleep and file/HTTP loading. October 20 checks covered tree attachment across representative detail limits and 1/5/10 height scales, independent grass/tree visibility combinations, sleep and both entry modes. Full device coverage, long navigation sessions and final presentation acceptance remain incomplete.
 
 ## Focused regression tests
+
+Run `node --test tests/environment.test.cjs` for deterministic rain variation, shared endpoint parameters, fixed buffers and clock freezing. Real-browser checks are still required for shader compilation and camera-independent world trajectories. Ocean browser fixtures also probe eight successive grouped crests, CPU/GPU displacement and normals, amplitude bounds and stationary coast contact.
 
 Run `node --test tests/model-volume.test.cjs` for index-storage fixtures. They cover the 65534/65535/65536 index boundary, existing restart values and invalid generated references, plus exact triangle winding, holes and computed normals. The Worker tests also check small-index transfer and preservation of vertex 65535 in a large mesh.
 

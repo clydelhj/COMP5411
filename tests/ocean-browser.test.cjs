@@ -66,6 +66,12 @@ test('ocean surface, atmosphere, sunset shading and idle behavior run in actual 
       assert(Math.max(...probe.cpu.map((value, index) => Math.abs(value - probe.gpu[index]))) < 0.02,
         'analytic macro normal agrees with numerical surface tangents at ' + probe.point);
     }
+    assert(Math.max(...report.surfGroups.heights) - Math.min(...report.surfGroups.heights) > 0.08,
+      'successive nearshore crests form varying-strength wave sets');
+    assert(report.surfGroups.heights.every(value => value >= 0 && value <= 1.3),
+      'grouped breaking crests remain within the existing amplitude bound');
+    assert(report.surfGroups.contact.every(value => Math.abs(value) < 0.0001),
+      'varying surf sets keep the exact shoreline contact stationary');
     assert.deepEqual(report.scale.after, report.scale.before, 'vertical exaggeration does not multiply physical wave amplitudes');
     assert(report.weather.change.changedPixels > 500, 'weather changes the water image');
     assert(report.night.luminance < report.night.daylight * 0.8, 'water does not remain bright blue at night');

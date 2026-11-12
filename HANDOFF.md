@@ -1,6 +1,6 @@
 # Maintenance handoff
 
-Baseline date: November 4, 2026. Project: **Noto Peninsula: An Interactive 3D Landscape**, COMP5411 Group 12, LEE Hyunjin and TAN Jiming.
+Baseline date: November 12, 2026. Project: **Noto Peninsula: An Interactive 3D Landscape**, COMP5411 Group 12, LEE Hyunjin and TAN Jiming.
 
 ## Entry and documentation
 
@@ -11,6 +11,7 @@ Baseline date: November 4, 2026. Project: **Noto Peninsula: An Interactive 3D La
 - `TEXTURE-SOURCES.md`, `LICENSES-AND-SOURCES.md`: asset sources, channel conventions and terms.
 - `docs/COMP5411_Proposal.pdf`: proposal and course-week milestones.
 - `docs/COMP5411_Progress_Report_EN.md`: dated October 18 progress report, including then-current measurements and figures. Current architecture is described in `CODE_GUIDE.md`.
+- `docs/COMP5411_Project_Report.pdf`: current English project report, in the proposal's A4 academic format. Editable content is `docs/project-report-source.json`; figures and measured evaluation are in `docs/project-report-assets/`. Run `python scripts/build_project_report.py` with ReportLab to regenerate it.
 
 Keep runtime paths relative to the root. Asset distribution instructions govern any large files outside Git. Running the viewer does not require opening or processing the original TIFF, contacting external services, or installing npm dependencies.
 
@@ -47,6 +48,10 @@ Mixed-detail land edges match the actual coarse surface, including shoreline sub
 Generated 16-bit indices must stay below 65535 because WebGL2 reserves that value for primitive restart. Preserve triangle order, exact attributes and the Worker's typed-array transfers; compact indices again after seam topology changes. Larger references retain 32-bit storage, and existing 16-bit buffers keep their original restart interpretation.
 
 Ocean geometry retains long swells and CPU/GPU displacement parity. The two 128-square GPU FFT fields supply filtered slopes/crest shading; do not describe them as a fully spectral displaced mesh or fluid solver. Preserve FFT sign consistency: positive crests compress, and normals use choppy tangent derivatives. Shared clock updates are capped at 20 Hz; no-water/unchanged-time frames do not transform the fields. Float-target failure keeps analytic water active. Retain the MIT notice in `src/ocean-spectrum.js` and `vendor/ocean/dli-waves-LICENSE.txt`.
+
+The nearshore wave-group envelope remains within 0.25-1 and shares coefficients between CPU and GLSL. Preserve its product-rule normal derivative and shared influence on breaker geometry, foam and wet wash. Spray samples emission-time strength so its modulation does not change during flight. Exact shore contact and the previous maximum displacement bound remain intact.
+
+Rain uses fixed buffers and world-anchored periodic trajectories. The camera selects nearby copies without dragging drops; fade before all wrap boundaries. Keep paired endpoint motion parameters, the shared clock and no particle-buffer uploads during navigation. Presets remain immediate, and rain has no terrain/water collision simulation.
 
 Terrain reflection uses only original coarse height/land grids, at most 150,000 front-facing proxy triangles and a 512 × 288 mipmapped target. Never pass a refined land mesh or render the main detailed scene again. Cache stable captures; view, terrain-scale and lighting changes invalidate them. Captures use millisecond frame timestamps, throttle to 10 Hz and have finite settling. Update camera/terrain world matrices before capturing. Restore renderer state, keep reflected targets linear, and let empty texels show the shared sky. Filtered RGB is coverage-weighted: do not multiply it by alpha twice, and let land coverage occlude the reflected sun. The outside-crop horizon is illustrative and must extend only crop edges already classified as ocean. Preserve its regional fade and frustum visibility check. Water tops, cuts, horizon and analytic sky are current-frame effects for temporal reconstruction.
 
