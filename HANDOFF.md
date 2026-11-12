@@ -11,7 +11,6 @@ Baseline date: November 12, 2026. Project: **Noto Peninsula: An Interactive 3D L
 - `TEXTURE-SOURCES.md`, `LICENSES-AND-SOURCES.md`: asset sources, channel conventions and terms.
 - `docs/COMP5411_Proposal.pdf`: proposal and course-week milestones.
 - `docs/COMP5411_Progress_Report_EN.md`: dated October 18 progress report, including then-current measurements and figures. Current architecture is described in `CODE_GUIDE.md`.
-- `docs/COMP5411_Project_Report.pdf`: current English project report, in the proposal's A4 academic format. Editable content is `docs/project-report-source.json`; figures and measured evaluation are in `docs/project-report-assets/`. Run `python scripts/build_project_report.py` with ReportLab to regenerate it.
 
 Keep runtime paths relative to the root. Asset distribution instructions govern any large files outside Git. Running the viewer does not require opening or processing the original TIFF, contacting external services, or installing npm dependencies.
 

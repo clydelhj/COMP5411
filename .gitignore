@@ -12,3 +12,9 @@
 __pycache__/
 *.py[cod]
 *.log
+
+# Local project-report deliverables.
+/docs/COMP5411_Project_Report.pdf
+/docs/project-report-source.json
+/docs/project-report-assets/
+/scripts/build_project_report.py
