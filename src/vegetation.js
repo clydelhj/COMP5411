@@ -305,7 +305,7 @@
           geometry.setIndex(new THREE.BufferAttribute(await unpack(packed.index, Uint32Array), 1));
           geometry.computeBoundingBox();
           const limit = tree ? packed.level === 'near' ? LIMITS.nearTrees : LIMITS.middleTrees : LIMITS.herbs;
-          const mesh = new THREE.InstancedMesh(geometry, materials[part.material], limit);
+          const mesh = global.NotoInstanceBuffers.create(THREE, geometry, materials[part.material], limit);
           mesh.count = 0;
           mesh.castShadow = true;
           mesh.receiveShadow = true;
@@ -388,7 +388,7 @@
               toneMapped: false
             });
             configureFade(material);
-            const mesh = new THREE.InstancedMesh(geometry, material, LIMITS.farTrees);
+            const mesh = global.NotoInstanceBuffers.create(THREE, geometry, material, LIMITS.farTrees);
             mesh.count = 0;
             mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
             mesh.frustumCulled = false;
@@ -772,11 +772,12 @@
       }
     }
     function commitPlacement(prepared) {
-      // Keep attribute identities and upload only populated prefixes, not maximum pool capacity.
+      // Retain storage until growth is needed, then upload only populated prefixes.
       for (const pool of pools) {
         const buffer = prepared.buffers.get(pool), mesh = pool.mesh;
         mesh.count = buffer?.count ?? 0;
         if (!mesh.count) continue;
+        global.NotoInstanceBuffers.reserve(THREE, mesh, mesh.count, pool.limit);
         if (!mesh.instanceColor) {
           mesh.setColorAt(0, plantColor);
           mesh.material.needsUpdate = true;

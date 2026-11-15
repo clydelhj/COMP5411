@@ -12,6 +12,7 @@ Current runtime baseline: November 15, 2026. All paths below are relative to the
 │   ├── terrain.js
 │   ├── terrain-lod.js
 │   ├── terrain-refinement.js
+│   ├── terrain-upload-queue.js
 │   ├── temporal-reconstruction.js
 │   ├── geometry-worker.js
 │   ├── tile-geometry.js
@@ -29,6 +30,7 @@ Current runtime baseline: November 15, 2026. All paths below are relative to the
 │   ├── scene-effects.js
 │   ├── environment.js
 │   ├── ground-grass.js
+│   ├── instance-buffers.js
 │   ├── vegetation.js
 │   └── styles.css
 ├── scripts/
@@ -57,6 +59,7 @@ Large runtime/source assets may be distributed separately; their paths after ins
 | `terrain.js` | Scene setup, asynchronous loads, caches, camera safety, settings, performance feedback and frame scheduling |
 | `terrain-lod.js` | Distance-based nested display patches, selection hysteresis, source resampling and display-patch lookup |
 | `terrain-refinement.js` | Progressive local split/merge transactions, near-region priority and displayed-topology validation |
+| `terrain-upload-queue.js` | Bounded preparation of new GPU buffers and patch textures before a local replacement |
 | `temporal-reconstruction.js` | Jittered image reconstruction, static-surface reprojection, history rejection and bounded GPU targets |
 | `geometry-worker.js` | Dedicated Worker, transferable geometry buffers, compact seam/normal messages and main-thread reconstruction |
 | `tile-geometry.js` | Land/water classification, terrain triangles, mixed-detail edges and shared normals |
@@ -77,13 +80,17 @@ Large runtime/source assets may be distributed separately; their paths after ins
 
 ## Startup and resource flow
 
-The HTML uses deferred ordinary scripts. Third-party libraries and the terrain manifest load first; geological configuration precedes material factories. Shared water/shoreline and environment modules precede geometry. Vegetation data and model/grass payloads precede the vegetation runtime. `geometry-worker.js` loads after its geometry dependencies. `terrain-lod.js` and `terrain-refinement.js` load before the final orchestrator, `terrain.js`.
+The HTML uses deferred ordinary scripts. Third-party libraries and the terrain manifest load first; geological configuration precedes material factories. Shared water/shoreline and environment modules precede geometry. Vegetation data and model/grass payloads precede the vegetation runtime, and `instance-buffers.js` precedes both grass and vegetation. `geometry-worker.js` loads after its geometry dependencies. `terrain-lod.js`, `terrain-refinement.js` and `terrain-upload-queue.js` load before the final orchestrator, `terrain.js`.
 
 Load `sky-atmosphere.js` and `cloud-layers.js` before `water-motion.js`: water shares their shader declarations. Bind the controllers with `waterMotion.setAtmosphere()` and `setCloudLayers()` before the first material compilation. `temporal.setPostProcessor(cloudLayers)` attaches the depth-aware cloud compositor.
 
 `temporal-reconstruction.js` loads before the final orchestrator. `terrain.js` decompresses the bundled Three.js modules, prepares the shared classification and texture resources, creates the scene and loads terrain input. Input files call `window.NOTO_TILE_RECEIVE(key, payload)` with compressed height arrays. Heights decode as `uint16 / 100 - 100` metres, with 65535 reserved for NoData.
 
 Geometric and material resources are prepared off the active set. A local split/merge transaction replaces one parent or its displayed descendants, together with neighbors whose seam context changes. Existing coverage remains visible while that transaction builds; unrelated regions do not wait for the full final selection. Independent patch resources are released on cache eviction; shared material arrays, water textures and vegetation resources belong to their factories, not individual terrain patches.
+
+`prepareShaderPrograms()` prepares the direct-output and linear offscreen material variants through Three.js `compileAsync()` before new terrain is published. Startup preparation includes colored plant instancing. On devices with parallel shader compilation, completion is awaited without holding a temporary render target or viewport across the wait. Without that extension, explicit preparation is restricted to loading coarse coverage. This prepares main material programs; it does not guarantee precompilation of every shadow/depth variant. `terrainViewer.getState().shaderWarmup` exposes completion and pending state.
+
+`terrain-upload-queue.js` prepares patch GPU resources through public Three.js APIs. A shared simple material and a 1 × 1 target upload one mesh's buffers with a temporary one-triangle draw range; the range and caller render state are restored immediately. Patch height textures use separate `initTexture()` jobs. Preparation starts while subsequent Worker construction continues, and local replacement waits for the final seam-normal versions as well. A batch yields after a 4 ms target or four jobs, then resumes in a task after a browser frame. An individual driver call cannot be interrupted, so this is a cooperative budget rather than a hard frame-time guarantee. Spreading preparation can lengthen full-scene background convergence; existing near detail remains visible while the remaining work finishes. Hidden pages pause the queue; eviction cancels owned jobs before releasing resources. No queue work is scheduled once it is empty. `terrainViewer.getState().terrainUploads` exposes pending jobs, completion and measured batch/job durations.
 
 ## Background geometry and bounded plant updates
 
@@ -95,7 +102,9 @@ Boundary vertex indices, positions and original normals are prepared in the Work
 
 Compact-edge extraction classifies each vertex against the four patch boundary planes once. A bitwise intersection rejects interior triangle edges before allocating deduplication keys. Accepted edges retain their original traversal order and endpoint values, including coastal subdivisions and mixed-detail boundaries.
 
-Plant and grass placement use cooperative generators with a 3 ms target slice. Candidate scans, distance sorting and instance preparation span multiple requested frames. A completed snapshot replaces the old instance set atomically. Camera motion schedules a later snapshot without continually restarting the current one; terrain/settings invalidation cancels stale work. Shared GPU attributes retain their identities and upload only populated ranges. This is bounded main-thread scheduling, not a plant Worker or a guarantee that every individual operation completes within 3 ms.
+Plant and grass placement use cooperative generators with a 3 ms target slice. Candidate scans, distance sorting and instance preparation span multiple requested frames. A completed snapshot replaces the old instance set atomically. Camera motion schedules a later snapshot without continually restarting the current one; terrain/settings invalidation cancels stale work. This is bounded main-thread scheduling, not a plant Worker or a guarantee that every individual operation completes within 3 ms.
+
+`instance-buffers.js` starts each plant/grass pool at up to 256 instances, with instance colors present before shader preparation. Capacity grows to the required population or twice the previous capacity, bounded by the unchanged population limit. Growth releases the previous instance GPU buffers through `InstancedMesh.dispose()` and replaces their CPU arrays before the complete prepared snapshot is copied. Grass also renews its owned slope attribute. Between growth events, attribute identities are stable and populated update ranges restrict subsequent uploads. First allocation uploads the entire capacity, so keeping capacity proportional to population matters. Growth does not thin plants or change positions.
 
 ## Terrain data and local LOD
 
@@ -118,6 +127,8 @@ The initial base-cell budget is approximately 2 × 1024² on the higher starting
 ## Coast and volume
 
 Land and sea are clipped against the same zero contour of an 8 m sampled and smoothed shoreline-distance field. Shared edge intersection rules prevent independent boundary estimates from opening gaps. Coastal contour segments are refined to at most 8 m, with a 0.03 m distance-field residual target and a 0.5 m recursion floor. These values describe approximation to the display field, not survey accuracy.
+
+The contour uses convex cubic B-spline sampling inside a 16 m band, blending back to the original bilinear field between 16 and 32 m. This removes cell-boundary tangent jumps without changing the stored distance field or DEM. Worker geometry and CPU height/wave queries use the same sampler; water and wetness use matching GLSL with four additional base-level bilinear fetches in the narrow band. Distant samples retain the single-fetch path. The spline smooths the display coastline; it does not recover sub-grid surveyed features.
 
 Inside the coast, the nearest 16 m is held at mean sea level. A smooth transition restores the original displayed height over the following 48 m. A 72 m coastal band retains fine triangles for local wave/contact effects. This display contact profile is separate from the unchanged source DEM. The outer model boundary closes at −100 m; no real seabed bathymetry is inferred.
 
@@ -173,11 +184,15 @@ The sky lookup unwraps longitude derivatives before mip selection and uses `text
 
 Owned render-target dimensions are physical pixels. Binding a target selects its physical viewport; calling `renderer.setViewport()` with those dimensions would apply the canvas pixel ratio again. Preserve the caller's logical viewport when restoring state. Fractional ratios above and below one are covered by the GPU fixture.
 
-`ocean-reflection.js` mirrors an owned camera across mean sea level into a 512 × 288 mipmapped linear-color target, approximately 1.31 MiB including estimated depth storage. Its owned front-facing terrain proxy reads original coarse `heights` and `landCells`, never the heavily subdivided coastal mesh, and is capped at 150,000 triangles. Empty texels retain the analytic sky. Projective sampling distorts the reflected silhouette with the water normal and filters it according to roughness. Filtered coverage composites the land once and attenuates the reflected sun. Captures occur only after camera, terrain-scale or lighting changes, throttled to 10 Hz with at most eight settling attempts. Animated waves alone reuse the capture. Plants, detailed geological shading and dynamic shadows are intentionally absent from this coarse reflection. Renderer state is restored after capture.
+`ocean-reflection.js` mirrors an owned camera across mean sea level into a 512 × 288 mipmapped linear-color target, approximately 1.31 MiB including estimated depth storage. Its owned front-facing terrain proxy reads original coarse `heights` and `landCells`, never the heavily subdivided coastal mesh, and is capped at 150,000 triangles. Proxy heights follow the shared coastal contact profile. Vertex colors use stratified, linear-RGB means of the source material photographs with the classification blend kernel; the small proxy pass also samples the shared ground cover and grass masks. Sun and hemisphere illumination match the main scene. This keeps a bright bare coast distinct from forest in its reflection. Empty texels retain the analytic sky. Projective sampling distorts the reflected silhouette with the water normal and filters it according to roughness. Filtered coverage composites the land once and attenuates the reflected sun. Captures occur only after camera, terrain-scale, lighting or ground-cover visibility changes, throttled to 10 Hz with at most eight settling attempts. Animated waves alone reuse the capture. Detailed plant silhouettes, geological normal maps and dynamic shadows are absent from this coarse reflection. Renderer state is restored after capture.
 
 `ocean-backdrop.js` draws the matching sky and four offshore strips totalling 2,304 triangles. The strips lie outside the DEM crop, extend only existing ocean edges, and fade out in regional/interior views. They are an illustrative distant horizon, not additional measured terrain or bathymetry. Sky and water remain reactive to temporal reconstruction. These water effects are parameterized visual animation, not a fluid solver or validated ocean prediction.
 
-Nearshore breaker height uses a deterministic moving wave-group envelope in the range 0.25-1. The same envelope scales foam and wet wash. Its analytic gradient contributes to water normals, and CPU height queries share the coefficient table used to generate GLSL. Spray samples wave strength at emission time and keeps it constant during flight. This varies successive crests without increasing the existing displacement bound or moving the exact shoreline contact; it is an illustrative surf treatment.
+Nearshore breaker height uses a deterministic moving wave-group envelope in the range 0.25-1. The same envelope modulates foam formation and wet wash. Its analytic gradient contributes to water normals, and CPU height queries share the coefficient table used to generate GLSL. Spray samples wave strength at emission time and keeps it constant during flight. This varies successive crests without increasing the existing displacement bound or moving the exact shoreline contact; it is an illustrative surf treatment.
+
+The narrow foam front has a soft, advected metre-scale envelope and leaves a short decaying wake. `water-materials.js` bakes a periodic 512-square RG8 cellular coverage texture once at startup. Its channels store thin and thick aerated films with warped, irregular pores, so mipmaps average coverage rather than thresholding a blurred distance field. Two rotated samples at 8.3 m and 17.9 m repeats supply resolved thickness variation within the nearshore band. The texture uses approximately 0.67 MiB including mipmaps and adds no scene pass. The crest's phase average replaces unresolved fronts at a distance.
+
+Clear water and aerated foam resolve their radiance separately, applying coverage once. Fresnel weights the water's reflected and transmitted light. Foam retains actual direct illumination, terrain/cloud attenuation and pointer lighting, while its ambient response takes the larger of the scene's indirect diffuse light and the existing daylight-scaled water-column sky approximation. This supplies scattered environment light when clouds block the sun without doubling the ambient terms. The sky contribution fades out at night. It is an illustrative scattering approximation, not a multiple-scattering fluid simulation.
 
 The environment uses a NOAA-style solar approximation at the model center, selected date and fixed GMT+9 time. Clear/cloudy/rainy presets affect sky, fog, lights, waves and rain. Local PCF shadows follow the view and reuse their map when possible. The pointer flashlight ray-tests the displayed height field instead of traversing every terrain triangle. Rain, spray and wind use GPU animation and the shared scene clock.
 
@@ -233,7 +248,11 @@ The dated [progress report](docs/COMP5411_Progress_Report_EN.md) preserves Octob
 
 Run `node --test tests/terrain-base-culling.test.cjs` for top/wall/material preservation, cached same-side updates and base restoration above/at/below the plane at different height scales. Browser image and GPU comparisons remain necessary to verify the actual render result.
 
-Run `node --test tests/water-materials.test.cjs` for deterministic half-float wavelet normals, bounded slopes, retained variance and periodic edge continuity. This checks generated CPU texture data; actual texture filtering, shader output and motion require the ocean browser fixture.
+Run `node --test tests/water-materials.test.cjs` for deterministic half-float wavelet normals, bounded slopes, retained variance, periodic edge continuity and bounded thin/thick RG8 foam coverage. This checks generated CPU texture data; actual texture filtering, shader output and motion require the ocean browser fixture.
+
+Run `node --test tests/coastal-field.test.cjs tests/ocean-reflection.test.cjs` for shared coastline tangent continuity, far-field preservation, bounded source-albedo proxy colors, contact heights and lighting/cache behavior. The ocean browser fixture additionally checks actual grass/cover reflection shader compilation and CPU/GPU coastline-distance parity.
+
+Run `node --test tests/instance-buffers.test.cjs tests/shader-preparation.test.cjs tests/terrain-upload-queue.test.cjs` for population-preserving buffer growth/disposal, asynchronous renderer-state restoration, terrain-cache ownership, upload budgets/cancellation and retained coverage during preparation. Input latency and first-use GPU stalls require an actual browser trace; these CPU tests do not establish frame rate.
 
 Run `node --test tests/environment.test.cjs` for deterministic rain variation, shared endpoint parameters, fixed buffers and clock freezing. Real-browser checks are still required for shader compilation and camera-independent world trajectories. Ocean browser fixtures also probe eight successive grouped crests, CPU/GPU displacement and normals, amplitude bounds and stationary coast contact.
 

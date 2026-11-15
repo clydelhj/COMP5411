@@ -58,7 +58,7 @@
     status.textContent = `Unable to load terrain: ${error.message}`;
   }
   try {
-    if (!tileset || !window.NotoCloudLayers || !window.NotoSkyAtmosphere || !window.NotoOceanReflection || !window.NotoOceanSpectrum || !window.NotoOceanBackdrop || !window.NotoTemporalReconstruction || !window.NotoTerrainRefinement || !window.NotoGeometryWorker || !window.NotoTileGeometry || !window.NotoRockMaterials || !window.NotoWaterMaterials || !window.NotoWaterMotion || !window.NotoEnvironment || !window.NotoVegetation) {
+    if (!tileset || !window.NotoCloudLayers || !window.NotoSkyAtmosphere || !window.NotoOceanReflection || !window.NotoOceanSpectrum || !window.NotoOceanBackdrop || !window.NotoTemporalReconstruction || !window.NotoTerrainRefinement || !window.NotoGeometryWorker || !window.NotoTileGeometry || !window.NotoInstanceBuffers || !window.NotoTerrainUploadQueue || !window.NotoRockMaterials || !window.NotoWaterMaterials || !window.NotoWaterMotion || !window.NotoEnvironment || !window.NotoVegetation) {
       throw new Error('Missing local terrain assets. Keep the data, src and vendor folders together.');
     }
     const libraries = window.NOTO_LIBRARIES;
@@ -291,7 +291,10 @@
     controls.maxDistance = Math.max(m.width_m, m.height_m) * 8;
     controls.maxPolarAngle = Math.PI * 0.85;
     controls.screenSpacePanning = true;
-    const oceanReflection = window.NotoOceanReflection.create({ THREE, renderer, camera, terrain, metadata: m });
+    const oceanReflection = window.NotoOceanReflection.create({
+      THREE, renderer, camera, terrain, metadata: m,
+      surfaceMaterials: materialFactory.shared, coastalField
+    });
     waterMotion.setReflection(oceanReflection);
     const environment = window.NotoEnvironment.create({
       THREE,
@@ -540,6 +543,53 @@
     let geometryBytes = 0,
       foregroundBusy = false,
       pendingSelection = null;
+    const shaderWarmup = { completed: 0, pending: 0, lastMs: 0, parallel: renderer.extensions.has('KHR_parallel_shader_compile') };
+    const shaderWarmupTarget = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
+    const terrainUploads = window.NotoTerrainUploadQueue.create({ THREE, renderer, camera, paused: () => document.hidden });
+    function prepareItemUploads(item) {
+      const showBase = camera.position.y <= -100 * terrain.scale.y + 0.01;
+      return terrainUploads.prepare(item, [
+        item.materials?.top.userData.notoTile.heightTexture,
+        ...item.group.children.filter(mesh => showBase || !mesh.userData.notoBaseFace).map(mesh => mesh.geometry)
+      ]);
+    }
+    async function prepareShaderPrograms(object) {
+      // Compile both direct-output and linear offscreen variants before publication.
+      // The latter is used by temporal/cloud capture; waiting on parallel compilation
+      // keeps the first visible grass/terrain frame from synchronously linking programs.
+      // Without parallel compilation, do this only while loading complete coarse
+      // coverage. Later patches share those variants; compiling each one would
+      // synchronously revisit the same programs during navigation.
+      if (!shaderWarmup.parallel && initialized) return;
+      const started = performance.now();
+      shaderWarmup.pending++;
+      try {
+        for (const target of [null, shaderWarmupTarget]) {
+          if (graphicsContext.isContextLost()) throw new Error('WebGL context was lost during shader preparation');
+          const previousTarget = renderer.getRenderTarget();
+          const face = renderer.getActiveCubeFace(), mip = renderer.getActiveMipmapLevel();
+          const viewport = renderer.getViewport(new THREE.Vector4());
+          const scissor = renderer.getScissor(new THREE.Vector4());
+          const scissorTest = renderer.getScissorTest();
+          let preparation;
+          try {
+            renderer.setRenderTarget(target);
+            preparation = renderer.compileAsync(object, camera, scene);
+          } finally {
+            renderer.setRenderTarget(previousTarget, face, mip);
+            renderer.setViewport(viewport);
+            renderer.setScissor(scissor);
+            renderer.setScissorTest(scissorTest);
+          }
+          await preparation;
+        }
+        if (graphicsContext.isContextLost()) throw new Error('WebGL context was lost during shader preparation');
+        shaderWarmup.completed++;
+        shaderWarmup.lastMs = performance.now() - started;
+      } finally {
+        shaderWarmup.pending--;
+      }
+    }
     const refinementState = { commits: 0, lastType: null, lastCommitMs: 0, pendingPatches: 0, selectionDelayMs: 80 };
     const baseCulling = { updates: 0, patches: 0, culledMeshes: 0, culledTriangles: 0, live: null, showBase: null };
     let activeTransition = null;
@@ -662,9 +712,21 @@
             group: meshGroup(geometry, materials),
             bytes: estimateBytes(geometry)
           };
+          await prepareShaderPrograms(item.group);
+          // Another seam context can resolve to this same proven-independent key
+          // while compilation is pending. Keep the existing cache owner once.
+          const preparedEquivalent = geometryCache.get(finalKey);
+          if (preparedEquivalent) {
+            geometry.dispose();
+            materials?.dispose();
+            cacheStats.geometryHits++;
+            return preparedEquivalent;
+          }
           if (tile.file && surfaceCells(tile) > 1000) quality.bytesPerCell = quality.bytesPerCell * 0.95 + item.bytes / surfaceCells(tile) * 0.05;
           geometryCache.set(finalKey, item);
           geometryBytes += item.bytes;
+          // Start GPU preparation without blocking the next Worker construction job.
+          prepareItemUploads(item);
           cacheStats.built++;
           quality.buildMs = quality.buildMs * 0.9 + (performance.now() - started) * 0.1;
           lastBuildAt = performance.now();
@@ -696,6 +758,11 @@
       if (resident && resident !== next) resident.normalsReady = false;
       if (!next.normalsReady && !await geometryBuilder.synchronizeNormals([...next.values()], isCurrent)) return false;
       if (!isCurrent()) return false;
+      // Keep old coverage until both geometry uploads and final seam-normal updates
+      // are ready. Rendering a new frontier must not allocate all its buffers at once.
+      const uploadsReady = await Promise.all([...next.values()].map(prepareItemUploads));
+      if (!isCurrent()) return false;
+      if (!uploadsReady.every(Boolean)) throw new Error(terrainUploads.getState().error || 'Terrain upload was cancelled');
       if (resident === next) next.normalsReady = true;
       for (const [key, item] of live) if (next.get(key) !== item) terrain.remove(item.group);
       for (const [key, item] of next) if (live.get(key) !== item) terrain.add(item.group);
@@ -722,6 +789,7 @@
     }
     function disposeItem(item) {
       /* Dispose tile geometry and tile-owned rock materials; keep shared resources alive. */
+      terrainUploads.cancel(item);
       item.geometry.dispose();
       item.materials?.dispose();
     }
@@ -1489,6 +1557,7 @@
         frameContinuation = false;
         lastAnimationFrame = null;
       } else {
+        terrainUploads.resume();
         wakeRendering();
         scheduleLOD();
       }
@@ -1547,6 +1616,8 @@
           ...graphics
         },
         geometryWorker: geometryBuilder.getState(),
+        shaderWarmup: { ...shaderWarmup },
+        terrainUploads: terrainUploads.getState(),
         refinement: { ...refinementState, active: Boolean(activeTransition), desiredPatches: pendingSelection?.length ?? 0 },
         baseCulling: { updates: baseCulling.updates, patches: baseCulling.patches,
           culledMeshes: baseCulling.culledMeshes, culledTriangles: baseCulling.culledTriangles },
@@ -1601,6 +1672,10 @@
     camera.position.copy(controls.target).add(new THREE.Vector3(extent * 0.12, extent * 0.72, extent * 0.87).multiplyScalar(Math.max(1, 1 / camera.aspect) * 1.2));
     controls.update();
     status.textContent = 'Loading terrain tiles…';
+    // Zero-count plant pools already carry instance color attributes, so these are
+    // the actual first-use instancing variants rather than an uncolored substitute.
+    await terrainUploads.warmup();
+    await prepareShaderPrograms(scene);
     // Build complete coarse coverage before requesting fine detail.
     const initial = new Map();
     for (const tile of levels[maxLevel]) {

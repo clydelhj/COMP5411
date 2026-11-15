@@ -16,6 +16,7 @@ before(async () => {
   const source = zlib.gunzipSync(Buffer.from(context.window.NOTO_LIBRARIES.core, 'base64')).toString('utf8');
   THREE = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
   const globals = { window: { NOTO_GRASS_TEXTURES: { color: 'fixture-color', normal: 'fixture-normal' } } };
+  vm.runInNewContext(fs.readFileSync(path.join(root, 'src/instance-buffers.js'), 'utf8'), globals);
   vm.runInNewContext(fs.readFileSync(path.join(root, 'src/ground-grass.js'), 'utf8'), globals);
   ground = globals.window.NotoGroundGrass;
 });

@@ -28,12 +28,12 @@
     uniform float uSeaScaleY;
     uniform float uSeaWeather;
     uniform vec4 uSeaWaves[3];
+    __COAST_DISTANCE_SHADER__
     float shoreDistance(vec2 p) {
       // The visual offshore backdrop is outside the measured crop, never a repeated map edge.
       if(any(greaterThan(abs(p),uSeaSize*0.5))) return 2048.0;
       vec2 uv = (p + uSeaSize * 0.5) / uShoreExtent;
-      vec2 packed = texture2D(uShoreDistance, uv).rg * 255.0;
-      return (packed.x + packed.y * 256.0 - 32768.0) / 8.0;
+      return sampleCoastDistance(uShoreDistance,uv,vec2(textureSize(uShoreDistance,0)));
     }
     float surfPhase(vec2 p, float distance) {
       return 6.28318530718 * (distance / 48.0 + uSeaTime * 0.16
@@ -213,7 +213,27 @@
       return background;
     }
   `;
-  const SURFACE_GLSL = SKY_GLSL + CLOUD_GLSL + CLOUD_REFLECTION_GLSL + /* glsl */`
+  const SURFACE_LAYER_GLSL = /* glsl */`
+    vec3 seaLayerRadiance(vec3 waterBody,vec3 mixedAlbedo,vec3 directDiffuse,
+      vec3 indirectDiffuse,vec3 volumeAmbient,vec3 reflectedRadiance,vec3 crestScattering,
+      vec3 foamSkyRadiance,float fresnel,float foam) {
+      // Three.js diffuse terms already contain mixedAlbedo. Recover their lighting
+      // before resolving the two surface fractions, so coverage is applied once.
+      vec3 irradianceScale=1.0/max(mixedAlbedo,vec3(0.0001));
+      vec3 waterRadiance=(waterBody*directDiffuse*irradianceScale+volumeAmbient)*(1.0-fresnel)
+        +reflectedRadiance*fresnel+crestScattering;
+      // Aerated foam scatters diffuse light and is not attenuated again by the
+      // clear-water Fresnel term. Night, terrain shadows and pointer lighting all
+      // remain in the actual scene's diffuse-light contributions.
+      // Diffuse scattering through aerated water receives the same broad sky-light
+      // response as the water column. This remains when clouds block the direct sun;
+      // it replaces missing environment irradiance, rather than adding it twice.
+      vec3 foamAmbient=max(indirectDiffuse*irradianceScale,foamSkyRadiance);
+      vec3 foamRadiance=vec3(0.84,0.88,0.86)*(directDiffuse*irradianceScale+foamAmbient);
+      return mix(waterRadiance,foamRadiance,foam);
+    }
+  `;
+  const SURFACE_GLSL = SKY_GLSL + CLOUD_GLSL + CLOUD_REFLECTION_GLSL + SURFACE_LAYER_GLSL + /* glsl */`
     uniform vec3 uSeaSunColor;
     uniform float uSeaSunIntensity;
     uniform sampler2D uOceanSpectrumLarge;
@@ -222,6 +242,7 @@
     uniform float uOceanSpectrumEnabled;
     uniform vec4 uSeaPhaseCharts[44];
     uniform float uSeaMicroMeanVariance;
+    uniform sampler2D uSeaFoamDensity;
     uniform sampler2D uSeaReflection;
     uniform mat4 uSeaReflectionMatrix;
     uniform float uSeaReflectionEnabled;
@@ -339,6 +360,8 @@
      * Promise<Object> with animation, numerical-query and disposal interfaces.
      */
     if (!source) throw new Error('Missing local shoreline data');
+    if (!global.NotoCoastalGeometry?.distanceShaderDeclarations) throw new Error('Missing shared coastline sampler');
+    const geometryGLSL = GLSL.replace('__COAST_DISTANCE_SHADER__', global.NotoCoastalGeometry.distanceShaderDeclarations);
     let values = coastalField?.distances;
     if (!values) {
       const compressed = Uint8Array.from(atob(source.distances), c => c.charCodeAt(0));
@@ -362,6 +385,7 @@
     const uniforms = {
       uSeaPhaseCharts: { value: createPhaseCharts(THREE) },
       uSeaMicroMeanVariance: { value: meanNormalVariance(materials.textures?.detail) },
+      uSeaFoamDensity: { value: materials.textures?.foam || neutralSpectrum },
       uSkyAtmosphereMap: { value: neutralSpectrum },
       uSkyAtmosphereEnabled: { value: 0 },
       uCloudColumnLow: { value: neutralSpectrum },
@@ -412,7 +436,7 @@
     const original = materials.top.onBeforeCompile;
     materials.top.name = 'Noto spectral wind sea and long swell';
     materials.top.userData.temporalReactive = true;
-    materials.top.customProgramCacheKey = () => 'noto-water-wavelet-surf-v13';
+    materials.top.customProgramCacheKey = () => 'noto-water-wavelet-surf-v19';
     materials.top.defaultAttributeValues = {
       ...materials.top.defaultAttributeValues,
       notoSeaEdge: [0, 0, 0, 0]
@@ -420,7 +444,7 @@
     materials.top.onBeforeCompile = shader => {
       original(shader);
       Object.assign(shader.uniforms, uniforms);
-      shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\n' + GLSL + '\nattribute vec4 notoSeaEdge;\nvarying vec3 vSeaNormal;\nvarying vec3 vSeaWorldPosition;');
+      shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\n' + geometryGLSL + '\nattribute vec4 notoSeaEdge;\nvarying vec3 vSeaNormal;\nvarying vec3 vSeaWorldPosition;');
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
         vec3 offset = seaOffset(position.xz);
         vec2 edgeDirection = notoSeaEdge.zw - notoSeaEdge.xy;
@@ -432,7 +456,7 @@
         vSeaNormal = seaNormal(position.xz);
         vSeaWorldPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
       // The base sampler declaration must precede seaNoise, which references it.
-      shader.fragmentShader = shader.fragmentShader.replace('uniform float uNotoWaterScale;', 'uniform float uNotoWaterScale;\n' + GLSL + SURFACE_GLSL);
+      shader.fragmentShader = shader.fragmentShader.replace('uniform float uNotoWaterScale;', 'uniform float uNotoWaterScale;\n' + geometryGLSL + SURFACE_GLSL);
       shader.fragmentShader = shader.fragmentShader.replace('#include <shadowmap_pars_fragment>', '#include <shadowmap_pars_fragment>\n#include <shadowmask_pars_fragment>');
       // RGB in the legacy color texture is uniformly white; appearance now comes from optics.
       shader.fragmentShader = shader.fragmentShader.replace('diffuseColor.rgb *= texture2D(uNotoWaterColor, notoWaterUV).rgb;', '');
@@ -480,22 +504,39 @@
         float shoreZone = smoothstep(0.0,2.0,distanceToShore) * (1.0-smoothstep(44.0,85.0,distanceToShore));
         float surfFoam = 0.0;
         if(shoreZone>0.0) {
-          float foamPatch = seaFilteredWorldNoise((foamP-vec2(uSeaTime*1.35,uSeaTime*0.55))/197.0,seaDx/197.0,seaDy/197.0);
+          // Metre-scale gaps break the front into aerated tongues. Coverage is only
+          // strong on the travelling crest; the patch field never paints a broad sheet.
+          vec2 foamDrift=foamP-vec2(uSeaTime*1.35,uSeaTime*0.55);
+          float foamPatch = 0.6*seaFilteredWorldNoise(seaRotation*foamDrift/4.7,seaRotation*seaDx/4.7,seaRotation*seaDy/4.7)
+            +0.4*seaFilteredWorldNoise(swellRotation*foamDrift/2.1,swellRotation*seaDx/2.1,swellRotation*seaDy/2.1);
           float phase = surfPhase(foamP,distanceToShore);
-          float crest = pow(0.5+0.5*sin(phase),20.0);
-          float coverage = smoothstep(0.36,0.67,foamPatch*0.58+breakup*0.42);
-          float lace = smoothstep(0.20,0.61,bubbles*0.70+breakup*0.30);
+          // Two rotated scales tear a rounded front instead of exposing square noise
+          // cells. The phase offset stays within the width of the geometric crest.
+          float crest = pow(0.5+0.5*sin(phase+(foamPatch-0.5)*0.65),18.0);
+          // The broad envelope stays soft; resolved cellular films provide the
+          // internal holes and thickness. Both channels store coverage before
+          // filtering, so a distant film keeps its correct fractional opacity.
+          float coverage = smoothstep(0.25,0.70,foamPatch);
+          vec2 foamDensity = textureGrad(uSeaFoamDensity,seaRotation*foamDrift/8.3,
+            seaRotation*seaDx/8.3,seaRotation*seaDy/8.3).rg*0.65
+            +textureGrad(uSeaFoamDensity,swellRotation*foamDrift/17.9+vec2(0.37,0.19),
+            swellRotation*seaDx/17.9,swellRotation*seaDy/17.9).rg*0.35;
           float distantSurf = smoothstep(7.0,32.0,max(shoreFootprint,seaFootprint));
-          crest = mix(crest,0.07,distantSurf);
+          // The phase-average of pow(0.5+0.5*sin(phase),18) is 0.13206.
+          // Converge to coverage instead of letting subpixel crests flicker.
+          crest = mix(crest,0.13206,distantSurf);
           // After a crest passes, aerated water persists briefly and decays behind
           // the moving front. The birth ramp makes the cycle seam continuous.
           float age = fract(phase/6.28318530718-0.25);
-          float residue = smoothstep(0.0,0.055,age)*exp(-age*5.5)
+          float residue = smoothstep(0.0,0.045,age)*exp(-age*9.0)
             *(1.0-smoothstep(0.72,1.0,age));
-          residue = mix(residue,0.14,distantSurf)*coverage*lace;
+          residue = mix(residue,0.09,distantSurf)*coverage*foamDensity.r;
           // The same moving wave set controls displaced crests, breaking foam and spray.
-          surfFoam = surfStrength(foamP,uSeaTime)*shoreZone
-            *(crest*(0.45+coverage*0.55)*lace*1.55+residue*0.35);
+          // Breaking strength controls where a crest aerates, not the opacity of
+          // every bubble. Dense crest foam scatters strongly; thin wakes decay quickly.
+          float breaking = smoothstep(0.28,0.62,surfStrength(foamP,uSeaTime)+breakup*0.12);
+          float front = crest*coverage*foamDensity.g;
+          surfFoam = shoreZone*(front*(0.70+breaking*0.60)+residue*breaking*0.36);
         }
         float oceanCrest = max(oceanLarge.b,oceanSmall.b*0.80);
         // Only compressed positive crests aerate; the proxy is deliberately sparse in calm weather.
@@ -579,41 +620,30 @@
         // One filtered microfacet lobe supplies solar glint. Pointer-light highlights
         // and directional shadow attenuation remain in Three.js's direct-light result.
         vec3 directHighlights = reflectedLight.directSpecular;
-        vec3 bodyLighting = max(outgoingLight-directHighlights-reflectedLight.indirectSpecular,vec3(0.0));
         // The submerged water column receives diffuse sky irradiance throughout its
         // depth, rather than behaving like an opaque Lambert-painted surface. The
         // Beer-Lambert body color already separates bottom transmission and deep-water
         // scattering. Keep direct lighting (including the pointer light) and foam's
         // diffuse response; replace only the water's surface-normal-dependent ambient.
         vec3 volumeAmbient = waterBody*uSeaSky*(1.25*uSeaDaylight);
-        bodyLighting = max(bodyLighting-reflectedLight.indirectDiffuse*(1.0-foam),vec3(0.0))
-          +volumeAmbient*(1.0-foam);
-        float reflectionWeight = fresnel*(1.0-foam*0.96);
-        outgoingLight = bodyLighting*(1.0-reflectionWeight)
-          +skyReflection*reflectionWeight+directHighlights+scattering*(1.0-foam);
+        vec3 foamSkyRadiance = uSeaSky*(1.25*uSeaDaylight);
+        outgoingLight = seaLayerRadiance(waterBody,diffuseColor.rgb,
+          reflectedLight.directDiffuse,reflectedLight.indirectDiffuse,volumeAmbient,
+          skyReflection,scattering,foamSkyRadiance,fresnel,foam)+directHighlights;
         #include <opaque_fragment>`);
       materials.top.userData.notoShader = shader;
     };
     materials.cut.customProgramCacheKey = () => 'noto-water-cut-gerstner-v2';
     materials.cut.onBeforeCompile = shader => {
       Object.assign(shader.uniforms, uniforms);
-      shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\n' + GLSL).replace('#include <begin_vertex>', `#include <begin_vertex>
+      shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\n' + geometryGLSL).replace('#include <begin_vertex>', `#include <begin_vertex>
           vec3 offset = seaOffset(position.xz)*clamp(1.0+position.y/100.0,0.0,1.0);
           transformed += vec3(offset.x,offset.y/uSeaScaleY,offset.z);`);
     };
     function shoreAt(x, z) {
-      /* Bilinearly query shore distance on the CPU using the same pixel-centre convention as the texture.
-Parameters: x/z are unexaggerated model metres.
-Convert to pixel indices, clamp and interpolate four samples. Returns approximate metres, positive on the sea side. */
+      // Geometry, foam and CPU probes use the same bounded cubic contact field.
       if (Math.abs(x) > source.widthM / 2 || Math.abs(z) > source.heightM / 2) return 2048;
-      const u = Math.max(0, Math.min(source.cols - 1, (x + source.widthM / 2) / source.cellM - 0.5));
-      const v = Math.max(0, Math.min(source.rows - 1, (z + source.heightM / 2) / source.cellM - 0.5));
-      const c = Math.floor(u),
-        r = Math.floor(v),
-        tx = u - c,
-        tz = v - r;
-      const sample = (i, j) => (values[Math.min(source.rows - 1, j) * source.cols + Math.min(source.cols - 1, i)] - 32768) / 8;
-      return (sample(c, r) * (1 - tx) + sample(c + 1, r) * tx) * (1 - tz) + (sample(c, r + 1) * (1 - tx) + sample(c + 1, r + 1) * tx) * tz;
+      return global.NotoCoastalGeometry.sampleDistance(values, source, x, z);
     }
     function sample(x, z, time = uniforms.uSeaTime.value) {
       /*
@@ -643,7 +673,7 @@ Convert to pixel indices, clamp and interpolate four samples. Returns approximat
     }
     function decorateLand(shader) {
       Object.assign(shader.uniforms, uniforms);
-      shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\n' + GLSL);
+      shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\n' + geometryGLSL);
       // Wash-up changes the actual land material, after its geology/vegetation
       // mix and before lighting. It therefore follows the shore, not the screen.
       shader.fragmentShader = shader.fragmentShader.replace('#include <lights_physical_fragment>', `
@@ -666,8 +696,9 @@ Convert to pixel indices, clamp and interpolate four samples. Returns approximat
     }
     return {
       uniforms,
-      shaderDeclarations: GLSL,
+      shaderDeclarations: geometryGLSL,
       skyShaderDeclarations: SKY_GLSL,
+      surfaceLayerShaderDeclarations: SURFACE_LAYER_GLSL,
       setCloudLayers(controller) {
         // Optical columns share the elevated cloud field, with world-position parallax on water.
         if (controller?.uniforms) Object.assign(uniforms, controller.uniforms);
@@ -722,6 +753,11 @@ Convert to pixel indices, clamp and interpolate four samples. Returns approximat
         scaleY: uniforms.uSeaScaleY.value,
         maxAmplitudeM: 3.55 * uniforms.uSeaWeather.value,
         shoreCellM: source.cellM,
+        foamDensity: materials.textures?.foam ? {
+          width: materials.textures.foam.image.width, height: materials.textures.foam.image.height,
+          channels: 2, textureReads: 2, periodsM: [8.3,17.9],
+          textureMiB: materials.textures.foam.image.data.byteLength*4/3/1048576
+        } : null,
         shading: 'Roughness-filtered Fresnel reflection, spectral slopes, absorption and trailing surf foam',
         spectrum: spectrum?.getState() ?? { active: false, reason: 'No spectrum controller' }
       }),

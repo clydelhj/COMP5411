@@ -26,11 +26,71 @@ Hash wrapped lattice points and smoothly interpolate. Returns the same value in 
       sy = ty * ty * (3 - 2 * ty);
     return (hash(ix, iy) * (1 - sx) + hash(ix + 1, iy) * sx) * (1 - sy) + (hash(ix, iy + 1) * (1 - sx) + hash(ix + 1, iy + 1) * sx) * sy;
   }
+  function createFoamDensity(THREE) {
+    // Bake thin/thick optical coverage, not a distance field. Hardware mipmaps
+    // therefore preserve the occupied fraction of unresolved films and pores.
+    // Periodic, jittered cellular voids and a smooth domain warp avoid grid-shaped holes.
+    function cells(count, salt) {
+      const features = new Float32Array(count * count * 3);
+      let state = salt;
+      const random = () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state / 4294967296; };
+      for (let i = 0; i < count * count; i++) {
+        features[i * 3] = 0.15 + random() * 0.70;
+        features[i * 3 + 1] = 0.15 + random() * 0.70;
+        features[i * 3 + 2] = 0.24 + random() * 0.20;
+      }
+      return { count, features };
+    }
+    function voidDistance(field, u, v) {
+      const { count, features } = field, x = u * count, y = v * count;
+      const ix = Math.floor(x), iy = Math.floor(y), tx = x - ix, ty = y - iy;
+      let distance = 2;
+      for (let row = -1; row <= 1; row++) for (let col = -1; col <= 1; col++) {
+        const c = ((ix + col) % count + count) % count;
+        const r = ((iy + row) % count + count) % count;
+        const offset = (r * count + c) * 3;
+        const dx = tx - col - features[offset], dy = ty - row - features[offset + 1];
+        distance = Math.min(distance, Math.sqrt(dx * dx + dy * dy) - features[offset + 2]);
+      }
+      return distance;
+    }
+    const smooth = (a, b, value) => {
+      const t = Math.max(0, Math.min(1, (value - a) / (b - a)));
+      return t * t * (3 - 2 * t);
+    };
+    const coarse = cells(12, 541191), fine = cells(32, 195411);
+    const pixels = new Uint8Array(TEXTURE_SIZE * TEXTURE_SIZE * 2);
+    let thinSum = 0, thickSum = 0;
+    for (let row = 0; row < TEXTURE_SIZE; row++) for (let col = 0; col < TEXTURE_SIZE; col++) {
+      const u = (col + 0.5) / TEXTURE_SIZE, v = (row + 0.5) / TEXTURE_SIZE;
+      const warpedU = u + 0.037 * (periodicNoise(u, v, 4) - 0.5)
+        + 0.015 * (periodicNoise(u + 0.2, v + 0.7, 8) - 0.5);
+      const warpedV = v + 0.037 * (periodicNoise(u + 0.63, v + 0.27, 4) - 0.5)
+        + 0.015 * (periodicNoise(u + 0.8, v + 0.1, 8) - 0.5);
+      const largeGap = voidDistance(coarse, warpedU, warpedV);
+      const smallGap = voidDistance(fine, warpedU, warpedV);
+      const smallFilm = smooth(-0.03, 0.10, smallGap);
+      const grain = periodicNoise(u, v, 64);
+      const thin = smooth(-0.015, 0.085, largeGap) * (0.10 + smallFilm * 0.90) * (0.5 + grain * 0.5);
+      const thick = smooth(-0.12, 0.045, largeGap) * (0.50 + smallFilm * 0.50) * (0.72 + grain * 0.28);
+      const offset = (row * TEXTURE_SIZE + col) * 2;
+      // Integrate optical depth before mip generation. Fresh aerated layers are
+      // denser than the draining film, while empty cellular voids stay exactly clear.
+      pixels[offset] = Math.round((1 - Math.exp(-thin * 1.4)) * 255);
+      pixels[offset + 1] = Math.round((1 - Math.exp(-thick * 3.2)) * 255);
+      thinSum += pixels[offset]; thickSum += pixels[offset + 1];
+    }
+    const texture = new THREE.DataTexture(pixels, TEXTURE_SIZE, TEXTURE_SIZE, THREE.RGFormat);
+    texture.name = 'Periodic thin/thick foam coverage';
+    texture.colorSpace = THREE.NoColorSpace;
+    texture.userData.coverageMean = [thinSum, thickSum].map(sum => sum / (TEXTURE_SIZE * TEXTURE_SIZE * 255));
+    return texture;
+  }
   function createTextures(THREE) {
     /* Bake seamless directional wavelets once. Integer Fourier modes close at the
      * tile edges; a weak second harmonic sharpens crests without value-noise lobes.
      * Precomputed row/column trigonometry keeps texture construction off the frame loop.
-     * Returns mipmapped sRGB color/noise and linear RGBA16F normal/roughness textures.
+     * Returns mipmapped color/noise, RGBA16F normal/roughness and RG8 foam coverage.
      */
     const colorPixels = new Uint8Array(TEXTURE_SIZE * TEXTURE_SIZE * 4);
     const detailPixels = new Uint16Array(colorPixels.length);
@@ -93,9 +153,10 @@ Hash wrapped lattice points and smoothly interpolate. Returns the same value in 
     }
     const color = new THREE.DataTexture(colorPixels, TEXTURE_SIZE, TEXTURE_SIZE);
     const detail = new THREE.DataTexture(detailPixels, TEXTURE_SIZE, TEXTURE_SIZE, THREE.RGBAFormat, THREE.HalfFloatType);
+    const foam = createFoamDensity(THREE);
     const count = TEXTURE_SIZE * TEXTURE_SIZE;
     detail.userData.normalMeanVariance = Math.max(0, 1 - (meanX * meanX + meanZ * meanZ + meanUp * meanUp) / (count * count));
-    for (const texture of [color, detail]) {
+    for (const texture of [color, detail, foam]) {
       texture.wrapS = THREE.RepeatWrapping;
       texture.wrapT = THREE.RepeatWrapping;
       texture.minFilter = THREE.LinearMipmapLinearFilter;
@@ -110,7 +171,8 @@ Hash wrapped lattice points and smoothly interpolate. Returns the same value in 
     detail.colorSpace = THREE.NoColorSpace;
     return {
       color,
-      detail
+      detail,
+      foam
     };
   }
   function create(THREE) {
@@ -201,6 +263,7 @@ Updates the shader in place and retains a diagnostic reference. */
         cut.dispose();
         textures.color.dispose();
         textures.detail.dispose();
+        textures.foam.dispose();
       }
     };
   }

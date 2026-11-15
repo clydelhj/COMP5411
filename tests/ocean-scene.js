@@ -25,7 +25,7 @@
     const group = new THREE.Group();
     scene.add(group);
 
-    const widthM = 8192, heightM = 8192, cellM = 16;
+    const widthM = 8192, heightM = 8192, cellM = 8;
     const cols = widthM / cellM, rows = heightM / cellM;
     const values = new Uint16Array(cols * rows);
     const coast = z => -280 + 42 * Math.sin(z / 210) + 17 * Math.sin(z / 61);
@@ -53,8 +53,31 @@
     const motion = await window.NotoWaterMotion.create(THREE, source, materials, { distances: values }, spectrum);
     motion.setAtmosphere?.(atmosphere);
     motion.setCloudLayers?.(clouds);
+    // Generated shared resources exercise the production cover/grass shader branch,
+    // including real grass declarations. The neutral fallback alone cannot validate it.
+    const reflectionColor = new THREE.DataArrayTexture(Uint8Array.from([
+      184, 164, 129, 255, 149, 139, 111, 255, 129, 134, 106, 255, 168, 152, 120, 255
+    ]), 2, 2, 1);
+    reflectionColor.colorSpace = THREE.SRGBColorSpace;
+    reflectionColor.needsUpdate = true;
+    const reflectionCover = new THREE.DataTexture(new Uint8Array([102, 121, 72, 150]), 1, 1);
+    reflectionCover.colorSpace = THREE.SRGBColorSpace; reflectionCover.needsUpdate = true;
+    const reflectionGrassMask = new THREE.DataTexture(new Uint8Array([185]), 1, 1, THREE.RedFormat);
+    reflectionGrassMask.needsUpdate = true;
+    const reflectionGrassColor = new THREE.DataTexture(new Uint8Array([125, 137, 76, 255]), 1, 1);
+    reflectionGrassColor.colorSpace = THREE.SRGBColorSpace; reflectionGrassColor.needsUpdate = true;
+    const reflectionSurface = {
+      textureSet: { color: reflectionColor },
+      layerTexture: new THREE.Data3DTexture(new Uint8Array(16), 2, 2, 2),
+      palette: { colors: [new THREE.Color(0xa79e82)] },
+      cols: 2, rows: 2, levels: 2, width: widthM, height: heightM,
+      groundCover: reflectionCover,
+      grass: { mask: reflectionGrassMask, color: reflectionGrassColor },
+      grassVisibility: { value: 1 }
+    };
     const reflection = window.NotoOceanReflection?.create({
       THREE, renderer, camera, terrain: group,
+      surfaceMaterials: reflectionSurface,
       metadata: { width_m: widthM, height_m: heightM, elevation_max_m: 400, source_width: 8193, source_height: 8193, source_spacing_m: [1, 1] }
     }) || null;
     if (reflection) {
@@ -132,7 +155,8 @@
       const lighting = {
         direction: direction.toArray(), elevation: day ? 23 : -20, weather,
         sunColor: sun.color.toArray(), sunIntensity: sun.intensity,
-        hemisphereIntensity: ambient.intensity, skyColor: sky.toArray(), groundColor: ambient.groundColor.toArray()
+        hemisphereIntensity: ambient.intensity, hemisphereColor: ambient.color.toArray(),
+        hemisphereGroundColor: ambient.groundColor.toArray(), skyColor: sky.toArray(), groundColor: ambient.groundColor.toArray()
       };
       motion.setLighting?.(lighting);
       reflection?.setLighting(lighting);
@@ -225,13 +249,13 @@
       }
       return { mean: total / left.values.length, maximum, changedPixels, pixels: left.pixels };
     }
-    function gpuOffsets(points, normalProbe = false) {
+    function gpuOffsets(points, normalProbe = false, distanceProbe = false) {
       const previous = renderer.getRenderTarget();
       const target = new THREE.WebGLRenderTarget(points.length, 1, { type: THREE.FloatType, depthBuffer: false });
       const material = new THREE.ShaderMaterial({
         uniforms: { ...motion.uniforms, uProbePoints: { value: points.map(point => new THREE.Vector2(...point)) } },
         vertexShader: 'void main(){gl_Position=vec4(position.xy,0.0,1.0);}',
-        fragmentShader: `${motion.shaderDeclarations}\nuniform vec2 uProbePoints[${points.length}];\nvoid main(){int index=int(gl_FragCoord.x);gl_FragColor=vec4(${normalProbe ? 'seaNormal' : 'seaOffset'}(uProbePoints[index]),1.0);}`,
+        fragmentShader: `${motion.shaderDeclarations}\nuniform vec2 uProbePoints[${points.length}];\nvoid main(){int index=int(gl_FragCoord.x);gl_FragColor=vec4(${distanceProbe ? 'vec3(shoreDistance(uProbePoints[index]),0.0,0.0)' : `${normalProbe ? 'seaNormal' : 'seaOffset'}(uProbePoints[index])`},1.0);}`,
         depthTest: false, depthWrite: false, blending: THREE.NoBlending
       });
       const probe = new THREE.Scene();
@@ -248,6 +272,7 @@
       }
       return points.map((point, index) => {
         let cpu = motion.sample(...point);
+        if (distanceProbe) cpu = [motion.shoreAt(...point), 0, 0];
         if (normalProbe) {
           const [x, z] = point, epsilon = 0.25;
           const left = motion.sample(x - epsilon, z), right = motion.sample(x + epsilon, z);
@@ -258,6 +283,37 @@
         }
         return { point, gpu: [...result.slice(index * 4, index * 4 + 3)], cpu };
       });
+    }
+    function gpuSurfaceLayers() {
+      if (!motion.surfaceLayerShaderDeclarations) return null;
+      const previous = renderer.getRenderTarget();
+      const target = new THREE.WebGLRenderTarget(5, 1, { type: THREE.FloatType, depthBuffer: false });
+      const material = new THREE.ShaderMaterial({
+        vertexShader: 'void main(){gl_Position=vec4(position.xy,0.0,1.0);}',
+        fragmentShader: `${motion.surfaceLayerShaderDeclarations}
+          void main(){
+            int mode=int(gl_FragCoord.x);
+            float foam=mode==3?0.0:0.4;
+            vec3 albedo=vec3(0.84,0.88,0.86)*foam;
+            vec3 ambient=(mode==2||mode==4)?vec3(0.0):albedo*0.5;
+            vec3 sky=mode==4?vec3(0.2,0.3,0.4):vec3(0.0);
+            gl_FragColor=vec4(seaLayerRadiance(vec3(0.0),albedo,vec3(0.0),ambient,
+              vec3(0.0),vec3(0.0),vec3(0.0),sky,mode==0?0.02:0.98,foam),1.0);
+          }`,
+        depthTest: false, depthWrite: false, blending: THREE.NoBlending
+      });
+      const probe = new THREE.Scene(), mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
+      probe.add(mesh);
+      const pixels = new Float32Array(20);
+      try {
+        renderer.setRenderTarget(target);
+        renderer.render(probe, new THREE.Camera());
+        renderer.readRenderTargetPixels(target, 0, 0, 5, 1, pixels);
+      } finally {
+        renderer.setRenderTarget(previous);
+        mesh.geometry.dispose(); material.dispose(); target.dispose();
+      }
+      return Array.from({ length: 5 }, (_, i) => [...pixels.slice(i * 4, i * 4 + 3)]);
     }
     function readSpectrum(texture, lengthM = 1024) {
       const previous = renderer.getRenderTarget();
@@ -451,6 +507,19 @@
       const points = [[500, 200], [100, -300], [-250, 0], [4096, 0]];
       report.probes = gpuOffsets(points);
       report.normalProbes = gpuOffsets(points, true);
+      report.surfaceLayers = gpuSurfaceLayers();
+      report.foamDensity = motion.getState().foamDensity;
+      // Compare the shared 4-tap cubic sampler with its 16-weight CPU definition
+      // across an 8 m texel boundary and both edges of its narrow blend interval.
+      const boundaryZ = cellM * 0.5;
+      const boundaryX = (Math.round((coast(boundaryZ) + widthM * 0.5) / cellM - 0.5) + 0.5) * cellM - widthM * 0.5;
+      const coastPoints = [-0.01, 0, 0.01].flatMap(offset => [
+        [boundaryX + offset, boundaryZ], [boundaryX, boundaryZ + offset]
+      ]);
+      for (const distance of [-32, -16, 0, 16, 32]) {
+        for (const offset of [-0.1, 0, 0.1]) coastPoints.push([coast(boundaryZ) + distance + offset, boundaryZ]);
+      }
+      report.coastDistanceProbes = gpuOffsets(coastPoints, false, true);
       // Consecutive crests at one coast location should form sets instead of identical
       // pulses. Probe the real GLSL and its analytic normal at each set strength.
       const groupTime = motion.uniforms.uSeaTime.value;

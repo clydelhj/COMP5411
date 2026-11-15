@@ -213,10 +213,10 @@
       geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
       geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
       geometry.setAttribute('grassRoot', new THREE.Float32BufferAttribute(roots, 2));
-      geometry.setAttribute('grassSlope', new THREE.InstancedBufferAttribute(new Float32Array(LIMIT * 2), 2).setUsage(THREE.DynamicDrawUsage));
+      geometry.setAttribute('grassSlope', new THREE.InstancedBufferAttribute(new Float32Array(Math.min(256, LIMIT) * 2), 2).setUsage(THREE.DynamicDrawUsage));
       geometry.setIndex(indices);
       geometry.computeVertexNormals();
-      const mesh = new THREE.InstancedMesh(geometry, material, LIMIT);
+      const mesh = global.NotoInstanceBuffers.create(THREE, geometry, material, LIMIT);
       mesh.name = `Ground grass ${blades} blades`;
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.count = 0;
@@ -324,13 +324,14 @@
       return { state: nextState, buffers: staged };
     }
     function commit(prepared) {
-      /* Only populated prefixes are copied/uploaded. Keep BufferAttribute identities stable so
-       * repeated placement passes reuse their WebGL buffers rather than leaking replacements.
+      /* Copy/upload populated prefixes and reuse storage until capacity grows.
+       * The capacity helper releases old GPU ownership before replacing attributes.
        */
       for (let level = 0; level < pools.length; level++) {
         const mesh = pools[level], buffer = prepared.buffers[level];
         mesh.count = buffer.count;
         if (!buffer.count) continue;
+        global.NotoInstanceBuffers.reserve(THREE, mesh, buffer.count, LIMIT, { grassSlope: 2 });
         if (!mesh.instanceColor) {
           mesh.setColorAt(0, tint);
           material.needsUpdate = true;

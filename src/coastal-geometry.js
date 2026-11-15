@@ -6,6 +6,61 @@
   const MAX_EDGE = 8;
   const CONTOUR_ERROR = 0.03;
   const BEACH_WIDTH = 64;
+  // A convex cubic B-spline rounds the 8 m field's cell-boundary gradient jumps.
+  // Use it only around the contour; distant field values retain their original
+  // fast bilinear sampling. Geometry, water and collision share this definition.
+  function sampleDistance(values, source, x, z) {
+    const u = Math.max(0, Math.min(source.cols - 1, (x + source.widthM / 2) / source.cellM - 0.5));
+    const v = Math.max(0, Math.min(source.rows - 1, (z + source.heightM / 2) / source.cellM - 0.5));
+    const c = Math.floor(u), r = Math.floor(v), tx = u - c, tz = v - r;
+    const c2 = Math.min(source.cols - 1, c + 1), row1 = r * source.cols;
+    const row2 = Math.min(source.rows - 1, r + 1) * source.cols;
+    const linear = ((values[row1 + c] * (1 - tx) + values[row1 + c2] * tx) * (1 - tz)
+      + (values[row2 + c] * (1 - tx) + values[row2 + c2] * tx) * tz - 32768) / 8;
+    if (Math.abs(linear) >= 32) return linear;
+    // No per-sample arrays/closures: this path is also used by Worker subdivision.
+    const x2 = tx * tx, x3 = x2 * tx, z2 = tz * tz, z3 = z2 * tz;
+    const wx0 = (1 - tx) ** 3 / 6, wx1 = (3 * x3 - 6 * x2 + 4) / 6;
+    const wx2 = (-3 * x3 + 3 * x2 + 3 * tx + 1) / 6, wx3 = x3 / 6;
+    const wz0 = (1 - tz) ** 3 / 6, wz1 = (3 * z3 - 6 * z2 + 4) / 6;
+    const wz2 = (-3 * z3 + 3 * z2 + 3 * tz + 1) / 6, wz3 = z3 / 6;
+    const c0 = Math.max(0, c - 1), c3 = Math.min(source.cols - 1, c + 2);
+    const row0 = Math.max(0, r - 1) * source.cols, row3 = Math.min(source.rows - 1, r + 2) * source.cols;
+    const cubic = ((values[row0 + c0] * wx0 + values[row0 + c] * wx1 + values[row0 + c2] * wx2 + values[row0 + c3] * wx3) * wz0
+      + (values[row1 + c0] * wx0 + values[row1 + c] * wx1 + values[row1 + c2] * wx2 + values[row1 + c3] * wx3) * wz1
+      + (values[row2 + c0] * wx0 + values[row2 + c] * wx1 + values[row2 + c2] * wx2 + values[row2 + c3] * wx3) * wz2
+      + (values[row3 + c0] * wx0 + values[row3 + c] * wx1 + values[row3 + c2] * wx2 + values[row3 + c3] * wx3) * wz3 - 32768) / 8;
+    const fade = Math.max(0, Math.min(1, (Math.abs(linear) - 16) / 16));
+    return cubic + (linear - cubic) * fade * fade * (3 - 2 * fade);
+  }
+  const distanceShaderDeclarations = /* glsl */`
+    float coastPackedDistance(vec2 packed) {
+      return (dot(packed,vec2(255.0,65280.0))-32768.0)/8.0;
+    }
+    vec4 coastCubicWeights(float t) {
+      float t2=t*t,t3=t2*t;
+      return vec4((1.0-t)*(1.0-t)*(1.0-t),3.0*t3-6.0*t2+4.0,
+        -3.0*t3+3.0*t2+3.0*t+1.0,t3)/6.0;
+    }
+    float sampleCoastDistance(sampler2D field,vec2 uv,vec2 dimensions) {
+      float linear=coastPackedDistance(textureLod(field,uv,0.0).rg);
+      if(abs(linear)>=32.0)return linear;
+      vec2 grid=clamp(uv*dimensions-0.5,vec2(0.0),dimensions-1.0);
+      vec2 cell=floor(grid),fraction=grid-cell;
+      vec4 wx=coastCubicWeights(fraction.x),wz=coastCubicWeights(fraction.y);
+      vec2 gx=vec2(wx.x+wx.y,wx.z+wx.w),gz=vec2(wz.x+wz.y,wz.z+wz.w);
+      vec2 sx=(cell.x+vec2(-1.0+wx.y/gx.x,1.0+wx.w/gx.y)+0.5)/dimensions.x;
+      vec2 sz=(cell.y+vec2(-1.0+wz.y/gz.x,1.0+wz.w/gz.y)+0.5)/dimensions.y;
+      // Four explicit base-level bilinear fetches reproduce all sixteen weights;
+      // explicit LOD also remains defined inside the shoreline-only branch.
+      vec2 lower=textureLod(field,vec2(sx.x,sz.x),0.0).rg*gx.x
+        +textureLod(field,vec2(sx.y,sz.x),0.0).rg*gx.y;
+      vec2 upper=textureLod(field,vec2(sx.x,sz.y),0.0).rg*gx.x
+        +textureLod(field,vec2(sx.y,sz.y),0.0).rg*gx.y;
+      float cubic=coastPackedDistance(lower*gz.x+upper*gz.y);
+      return mix(cubic,linear,smoothstep(16.0,32.0,abs(linear)));
+    }
+  `;
   // Visual contact profile only: the original DEM is never edited. The inner
   // 16 m is flat so extra contour subdivision cannot open nonlinear-height seams;
   // 16–64 m transitions smoothly to the original displayed ground height.
@@ -33,7 +88,7 @@
         r1 = Math.min(r + 1, source.rows - 1);
       return (values[r * source.cols + c] * (1 - tx) + values[r * source.cols + c1] * tx) * (1 - tz) + (values[r1 * source.cols + c] * (1 - tx) + values[r1 * source.cols + c1] * tx) * tz;
     }
-    const distance = (x, z) => (sample(distances, x, z) - 32768) / 8;
+    const distance = (x, z) => sampleDistance(distances, source, x, z);
     const height = (x, z) => sample(heights, x, z) / 100 - 100;
     function touches(bounds, margin) {
       const index = (x, extent, count) => Math.max(0, Math.min(count - 1, Math.floor((x + extent / 2) / source.cellM - 0.5)));
@@ -333,6 +388,8 @@
 
   global.NotoCoastalGeometry = {
     workerSource: registerCoastalGeometry.toString(),
+    sampleDistance,
+    distanceShaderDeclarations,
     createHeightSampler,
     prepare,
     contactHeight,

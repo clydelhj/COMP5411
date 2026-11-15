@@ -11,7 +11,67 @@
   const UPDATE_INTERVAL_MS = 100;
   const SETTLING_FRAMES = 8;
 
-  function create({ THREE, renderer, camera, terrain, metadata }) {
+  const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
+  function smooth(low, high, value) {
+    const t = clamp((value - low) / (high - low), 0, 1);
+    return t * t * (3 - 2 * t);
+  }
+
+  // Integrate albedo in linear RGB once at setup. A bounded stratified sample of each
+  // source photograph replaces its subpixel detail, without inventing a coast-wide tint.
+  function createAlbedoSampler(THREE, shared) {
+    const image = shared?.textureSet?.color?.image;
+    const classes = shared?.layerTexture?.image?.data;
+    const fallback = new THREE.Color('#756a56').toArray();
+    if (!image?.data || !classes || !shared?.palette) return () => fallback;
+    const samplesX = Math.min(64, image.width), samplesY = Math.min(64, image.height);
+    const linear = Float32Array.from({ length: 256 }, (_, i) => {
+      const s = i / 255;
+      return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    });
+    const means = Array.from({ length: image.depth }, (_, layer) => {
+      const sum = [0, 0, 0];
+      for (let row = 0; row < samplesY; row++) for (let col = 0; col < samplesX; col++) {
+        const x = Math.floor((col + 0.5) * image.width / samplesX);
+        const y = Math.floor((row + 0.5) * image.height / samplesY);
+        const offset = ((layer * image.height + y) * image.width + x) * 4;
+        for (let channel = 0; channel < 3; channel++) sum[channel] += linear[image.data[offset + channel]];
+      }
+      const color = sum.map(value => value / (samplesX * samplesY));
+      const tint = shared.palette.colors[layer]?.toArray() || fallback;
+      const luminance = color[0] * 0.299 + color[1] * 0.587 + color[2] * 0.114;
+      const tintLuminance = tint[0] * 0.299 + tint[1] * 0.587 + tint[2] * 0.114;
+      return color.map((value, channel) => value
+        * (0.66 + 0.34 * clamp(tint[channel] / Math.max(tintLuminance, 0.001), 0.55, 1.65))
+        * (0.82 + 0.18 * clamp(luminance / 0.52, 0.72, 1.28)));
+    });
+    const weights = (position, halfWidth) => {
+      const nearest = Math.floor(position + 0.5), delta = position - nearest;
+      const lower = smooth(-halfWidth, halfWidth, -0.5 - delta);
+      const upper = smooth(-halfWidth, halfWidth, 0.5 - delta);
+      return [nearest, [lower, upper - lower, 1 - upper]];
+    };
+    return (x, z, height) => {
+      const { cols, rows, levels, width, height: extent } = shared;
+      const latticeX = clamp(x / width + 0.5, 0, 1) * (cols - 1);
+      const latticeZ = clamp(z / extent + 0.5, 0, 1) * (rows - 1);
+      // Match the surface shader's categorical blend kernel, including shallow strata.
+      const [cx, wx] = weights(latticeX, Math.max(0.00001, Math.min(0.9, 192 * (cols - 1) / width)));
+      const [cz, wz] = weights(latticeZ, Math.max(0.00001, Math.min(0.9, 192 * (rows - 1) / extent)));
+      const [, wy] = weights(0, Math.max(0.00001, Math.min(0.9, 9.6 * (levels - 1) / Math.max(height + 100, 1))));
+      const result = [0, 0, 0];
+      for (let dz = -1; dz <= 1; dz++) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const weight = wx[dx + 1] * wy[dy + 1] * wz[dz + 1];
+        if (weight <= 0.00001) continue;
+        const index = ((clamp(cz + dz, 0, rows - 1) * levels + clamp(dy, 0, levels - 1)) * cols + clamp(cx + dx, 0, cols - 1)) * 2;
+        const color = means[classes[index]] || fallback;
+        for (let channel = 0; channel < 3; channel++) result[channel] += weight * color[channel];
+      }
+      return result;
+    };
+  }
+
+  function create({ THREE, renderer, camera, terrain, metadata, surfaceMaterials = null, coastalField = null }) {
     const empty = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1);
     empty.name = 'Empty terrain reflection';
     empty.needsUpdate = true;
@@ -26,12 +86,57 @@
     proxy.matrixAutoUpdate = false;
     scene.add(proxy);
     const material = new THREE.MeshLambertMaterial({
-      color: 0x5b6250,
+      color: 0xffffff,
+      vertexColors: true,
       side: THREE.FrontSide,
       fog: false,
       toneMapped: false
     });
-    material.name = 'Coarse terrain reflection shading';
+    material.name = 'Source-albedo terrain reflection';
+    const albedoAt = createAlbedoSampler(THREE, surfaceMaterials);
+    const cover = surfaceMaterials?.groundCover;
+    const grass = surfaceMaterials?.grass;
+    const grassVisibility = surfaceMaterials?.grassVisibility || { value: 1 };
+    let observedGrassVisibility = grassVisibility.value;
+    // The existing small proxy pass uses one cover read and, when present, two grass
+    // reads. Main-view terrain shaders and their detailed meshes are never rendered here.
+    if (cover) material.onBeforeCompile = shader => {
+      Object.assign(shader.uniforms, {
+        uReflectionCover: { value: cover },
+        uReflectionExtent: { value: new THREE.Vector2(surfaceMaterials.width, surfaceMaterials.height) },
+        uReflectionGrassVisibility: grassVisibility
+      });
+      if (grass) Object.assign(shader.uniforms, {
+        uReflectionGrassMask: { value: grass.mask }, uReflectionGrassColor: { value: grass.color }
+      });
+      const varyings = 'varying vec3 vReflectionPosition; varying float vReflectionSlope;';
+      shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\n' + varyings)
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvReflectionPosition=position; vReflectionSlope=abs(normalize(normal).y);');
+      shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>
+        ${varyings}
+        uniform sampler2D uReflectionCover;
+        uniform vec2 uReflectionExtent;
+        uniform float uReflectionGrassVisibility;
+        ${grass ? `uniform sampler2D uReflectionGrassMask;
+          uniform sampler2D uReflectionGrassColor;
+          ${global.NotoGroundGrass?.shaderDeclarations || 'float grassPatchCoverage(vec2 p) { return 0.6; }'}` : ''}`);
+      shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+        vec2 coverUv=vReflectionPosition.xz/uReflectionExtent+0.5;
+        vec4 coverColor=texture2D(uReflectionCover,coverUv);
+        float slopeCoverage=smoothstep(0.5,0.819152,vReflectionSlope);
+        float geologyBrightness=clamp(dot(diffuseColor.rgb,vec3(0.299,0.587,0.114))*2.0,0.65,1.25);
+        diffuseColor.rgb=mix(diffuseColor.rgb,coverColor.rgb*geologyBrightness*0.98,
+          coverColor.a*slopeCoverage*uReflectionGrassVisibility);
+        ${grass ? `
+          float grassPatch=grassPatchCoverage(vReflectionPosition.xz);
+          float grassCoverage=texture2D(uReflectionGrassMask,coverUv).r*grassPatch*slopeCoverage
+            *smoothstep(1.5,3.0,vReflectionPosition.y)*uReflectionGrassVisibility;
+          vec3 grassColor=textureLod(uReflectionGrassColor,vec2(0.5),20.0).rgb;
+          float grassLuminance=dot(grassColor,vec3(0.2126,0.7152,0.0722));
+          grassColor=mix(grassColor*0.88,grassLuminance*vec3(0.48,0.94,0.29),0.50+0.34*grassPatch);
+          diffuseColor.rgb=mix(diffuseColor.rgb,grassColor*0.96,grassCoverage);` : ''}`);
+    };
+    material.customProgramCacheKey = () => `noto-coast-reflection-albedo-${Boolean(cover)}-${Boolean(grass)}`;
     const ambient = new THREE.HemisphereLight(0xc5d4dc, 0x44483a, 0.65);
     const sun = new THREE.DirectionalLight(0xfff1d4, 1.15);
     scene.add(ambient, sun, sun.target);
@@ -109,6 +214,7 @@
         const rowAxis = axis(rows);
         const colAxis = axis(cols);
         const positions = new Float32Array(rowAxis.length * colAxis.length * 3);
+        const colors = new Float32Array(positions.length);
         const valid = new Uint8Array(rowAxis.length * colAxis.length);
         const xs = query?.xs;
         const zs = query?.zs;
@@ -126,8 +232,12 @@
             const z = coordinate(rowAxis[row], 1);
             valid[vertex] = Number.isFinite(height) && Number.isFinite(x) && Number.isFinite(z) ? 1 : 0;
             positions[vertex * 3] = Number.isFinite(x) ? x : 0;
-            positions[vertex * 3 + 1] = Number.isFinite(height) ? Math.max(0.02, height) : 0.02;
+            const distance = coastalField?.distance(x, z);
+            const displayHeight = Number.isFinite(distance) && global.NotoCoastalGeometry?.contactHeight
+              ? global.NotoCoastalGeometry.contactHeight(height, distance) : height;
+            positions[vertex * 3 + 1] = Number.isFinite(displayHeight) ? Math.max(0, displayHeight) : 0;
             positions[vertex * 3 + 2] = Number.isFinite(z) ? z : 0;
+            colors.set(albedoAt(x, z, height), vertex * 3);
           }
         }
         const indices = [];
@@ -149,6 +259,7 @@
         if (!indices.length) continue;
         const buffer = new THREE.BufferGeometry();
         buffer.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        buffer.setAttribute('color', new THREE.BufferAttribute(colors, 3));
         buffer.setIndex(indices);
         buffer.computeVertexNormals();
         buffer.computeBoundingSphere();
@@ -169,16 +280,19 @@
 
     function setLighting(state = {}) {
       if (disposed || failed) return;
-      const key = JSON.stringify([state.direction, state.sunColor, state.sunIntensity, state.skyColor, state.elevation, state.weather]);
+      const key = JSON.stringify([state.direction, state.sunColor, state.sunIntensity, state.skyColor,
+        state.hemisphereColor, state.hemisphereGroundColor, state.hemisphereIntensity, state.elevation, state.weather]);
       if (key === lightingKey) return;
       lightingKey = key;
       const daylight = Math.max(0.025, Math.min(1, ((state.elevation ?? 30) + 7) / 22));
       if (state.sunColor?.length >= 3) sun.color.fromArray(state.sunColor);
-      sun.intensity = Math.max(0, Math.min(2.0, (state.sunIntensity ?? 2) * 0.5));
+      sun.intensity = Math.max(0, state.sunIntensity ?? 2);
       if (state.direction?.length >= 3) sun.position.fromArray(state.direction).multiplyScalar(1000);
       else sun.position.set(-300, 900, -200);
-      if (state.skyColor?.length >= 3) ambient.color.fromArray(state.skyColor);
-      ambient.intensity = 0.18 + daylight * 0.65;
+      const ambientColor = state.hemisphereColor || state.skyColor;
+      if (ambientColor?.length >= 3) ambient.color.fromArray(ambientColor);
+      if (state.hemisphereGroundColor?.length >= 3) ambient.groundColor.fromArray(state.hemisphereGroundColor);
+      ambient.intensity = state.hemisphereIntensity ?? (0.10 + daylight * 1.4);
       invalidate('Lighting changed');
     }
 
@@ -262,6 +376,10 @@
     function update({ now = 0, waterVisible: visible = true } = {}) {
       waterVisible = visible;
       if (disposed || failed || !proxyTriangles || !visible) return false;
+      if (observedGrassVisibility !== grassVisibility.value) {
+        observedGrassVisibility = grassVisibility.value;
+        invalidate('Ground cover visibility changed');
+      }
       const transform = terrain?.matrixWorld || identity;
       if (!observed || !observedCamera.equals(camera.matrixWorld) ||
           !observedProjection.equals(camera.projectionMatrix) || !observedTerrain.equals(transform)) {
@@ -313,6 +431,8 @@
         height: HEIGHT,
         proxyTriangles,
         proxyMeshes: proxy.children.length,
+        albedoMode: surfaceMaterials ? 'source-texture-means-and-cover' : 'neutral-fallback',
+        coverTextureReads: cover ? (grass ? 3 : 1) : 0,
         captures,
         pending,
         settlingFrames: settling,

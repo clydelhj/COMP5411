@@ -66,6 +66,30 @@ test('ocean surface, atmosphere, sunset shading and idle behavior run in actual 
       assert(Math.max(...probe.cpu.map((value, index) => Math.abs(value - probe.gpu[index]))) < 0.02,
         'analytic macro normal agrees with numerical surface tangents at ' + probe.point);
     }
+    assert(report.coastDistanceProbes.length >= 20, 'shoreline probes cover cell and blend boundaries');
+    for (const probe of report.coastDistanceProbes) {
+      assert(Number.isFinite(probe.cpu[0]) && probe.gpu.every(Number.isFinite), 'coast distance samples are finite');
+      assert(Math.abs(probe.cpu[0] - probe.gpu[0]) < 0.08,
+        'CPU/GPU coastal distance agrees within 8 cm packed-texture/filter precision at ' + probe.point);
+    }
+    if (!baseline) {
+      assert.equal(report.foamDensity?.width, 512);
+      assert.equal(report.foamDensity?.height, 512);
+      assert.equal(report.foamDensity?.channels, 2);
+      assert.equal(report.foamDensity?.textureReads, 2);
+      assert(report.foamDensity.textureMiB < 0.7, 'mipmapped foam density stays within its memory budget');
+      assert.equal(report.surfaceLayers?.length, 5, 'GPU evaluates the actual water/foam radiance resolver');
+      const [normalView, grazingView, unlit, bare, skyScattering] = report.surfaceLayers;
+      assert(report.surfaceLayers.flat().every(Number.isFinite));
+      for (let channel = 0; channel < 3; channel++) {
+        const expected = [0.84, 0.88, 0.86][channel] * 0.5 * 0.4;
+        assert(Math.abs(normalView[channel] - expected) < 0.00001, 'foam coverage weights diffuse light once');
+        assert(Math.abs(grazingView[channel] - normalView[channel]) < 0.00001, 'water Fresnel does not darken the foam fraction at grazing angles');
+        assert(Math.abs(unlit[channel]) < 0.00001 && Math.abs(bare[channel]) < 0.00001, 'foam adds neither unlit emission nor uncovered radiance');
+        assert(Math.abs(skyScattering[channel] - [0.84,0.88,0.86][channel]*[0.2,0.3,0.4][channel]*0.4) < 0.00001,
+          'cloud-blocked direct light retains bounded sky scattering in the foam fraction');
+      }
+    }
     assert(Math.max(...report.surfGroups.heights) - Math.min(...report.surfGroups.heights) > 0.08,
       'successive nearshore crests form varying-strength wave sets');
     assert(report.surfGroups.heights.every(value => value >= 0 && value <= 1.3),
@@ -100,6 +124,8 @@ test('ocean surface, atmosphere, sunset shading and idle behavior run in actual 
     }
     if (process.env.REQUIRE_OCEAN_REFLECTION === '1') {
       assert(report.reflection?.state.supported && report.reflection.state.active, 'coarse terrain reflection is actually active');
+      assert.equal(report.reflection.state.albedoMode, 'source-texture-means-and-cover', 'GPU fixture exercises the source-albedo reflection');
+      assert.equal(report.reflection.state.coverTextureReads, 3, 'GPU fixture compiles cover, grass mask and grass color sampling');
       assert(report.reflection.state.proxyTriangles > 0 && report.reflection.state.proxyTriangles <= 150000, 'reflection proxy remains bounded');
       assert(report.reflection.texture.maxima[3] > 0.5, 'reflection texture contains rendered land rather than only clear pixels');
       assert(report.reflection.imageChange.changedPixels > 30, 'terrain reflection contributes visible water pixels');
