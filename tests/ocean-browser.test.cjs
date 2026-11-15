@@ -130,6 +130,9 @@ test('ocean surface, atmosphere, sunset shading and idle behavior run in actual 
         assert(probes[0].rgba[0] > probes[0].rgba[2] * 1.1, 'sun-facing low horizon becomes warmer than blue at dawn/dusk');
       }
       assert(sky.noonProbes[2].rgba[2] > sky.noonProbes[2].rgba[0], 'daytime zenith retains its blue color');
+      assert(sky.reflectedSun.waterEnvironment.every(Number.isFinite), 'rough water environment lookup remains finite');
+      assert(Math.max(...sky.reflectedSun.visible.slice(0, 3).map((value, i) => value - sky.reflectedSun.waterEnvironment[i])) > 0.1,
+        'water environment excludes the sharp solar disk supplied separately by directional GGX');
       const redBlue = rgb => rgb[0] / Math.max(1, rgb[2]);
       assert(redBlue(sky.sunset.waterRGB) > redBlue(sky.noon.waterRGB), 'sunset warmth reaches the water reflection');
       const luminance = rgb => rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;

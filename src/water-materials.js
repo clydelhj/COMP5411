@@ -27,35 +27,53 @@ Hash wrapped lattice points and smoothly interpolate. Returns the same value in 
     return (hash(ix, iy) * (1 - sx) + hash(ix + 1, iy) * sx) * (1 - sy) + (hash(ix, iy + 1) * (1 - sx) + hash(ix + 1, iy + 1) * sx) * sy;
   }
   function createTextures(THREE) {
-    /* Create seamless sea color and detail textures using THREE.
-    Warp a periodic fractal field, then calculate gradients with periodic central differences. Color RGB is neutral and A stores foam noise; detail RGB/A stores normals/roughness.
-Returns {color,detail} DataTextures with mipmaps: sRGB color and linear detail. */
+    /* Bake seamless directional wavelets once. Integer Fourier modes close at the
+     * tile edges; a weak second harmonic sharpens crests without value-noise lobes.
+     * Precomputed row/column trigonometry keeps texture construction off the frame loop.
+     * Returns mipmapped sRGB color/noise and linear RGBA16F normal/roughness textures.
+     */
     const colorPixels = new Uint8Array(TEXTURE_SIZE * TEXTURE_SIZE * 4);
-    const detailPixels = new Uint8Array(colorPixels.length);
-    const heights = new Float32Array(TEXTURE_SIZE * TEXTURE_SIZE);
+    const detailPixels = new Uint16Array(colorPixels.length);
     const tau = Math.PI * 2;
-    for (let row = 0; row < TEXTURE_SIZE; row++) {
-      for (let col = 0; col < TEXTURE_SIZE; col++) {
-        const u = col / TEXTURE_SIZE;
-        const v = row / TEXTURE_SIZE;
-        const wu = u + 0.045 * Math.sin(tau * (2 * u + v)) + 0.018 * Math.sin(tau * (u - 3 * v));
-        const wv = v + 0.04 * Math.sin(tau * (u - 2 * v) + 1.3);
-        // Unequal noise bands avoid the parallel engraved lines of a few sine-wave textures.
-        const height = 0.90 * (periodicNoise(wu, wv, 4) - 0.5)
-          + 0.36 * (periodicNoise(wu, wv, 8) - 0.5)
-          + 0.18 * (periodicNoise(wu, wv, 16) - 0.5)
-          + 0.09 * (periodicNoise(wu, wv, 32) - 0.5)
-          + 0.045 * (periodicNoise(wu, wv, 64) - 0.5);
-        heights[row * TEXTURE_SIZE + col] = height;
+    let seed = 541119, meanX = 0, meanZ = 0, meanUp = 0;
+    const random = () => {
+      seed = Math.imul(seed, 1664525) + 1013904223 >>> 0;
+      return (seed + 0.5) / 4294967296;
+    };
+    const wavelets = [], used = new Set();
+    while (wavelets.length < 24) {
+      const band = wavelets.length;
+      const frequency = 7 * (46 / 7) ** ((band + 0.5) / 24);
+      const direction = band < 12 ? 0.62 + (random() - 0.5) * 1.4 : random() * Math.PI;
+      let nx = Math.round(Math.cos(direction) * frequency), nz = Math.round(Math.sin(direction) * frequency);
+      if (nx < 0 || (nx === 0 && nz < 0)) { nx = -nx; nz = -nz; }
+      const key = `${nx},${nz}`;
+      if (used.has(key)) continue;
+      used.add(key);
+      const phase = random() * tau, length = Math.hypot(nx, nz);
+      const sinX = new Float32Array(TEXTURE_SIZE), cosX = new Float32Array(TEXTURE_SIZE);
+      const sinZ = new Float32Array(TEXTURE_SIZE), cosZ = new Float32Array(TEXTURE_SIZE);
+      for (let i = 0; i < TEXTURE_SIZE; i++) {
+        sinX[i] = Math.sin(tau * nx * i / TEXTURE_SIZE + phase);
+        cosX[i] = Math.cos(tau * nx * i / TEXTURE_SIZE + phase);
+        sinZ[i] = Math.sin(tau * nz * i / TEXTURE_SIZE);
+        cosZ[i] = Math.cos(tau * nz * i / TEXTURE_SIZE);
       }
+      wavelets.push({ x: nx / length, z: nz / length, sinX, cosX, sinZ, cosZ });
     }
-    const heightAt = (col, row) => heights[(row + TEXTURE_SIZE) % TEXTURE_SIZE * TEXTURE_SIZE + (col + TEXTURE_SIZE) % TEXTURE_SIZE];
+    const slopeGain = 0.075 / Math.sqrt(wavelets.length * (1 + 0.24 ** 2) * 0.5);
     for (let row = 0; row < TEXTURE_SIZE; row++) {
       for (let col = 0; col < TEXTURE_SIZE; col++) {
         const u = col / TEXTURE_SIZE,
           v = row / TEXTURE_SIZE;
-        const dx = (heightAt(col + 1, row) - heightAt(col - 1, row)) * TEXTURE_SIZE / (2 * TILE_SCALE_M);
-        const dz = (heightAt(col, row + 1) - heightAt(col, row - 1)) * TEXTURE_SIZE / (2 * TILE_SCALE_M);
+        let dx = 0, dz = 0;
+        for (const wave of wavelets) {
+          const sine = wave.sinX[col] * wave.cosZ[row] + wave.cosX[col] * wave.sinZ[row];
+          const cosine = wave.cosX[col] * wave.cosZ[row] - wave.sinX[col] * wave.sinZ[row];
+          const gradient = slopeGain * sine * (1 + 0.48 * cosine);
+          dx += wave.x * gradient;
+          dz += wave.z * gradient;
+        }
         const noise = periodicNoise(u, v, 4) * 0.55 + periodicNoise(u, v, 16) * 0.28 + periodicNoise(u, v, 64) * 0.17;
         const index = (row * TEXTURE_SIZE + col) * 4;
         colorPixels[index] = colorPixels[index + 1] = colorPixels[index + 2] = 255;
@@ -63,14 +81,20 @@ Returns {color,detail} DataTextures with mipmaps: sRGB color and linear detail. 
         colorPixels[index + 3] = Math.round(noise * 255);
         // RGB encodes the tangent-space normal along +X,+Z,+Y, transformed back into object space when sampled.
         const length = Math.hypot(dx, dz, 1);
-        detailPixels[index] = Math.round((-dx / length * 0.5 + 0.5) * 255);
-        detailPixels[index + 1] = Math.round((-dz / length * 0.5 + 0.5) * 255);
-        detailPixels[index + 2] = Math.round((1 / length * 0.5 + 0.5) * 255);
-        detailPixels[index + 3] = Math.round((0.045 + noise * 0.055) * 255);
+        const normalX = -dx / length, normalZ = -dz / length, normalUp = 1 / length;
+        meanX += normalX; meanZ += normalZ; meanUp += normalUp;
+        // Sample-only half-float textures are filterable in WebGL2. Subtle slopes need
+        // more than the handful of normal levels provided by 8-bit encoding near 0.5.
+        detailPixels[index] = THREE.DataUtils.toHalfFloat(normalX * 0.5 + 0.5);
+        detailPixels[index + 1] = THREE.DataUtils.toHalfFloat(normalZ * 0.5 + 0.5);
+        detailPixels[index + 2] = THREE.DataUtils.toHalfFloat(normalUp * 0.5 + 0.5);
+        detailPixels[index + 3] = THREE.DataUtils.toHalfFloat(0.045 + noise * 0.055);
       }
     }
     const color = new THREE.DataTexture(colorPixels, TEXTURE_SIZE, TEXTURE_SIZE);
-    const detail = new THREE.DataTexture(detailPixels, TEXTURE_SIZE, TEXTURE_SIZE);
+    const detail = new THREE.DataTexture(detailPixels, TEXTURE_SIZE, TEXTURE_SIZE, THREE.RGBAFormat, THREE.HalfFloatType);
+    const count = TEXTURE_SIZE * TEXTURE_SIZE;
+    detail.userData.normalMeanVariance = Math.max(0, 1 - (meanX * meanX + meanZ * meanZ + meanUp * meanUp) / (count * count));
     for (const texture of [color, detail]) {
       texture.wrapS = THREE.RepeatWrapping;
       texture.wrapT = THREE.RepeatWrapping;
@@ -107,7 +131,7 @@ Returns {top,cut,textures,dispose}; dispose is idempotent. */
     });
     top.name = 'Noto sea surface';
     cut.name = 'Noto water cut and base';
-    top.customProgramCacheKey = () => 'noto-water-microdetail-v3';
+    top.customProgramCacheKey = () => 'noto-water-directional-wavelets-v4';
     top.onBeforeCompile = shader => {
       /* Inject shared water textures into standard color, normal and roughness shading.
 Parameter: shader is the Three.js shader/uniform container.

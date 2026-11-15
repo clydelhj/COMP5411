@@ -242,3 +242,67 @@ test('hard cell and patch limits bound lookahead or suppress a split when nothin
     assertCover(transaction.tiles, input.width, input.height);
   }
 });
+
+// A deliberately simple reference keeps priority ordering and the transitive seam
+// contract independent of the optimized heap/adjacency implementation.
+function referenceSelection(input, base, budget, limit, score, committed = new Set()) {
+  let step = base;
+  while (128 * step < Math.max(input.width, input.height)) step *= 2;
+  const root = input.lod.coarse(base, step)[0];
+  const leaves = new Map([[root.key, root]]), queue = [root];
+  let cost = cells([root]);
+  const priority = tile => score(tile) * (committed.has(tile.key) ? 1.3 : 1);
+  while (queue.length) {
+    queue.sort((a, b) => priority(b) - priority(a) || a.key.localeCompare(b.key));
+    const tile = queue.shift();
+    if (score(tile) <= (committed.has(tile.key) ? 1.5 : 2.4) || tile.step <= base) continue;
+    const children = input.lod.children(tile), increase = cells(children) - cells([tile]);
+    if (cost + increase > budget || leaves.size + children.length - 1 > limit) continue;
+    cost += increase;
+    leaves.delete(tile.key);
+    for (const child of children) { leaves.set(child.key, child); queue.push(child); }
+  }
+  return Array.from(leaves.values()).sort((a, b) => a.key.localeCompare(b.key));
+}
+
+function bruteContext(input, selected, tile) {
+  const context = new Map(selected.filter(other => input.lod.touches(tile, other)).map(other => [other.key, other]));
+  for (const entry of context.values()) for (const other of selected) {
+    if (other.step > entry.step && input.lod.touches(entry, other)) context.set(other.key, other);
+  }
+  return Array.from(context.keys());
+}
+
+test('heap selection preserves ordering, budgets and hysteresis while scoring each node once', () => {
+  for (const base of [1, 3, 5, 8]) {
+    const input = fixture(base, base * 128 * 12 + 17, base * 128 * 7 + 11);
+    let committed = new Set();
+    for (let view = 0; view < 5; view++) {
+      const x = input.width * (0.12 + 0.17 * view), z = input.height * (0.1 + 0.13 * view);
+      const score = tile => view === 4 ? 3 : tile.step * 120 / Math.max(5,
+        Math.hypot(Math.max(tile.c0 - x, 0, x - tile.c1), Math.max(tile.r0 - z, 0, z - tile.r1)));
+      const budget = (18 + view * 4) * 128 * 128, limit = 34 + view * 3;
+      const expected = referenceSelection(input, base, budget, limit, score, committed);
+      const calls = new Set();
+      const actual = input.lod.select({ step: base, budget, limit, score(tile) {
+        assert.equal(calls.has(tile.key), false, 'one camera-bound calculation per visited node');
+        calls.add(tile.key);
+        return score(tile);
+      } });
+      assert.deepEqual(Array.from(actual, tile => tile.key), expected.map(tile => tile.key));
+      assertCover(actual, input.width, input.height);
+      for (const tile of actual) assert.deepEqual(Array.from(tile.neighbors, other => other.key), bruteContext(input, expected, tile));
+      input.lod.commit(actual);
+      committed = new Set();
+      let rootStep = base;
+      while (rootStep * 128 < Math.max(input.width, input.height)) rootStep *= 2;
+      for (const leaf of actual) {
+        let step = leaf.step, x = leaf.x, z = leaf.z;
+        while (step < rootStep) {
+          step *= 2; x = Math.floor(x / 2); z = Math.floor(z / 2);
+          committed.add(`patch/${base}/${step}/${x}/${z}`);
+        }
+      }
+    }
+  }
+});

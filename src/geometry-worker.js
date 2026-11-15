@@ -58,12 +58,20 @@
       const x0 = tile.c0 * dx - metadata.width_m / 2, x1 = tile.c1 * dx - metadata.width_m / 2;
       const z0 = tile.r0 * dz - metadata.height_m / 2, z1 = tile.r1 * dz - metadata.height_m / 2;
       const positions = [], indices = [], seen = new Set();
+      // Most triangle edges lie strictly inside a patch. Classify vertices once;
+      // only edges sharing a boundary plane need a string key or deduplication.
+      const boundary = new Uint8Array(p.length / 3);
+      for (let i = 0; i < boundary.length; i++) {
+        boundary[i] = (Math.abs(p[i * 3] - x0) < 0.002 ? 1 : 0) |
+          (Math.abs(p[i * 3] - x1) < 0.002 ? 2 : 0) |
+          (Math.abs(p[i * 3 + 2] - z0) < 0.002 ? 4 : 0) |
+          (Math.abs(p[i * 3 + 2] - z1) < 0.002 ? 8 : 0);
+      }
       for (let i = 0; i < ids.length; i += 3) for (let j = 0; j < 3; j++) {
         const a = ids[i + j], b = ids[i + (j + 1) % 3];
+        if (!(boundary[a] & boundary[b])) continue;
         const key = `${Math.min(a, b)}/${Math.max(a, b)}`;
         if (seen.has(key)) continue;
-        if (![x0, x1].some(x => Math.abs(p[a * 3] - x) < 0.002 && Math.abs(p[b * 3] - x) < 0.002) &&
-            ![z0, z1].some(z => Math.abs(p[a * 3 + 2] - z) < 0.002 && Math.abs(p[b * 3 + 2] - z) < 0.002)) continue;
         seen.add(key);
         const first = positions.length / 3;
         positions.push(p[a * 3], p[a * 3 + 1], p[a * 3 + 2], p[b * 3], p[b * 3 + 1], p[b * 3 + 2]);

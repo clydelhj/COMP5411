@@ -541,6 +541,7 @@
       foregroundBusy = false,
       pendingSelection = null;
     const refinementState = { commits: 0, lastType: null, lastCommitMs: 0, pendingPatches: 0, selectionDelayMs: 80 };
+    const baseCulling = { updates: 0, patches: 0, culledMeshes: 0, culledTriangles: 0, live: null, showBase: null };
     let activeTransition = null;
     let lastBuildAt = -Infinity;
     let warmingResident = false;
@@ -745,6 +746,7 @@
       group.children.forEach(mesh => {
         mesh.castShadow = mesh.geometry === geometry.land?.top || mesh.geometry === geometry.land?.walls;
         mesh.receiveShadow = true;
+        mesh.userData.notoBaseFace = mesh.geometry === geometry.land?.bottom || mesh.geometry === geometry.water?.bottom;
         if (mesh.geometry === geometry.water?.top) {
           if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
           mesh.geometry.boundingBox.expandByScalar(6);
@@ -753,6 +755,28 @@
         }
       });
       return group;
+    }
+    function updateTerrainBaseVisibility() {
+      // Closed volumes have a flat downward-facing base at -100 m. Its back face
+      // is hidden from exterior cameras above that plane; skip submitting the
+      // duplicate dense mesh. Keep it at/below the plane for underside views.
+      // Water displacement is also exactly zero at this base elevation.
+      const showBase = camera.position.y <= -100 * terrain.scale.y + 0.01;
+      if (baseCulling.live === live && baseCulling.showBase === showBase) return;
+      let culledMeshes = 0, culledTriangles = 0;
+      for (const item of live.values()) {
+        for (const mesh of item.group.children) {
+          if (mesh.userData.notoBaseFace) {
+            mesh.visible = showBase;
+            if (!showBase) {
+              culledMeshes++;
+              culledTriangles += mesh.geometry.index ? mesh.geometry.index.count / 3 : mesh.geometry.attributes.position.count / 3;
+            }
+          }
+        }
+      }
+      Object.assign(baseCulling, { live, showBase, patches: live.size,
+        culledMeshes, culledTriangles, updates: baseCulling.updates + 1 });
     }
     // This is a frustum test, not terrain occlusion culling.
     function updateResolution() {
@@ -1351,6 +1375,7 @@
         // Reflection captures happen before the scene render, including immediate-sleep views.
         camera.updateMatrixWorld();
         terrain.updateWorldMatrix(true, false);
+        updateTerrainBaseVisibility();
         if (initialized && now - coverageAt > 80) {
           matrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
           frustum.setFromProjectionMatrix(matrix);
@@ -1523,6 +1548,8 @@
         },
         geometryWorker: geometryBuilder.getState(),
         refinement: { ...refinementState, active: Boolean(activeTransition), desiredPatches: pendingSelection?.length ?? 0 },
+        baseCulling: { updates: baseCulling.updates, patches: baseCulling.patches,
+          culledMeshes: baseCulling.culledMeshes, culledTriangles: baseCulling.culledTriangles },
         environment: environment.getState(),
         water: waterMotion.getState(),
         oceanSpectrum: oceanSpectrum.getState(),

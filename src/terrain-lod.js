@@ -105,12 +105,43 @@
       reset(step);
       const leaves = new Map([[root.key, root]]);
       let cost = cells(root);
-      const queue = [root];
+      // Score each visited node once per selection. A heap keeps the same priority/tie
+      // order without repeatedly evaluating camera bounds inside full-array sorts.
+      const queue = [];
+      const before = (a, b) => a.priority > b.priority || a.priority === b.priority && a.tile.key.localeCompare(b.tile.key) < 0;
+      function push(tile) {
+        const value = score(tile);
+        const entry = { tile, score: value, priority: value * (committedSplits.has(tile.key) ? 1.3 : 1) };
+        let index = queue.length;
+        queue.push(entry);
+        while (index > 0) {
+          const parent = (index - 1) >> 1;
+          if (!before(entry, queue[parent])) break;
+          queue[index] = queue[parent];
+          index = parent;
+        }
+        queue[index] = entry;
+      }
+      function pop() {
+        const first = queue[0], last = queue.pop();
+        if (queue.length) {
+          let index = 0;
+          while (index * 2 + 1 < queue.length) {
+            let child = index * 2 + 1;
+            if (child + 1 < queue.length && before(queue[child + 1], queue[child])) child++;
+            if (!before(queue[child], last)) break;
+            queue[index] = queue[child];
+            index = child;
+          }
+          queue[index] = last;
+        }
+        return first;
+      }
+      push(root);
       while (queue.length) {
-        queue.sort((a, b) => priority(b) - priority(a) || a.key.localeCompare(b.key));
-        const tile = queue.shift();
+        const { tile, score: error } = pop();
         const threshold = committedSplits.has(tile.key) ? 1.5 : 2.4;
-        if (score(tile) <= threshold || tile.step <= step) continue;
+        if (error <= threshold || tile.step <= step) continue;
         const next = children(tile);
         const increase = next.reduce((sum, child) => sum + cells(child), 0) - cells(tile);
         if (cost + increase > budget || leaves.size + next.length - 1 > limit) continue;
@@ -118,11 +149,8 @@
         leaves.delete(tile.key);
         for (const child of next) {
           leaves.set(child.key, child);
-          queue.push(child);
+          push(child);
         }
-      }
-      function priority(tile) {
-        return score(tile) * (committedSplits.has(tile.key) ? 1.3 : 1);
       }
       return decorate(leaves.values());
     }
@@ -130,11 +158,20 @@
       // Include adjacent patches and coarser endpoint owners in each geometry signature.
       // Progressive transactions use the same seam context as a fully selected frontier.
       const selected = [...tiles].sort((a, b) => a.key.localeCompare(b.key));
+      // Build pair adjacency once. Lists preserve selected order so the transitive
+      // coarse-owner closure and geometry cache signatures stay deterministic.
+      const adjacency = new Map(selected.map(tile => [tile.key, []]));
+      for (let i = 0; i < selected.length; i++) for (let j = i; j < selected.length; j++) {
+        const a = selected[i], b = selected[j];
+        if (!touches(a, b)) continue;
+        adjacency.get(a.key).push(b);
+        if (i !== j) adjacency.get(b.key).push(a);
+      }
       return selected.map(tile => {
-        const context = new Map(selected.filter(other => touches(tile, other)).map(other => [other.key, other]));
+        const context = new Map(adjacency.get(tile.key).map(other => [other.key, other]));
         for (const entry of context.values()) {
-          for (const other of selected) {
-            if (other.step > entry.step && touches(entry, other)) context.set(other.key, other);
+          for (const other of adjacency.get(entry.key)) {
+            if (other.step > entry.step) context.set(other.key, other);
           }
         }
         const neighbors = [...context.values()];

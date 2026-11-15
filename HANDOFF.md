@@ -1,6 +1,6 @@
 # Maintenance handoff
 
-Baseline date: November 12, 2026. Project: **Noto Peninsula: An Interactive 3D Landscape**, COMP5411 Group 12, LEE Hyunjin and TAN Jiming.
+Baseline date: November 15, 2026. Project: **Noto Peninsula: An Interactive 3D Landscape**, COMP5411 Group 12, LEE Hyunjin and TAN Jiming.
 
 ## Entry and documentation
 
@@ -46,9 +46,17 @@ Mixed-detail land edges match the actual coarse surface, including shoreline sub
 
 Generated 16-bit indices must stay below 65535 because WebGL2 reserves that value for primitive restart. Preserve triangle order, exact attributes and the Worker's typed-array transfers; compact indices again after seam topology changes. Larger references retain 32-bit storage, and existing 16-bit buffers keep their original restart interpretation.
 
+LOD selection uses one view score per visited node, a deterministic heap and ordered adjacency for the coarse-owner closure. Keep scores selection-local and preserve key tie-breaking, thresholds and neighbor/cache-key ordering. Worker compact edges use boundary bitmasks before allocating keys; preserve the original boundary tolerance and accepted-edge order.
+
+Only tagged flat land/water bottom meshes may be hidden above the scaled -100 m plane; restore them at/below it. Never hide tops or cut walls, dispose stored bottoms, change draw ordering, or alter shared materials for this optimization. Water displacement is zero at the base. Cache visibility until the live frontier changes or the camera crosses the scaled plane. Base-culling diagnostics cover all active meshes, not only those submitted in the frustum.
+
 Ocean geometry retains long swells and CPU/GPU displacement parity. The two 128-square GPU FFT fields supply filtered slopes/crest shading; do not describe them as a fully spectral displaced mesh or fluid solver. Preserve FFT sign consistency: positive crests compress, and normals use choppy tangent derivatives. Shared clock updates are capped at 20 Hz; no-water/unchanged-time frames do not transform the fields. Float-target failure keeps analytic water active. Retain the MIT notice in `src/ocean-spectrum.js` and `vendor/ocean/dli-waves-LICENSE.txt`.
 
 The nearshore wave-group envelope remains within 0.25-1 and shares coefficients between CPU and GLSL. Preserve its product-rule normal derivative and shared influence on breaker geometry, foam and wet wash. Spray samples emission-time strength so its modulation does not change during flight. Exact shore contact and the previous maximum displacement bound remain intact.
+
+Retain the broad short-wave directional spread, bounded spectral slope gains, roughness/footprint-filtered sky/cloud reflections and phase-aged foam residue. Water's GGX direct-light lobe owns solar glint; the visible sky still draws its analytic solar disk. Keep sun attenuation separate from pointer-light highlights. The reflection filtering reuses existing mipmapped targets and adds no pass.
+
+The fine 67 m FFT domain complements the 1024 m field and shared 373/131/43 m geometric waves. Micro normals use a once-baked, periodic 24-wavelet RGBA16F texture; preserve the pre-encoding mean-variance metadata and half-float filtering. Water-body ambient scattering follows daylight/sky irradiance, while direct/flashlight and foam lighting remain active. Keep narrow crest foam, continuous opacity, filtered submeter pores and faint phase-aged residue. Evaluate derivatives outside divergent shoreline branches and preserve projected-coverage fading for spray.
 
 Rain uses fixed buffers and world-anchored periodic trajectories. The camera selects nearby copies without dragging drops; fade before all wrap boundaries. Keep paired endpoint motion parameters, the shared clock and no particle-buffer uploads during navigation. Presets remain immediate, and rain has no terrain/water collision simulation.
 

@@ -155,6 +155,31 @@ function compareArray(actual, expected, label) {
   assert.deepEqual(Array.from(actual || []), Array.from(expected || []), label);
 }
 
+function assertCompactEdges(result, tile, metadata) {
+  const xBounds = [tile.c0, tile.c1].map(c => c * metadata.source_spacing_m[0] - metadata.width_m / 2);
+  const zBounds = [tile.r0, tile.r1].map(r => r * metadata.source_spacing_m[1] - metadata.height_m / 2);
+  for (const kind of ['land', 'water']) {
+    const top = result[kind]?.top;
+    if (!top) continue;
+    const p = top.attributes.position.array, ids = top.index.array;
+    const points = [], indices = [], seen = new Set();
+    // Slow geometric oracle: every indexed edge is considered independently.
+    for (let i = 0; i < ids.length; i += 3) for (let j = 0; j < 3; j++) {
+      const a = ids[i + j], b = ids[i + (j + 1) % 3];
+      if (!xBounds.some(x => Math.abs(p[a * 3] - x) < 0.002 && Math.abs(p[b * 3] - x) < 0.002) &&
+          !zBounds.some(z => Math.abs(p[a * 3 + 2] - z) < 0.002 && Math.abs(p[b * 3 + 2] - z) < 0.002)) continue;
+      const key = [a, b].sort((u, v) => u - v).join('/');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const start = points.length / 3;
+      points.push(...p.subarray(a * 3, a * 3 + 3), ...p.subarray(b * 3, b * 3 + 3));
+      indices.push(start, start + 1, start + 1);
+    }
+    compareArray(result.edgeGeometry[kind].top.attributes.position.array, Float32Array.from(points), `${kind} exact compact edge order`);
+    compareArray(result.edgeGeometry[kind].top.index.array, Uint32Array.from(indices), `${kind} exact compact edge indices`);
+  }
+}
+
 function compareGeometry(actual, expected) {
   assert.equal(Boolean(actual.coarseOnlyDependencies), Boolean(expected.coarseOnlyDependencies), 'coastal dependency qualification survives transfer');
   assert.deepEqual(JSON.parse(JSON.stringify(actual.metadata)), JSON.parse(JSON.stringify(expected.metadata)));
@@ -211,6 +236,7 @@ test('worker geometry preserves regular land, internal NoData and ocean ownershi
     t.after(() => client.dispose());
     const actual = await client.build(tile, raw, [], []);
     compareGeometry(actual, expected);
+    assertCompactEdges(actual, tile, input.tileset.metadata);
     assert.equal((actual.land || actual.water).top.index.array.BYTES_PER_ELEMENT, 2, 'small mesh indices remain compact after transfer');
     compareArray(raw, snapshot, 'caller height array remains owned and unchanged');
     assert.equal(raw.byteLength, snapshot.byteLength);
@@ -229,6 +255,7 @@ test('large worker meshes preserve vertex 65535 instead of converting it to rest
   t.after(() => client.dispose());
   const actual = await client.build(tile, raw, [], []);
   compareGeometry(actual, expected);
+  assertCompactEdges(actual, tile, input.tileset.metadata);
   assert.equal(actual.land.top.index.array.BYTES_PER_ELEMENT, 4);
   assert.ok(actual.land.top.index.array.includes(65535), 'vertex 65535 remains an ordinary Uint32 reference');
   actual.dispose();
@@ -249,6 +276,7 @@ test('continuous coastal topology and displayed height queries survive the worke
   t.after(() => client.dispose());
   const actual = await client.build(tile, raw, [], []);
   compareGeometry(actual, expected);
+  assertCompactEdges(actual, tile, input.tileset.metadata);
   assert.equal(typeof actual.sampleHeight, 'function', 'displayed triangle sampler is available after hydration');
   for (const conservative of [false, true]) for (let x = -55; x <= 55; x += 5) {
     for (let z = -25; z <= 25; z += 5) {
@@ -347,6 +375,8 @@ test('coastal mixed LOD preserves remapped triangle queries and compact coarse e
   const actualCoarse = await client.build(coarse, coarseRaw, [], []);
   const actual = await client.build(fine, fineRaw, neighbors, [{ tile: coarse, geometry: actualCoarse }]);
   compareGeometry(actual, expected);
+  assertCompactEdges(actualCoarse, coarse, input.tileset.metadata);
+  assertCompactEdges(actual, fine, input.tileset.metadata);
   for (const kind of ['land', 'water']) {
     const compact = actualCoarse.edgeGeometry[kind]?.top;
     assert.ok(compact?.index.array.length, `${kind} coarse edge packet exists`);

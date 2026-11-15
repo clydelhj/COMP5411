@@ -331,13 +331,13 @@
         infoAutoReset: renderer.info.autoReset, xrEnabled: renderer.xr.enabled
       };
     }
-    function skyProbes(directions) {
+    function skyProbes(directions, reflectedWater = false) {
       const previous = renderer.getRenderTarget();
       const target = new THREE.WebGLRenderTarget(directions.length, 1, { type: THREE.FloatType, depthBuffer: false });
       const material = new THREE.ShaderMaterial({
-        uniforms: { ...atmosphere.uniforms, uProbeDirections: { value: directions.map(point => new THREE.Vector3(...point).normalize()) } },
+        uniforms: { ...motion.uniforms, ...atmosphere.uniforms, uProbeDirections: { value: directions.map(point => new THREE.Vector3(...point).normalize()) } },
         vertexShader: 'void main(){gl_Position=vec4(position.xy,0.0,1.0);}',
-        fragmentShader: `${window.NotoSkyAtmosphere.shaderDeclarations}\nuniform vec3 uProbeDirections[${directions.length}];\nvoid main(){vec3 ray=uProbeDirections[int(gl_FragCoord.x)];gl_FragColor=vec4(atmosphereSkyColor(ray),atmosphereCloudTransmission(ray));}`,
+        fragmentShader: `${reflectedWater ? motion.skyShaderDeclarations : window.NotoSkyAtmosphere.shaderDeclarations}\nuniform vec3 uProbeDirections[${directions.length}];\nvoid main(){vec3 ray=uProbeDirections[int(gl_FragCoord.x)];gl_FragColor=vec4(${reflectedWater ? 'seaReflectedSky(ray,0.16,0.001)' : 'atmosphereSkyColor(ray)'},atmosphereCloudTransmission(ray));}`,
         depthTest: false, depthWrite: false, blending: THREE.NoBlending
       });
       const probe = new THREE.Scene();
@@ -679,6 +679,8 @@
         frame();
         const sunset = snapshot();
         const sunsetProbes = skyProbes(horizonDirections);
+        const sunDirections = [sunsetDirection.toArray()];
+        const reflectedSun = { visible: skyProbes(sunDirections)[0].rgba, waterEnvironment: skyProbes(sunDirections, true)[0].rgba };
         capture('atmosphere-sunset');
         solarLighting(-20);
         frame();
@@ -712,7 +714,7 @@
           sentinel.dispose();
         }
         report.atmosphere = {
-          state: atmosphere.getState(), backdrop: backdrop?.getState(), noonProbes, sunriseProbes, sunsetProbes,
+          state: atmosphere.getState(), backdrop: backdrop?.getState(), noonProbes, sunriseProbes, sunsetProbes, reflectedSun,
           timeOnly: { before: beforeTimeChange, after: afterTimeChange },
           sameTime: { before: beforeSameTime, after: afterSameTime },
           idle: { before: frozenState, after: idleSkyState, difference: regionDifference(frozenImage, idleSkyImage, skyRegion) },

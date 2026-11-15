@@ -6,7 +6,7 @@
   'use strict';
 
   // WAVES: [direction in radians, wavelength in metres, amplitude in metres, initial phase in radians]. Horizontal orbit amplitude is 0.55 times vertical amplitude.
-  const WAVES = [[0.45, 512, 1.2, 0], [1.35, 192, 0.7, 1.7], [-0.55, 72, 0.35, 3.1]];
+  const WAVES = [[0.45, 373, 1.15, 0], [1.35, 131, 0.70, 1.7], [-0.55, 43, 0.40, 3.1]];
   // Slowly travelling wave sets modulate breaking energy. X/Z coefficients are radians/metre;
   // the time coefficient is radians/second. The shared envelope stays within [0.25, 1].
   const SURF_GROUPS = [[0.013, 0.009, -0.13, 0.28], [0.023, -0.017, 0.21, 0.22]];
@@ -165,12 +165,55 @@
       float warmth = (1.0-smoothstep(0.08,0.4,uSeaSunDirection.y))*uSeaDaylight;
       return mix(sky,sky*vec3(1.16,0.94,0.78),warmth*(1.0-skyHeight)*0.45);
     }
+    vec3 seaReflectedSky(vec3 direction, float roughness, float angularFootprint) {
+      ${global.NotoSkyAtmosphere ? /* glsl */`
+      if(uSkyAtmosphereEnabled>0.5) {
+        // The directional GGX lobe already accounts for the sun. Sample the clear
+        // sky atlas without adding a second, perfectly sharp reflected solar disk.
+        vec2 uv = atmosphereSkyUv(direction);
+        float cone = max(roughness*roughness,angularFootprint);
+        vec2 size = vec2(textureSize(uSkyAtmosphereMap,0));
+        float lod = log2(max(1.0,cone*max(size.x/6.28318530718,size.y/1.57079632679)));
+        return textureLod(uSkyAtmosphereMap,uv,lod).rgb;
+      }` : ''}
+      return seaSkyColor(direction);
+    }
   `;
   const CLOUD_GLSL = global.NotoCloudLayers?.shaderDeclarations || /* glsl */`
     vec3 worldCloudReflection(vec3 origin,vec3 ray,vec3 background) { return background; }
     float worldCloudSunTransmission(vec3 origin,vec3 ray) { return 1.0; }
   `;
-  const SURFACE_GLSL = SKY_GLSL + CLOUD_GLSL + /* glsl */`
+  const CLOUD_REFLECTION_GLSL = global.NotoCloudLayers ? /* glsl */`
+    vec4 seaReflectedCloudColumn(vec3 origin,vec3 ray,int layer,float cone) {
+      if(ray.y<=0.0001)return vec4(0.0);
+      float height=layer==0?2500.0:5350.0;
+      float rise=height-origin.y;
+      if(rise<=0.0)return vec4(0.0);
+      vec2 uv=(origin.xz+ray.xz*(rise/ray.y))/80000.0+0.5;
+      if(any(lessThan(uv,vec2(0.0)))||any(greaterThan(uv,vec2(1.0))))return vec4(0.0);
+      // Project the rough reflection cone onto the horizontal cloud layer. Explicit
+      // LOD is well-defined at the horizon/volume bounds, where lanes can diverge.
+      float radius=cone*rise/(max(ray.y*ray.y,0.0001)*80000.0);
+      float width=float(textureSize(uCloudColumnLow,0).x);
+      float lod=log2(max(1.0,radius*width));
+      vec4 cloud=layer==0?textureLod(uCloudColumnLow,uv,lod):textureLod(uCloudColumnHigh,uv,lod);
+      float alpha=1.0-pow(max(0.0001,1.0-cloud.a),1.0/max(0.18,ray.y));
+      cloud.rgb*=alpha/max(0.0001,cloud.a);cloud.a=alpha;
+      return cloud;
+    }
+    vec3 seaReflectedClouds(vec3 origin,vec3 ray,vec3 background,float roughness,float angularFootprint) {
+      if(uWorldCloudsEnabled<0.5)return background;
+      float cone=max(roughness*roughness*0.65,angularFootprint);
+      vec4 low=seaReflectedCloudColumn(origin,ray,0,cone);
+      vec4 high=seaReflectedCloudColumn(origin,ray,1,cone);
+      return low.rgb+(high.rgb+background*(1.0-high.a))*(1.0-low.a);
+    }
+  ` : /* glsl */`
+    vec3 seaReflectedClouds(vec3 origin,vec3 ray,vec3 background,float roughness,float angularFootprint) {
+      return background;
+    }
+  `;
+  const SURFACE_GLSL = SKY_GLSL + CLOUD_GLSL + CLOUD_REFLECTION_GLSL + /* glsl */`
     uniform vec3 uSeaSunColor;
     uniform float uSeaSunIntensity;
     uniform sampler2D uOceanSpectrumLarge;
@@ -270,8 +313,9 @@
     return charts;
   }
   function meanNormalVariance(texture) {
-    // The linear RGBA8 source remains on the CPU. Its mean normal supplies unresolved angular
-    // energy when fine micro-detail is skipped; it is not an extra texture or GPU readback.
+    // The generated field retains its mean normal variance before half-float encoding.
+    // Legacy RGBA8 callers can derive the same statistic without a GPU readback.
+    if (Number.isFinite(texture?.userData?.normalMeanVariance)) return texture.userData.normalMeanVariance;
     const pixels = texture?.image?.data;
     if (!pixels?.length) return 0;
     let x = 0, y = 0, z = 0;
@@ -358,7 +402,7 @@
       ...(spectrum?.uniforms || {
         uOceanSpectrumLarge: { value: neutralSpectrum },
         uOceanSpectrumSmall: { value: neutralSpectrum },
-        uOceanSpectrumSize: { value: new THREE.Vector2(1024, 173) },
+        uOceanSpectrumSize: { value: new THREE.Vector2(1024, 67) },
         uOceanSpectrumEnabled: { value: 0 }
       }),
       uSeaWaves: {
@@ -368,7 +412,7 @@
     const original = materials.top.onBeforeCompile;
     materials.top.name = 'Noto spectral wind sea and long swell';
     materials.top.userData.temporalReactive = true;
-    materials.top.customProgramCacheKey = () => 'noto-water-grouped-surf-v9';
+    materials.top.customProgramCacheKey = () => 'noto-water-wavelet-surf-v13';
     materials.top.defaultAttributeValues = {
       ...materials.top.defaultAttributeValues,
       notoSeaEdge: [0, 0, 0, 0]
@@ -397,12 +441,13 @@
         vec2 slopes = microSlopes*uSeaWeather;
         if(uOceanSpectrumEnabled>0.5) {
           // Spectrum RG stores physical height gradients; normal components have the opposite sign.
-          // A bounded facet gain keeps sub-grid wind waves legible on the regional terrain mesh.
-          slopes = -(oceanLarge.rg*1.25+oceanSmall.rg*2.35) + microSlopes*0.85*microFilter;
+          // Keep resolved wind-sea slopes close to their physical gradients. Excessive
+          // slope gain turns the broad reflected sky into alternating metallic bands.
+          slopes = -(oceanLarge.rg*1.10+oceanSmall.rg*1.45) + microSlopes*0.85*microFilter;
         }
         vec3 nSea = normalize(vSeaNormal);
         // Filter subpixel facets while keeping their unresolved energy in roughness.
-        slopes *= 1.0-foam*0.72;
+        slopes *= 1.0-foam*0.35;
         vec3 notoWaterTangent = normalize(vec3(nSea.x + slopes.x, nSea.z + slopes.y, nSea.y));`);
       shader.fragmentShader = shader.fragmentShader.replace('normal = normalize(mix(normal, notoWaterNormal, 0.85));', 'normal = notoWaterNormal;');
       shader.fragmentShader = shader.fragmentShader.replace('roughnessFactor = clamp(notoWaterDetail.a, 0.045, 0.12);', `
@@ -430,29 +475,36 @@
         vec2 microSlopes = microWide.xy*0.50+microFine.xy*0.50*microFilter;
         float microVariance = microWide.z*0.25+microFine.z*0.25;
         float breakup = seaFilteredWorldNoise(seaRotation*(foamP-vec2(uSeaTime*0.8,uSeaTime*0.35))/53.0,seaRotation*seaDx/53.0,seaRotation*seaDy/53.0);
-        float bubbles = seaFilteredWorldNoise((foamP+vec2(uSeaTime*0.45,-uSeaTime*0.27))/3.2,seaDx/3.2,seaDy/3.2);
+        float bubbles = seaFilteredWorldNoise((foamP+vec2(uSeaTime*0.45,-uSeaTime*0.27))/0.55,seaDx/0.55,seaDy/0.55);
         // Breaker energy follows the same moving crest as geometry, but foam coverage advects and tears.
         float shoreZone = smoothstep(0.0,2.0,distanceToShore) * (1.0-smoothstep(44.0,85.0,distanceToShore));
         float surfFoam = 0.0;
         if(shoreZone>0.0) {
           float foamPatch = seaFilteredWorldNoise((foamP-vec2(uSeaTime*1.35,uSeaTime*0.55))/197.0,seaDx/197.0,seaDy/197.0);
           float phase = surfPhase(foamP,distanceToShore);
-          float crest = pow(0.5+0.5*sin(phase),4.5);
+          float crest = pow(0.5+0.5*sin(phase),20.0);
           float coverage = smoothstep(0.36,0.67,foamPatch*0.58+breakup*0.42);
-          float lace = smoothstep(0.24,0.66,bubbles*0.70+breakup*0.30);
+          float lace = smoothstep(0.20,0.61,bubbles*0.70+breakup*0.30);
           float distantSurf = smoothstep(7.0,32.0,max(shoreFootprint,seaFootprint));
-          crest = mix(crest,0.12,distantSurf);
-          float wake = pow(0.5+0.5*sin(phase-0.95),3.0);
-          float residue = (1.0-smoothstep(14.0,49.0,distanceToShore))*wake*coverage*0.30;
+          crest = mix(crest,0.07,distantSurf);
+          // After a crest passes, aerated water persists briefly and decays behind
+          // the moving front. The birth ramp makes the cycle seam continuous.
+          float age = fract(phase/6.28318530718-0.25);
+          float residue = smoothstep(0.0,0.055,age)*exp(-age*5.5)
+            *(1.0-smoothstep(0.72,1.0,age));
+          residue = mix(residue,0.14,distantSurf)*coverage*lace;
           // The same moving wave set controls displaced crests, breaking foam and spray.
-          surfFoam = surfStrength(foamP,uSeaTime)*shoreZone*(crest*(0.05+coverage*0.95)*lace*1.85+residue);
+          surfFoam = surfStrength(foamP,uSeaTime)*shoreZone
+            *(crest*(0.45+coverage*0.55)*lace*1.55+residue*0.35);
         }
         float oceanCrest = max(oceanLarge.b,oceanSmall.b*0.80);
         // Only compressed positive crests aerate; the proxy is deliberately sparse in calm weather.
         float crestWidth = max(fwidth(oceanCrest),0.002);
         float whitecaps = smoothstep(0.045-crestWidth,0.16+crestWidth,oceanCrest)*smoothstep(0.35,0.70,breakup*0.6+bubbles*0.4);
         whitecaps *= smoothstep(60.0,150.0,distanceToShore)*(0.32+0.58*max(0.0,uSeaWeather-0.7));
-        float foam = clamp(max(surfFoam,whitecaps),0.0,0.94);
+        // Bright foam stays on the narrow breaking front; faint pore-scale remnants
+        // preserve continuous opacity and ripple detail as they trail the crest.
+        float foam = clamp(max(surfFoam,whitecaps),0.0,0.92);
         // Shore distance is an optical-depth proxy, not surveyed bathymetry. Beer-Lambert attenuation
         // reveals a subdued coastal bed tint while offshore water keeps a deep blue-green body.
         float opticalDepth = clamp(0.6+max(distanceToShore,0.0)*0.10,0.6,70.0);
@@ -461,23 +513,23 @@
         vec3 shallowBed = vec3(0.11,0.145,0.105);
         vec3 waterBody = mix(deepBody,shallowBed,transmission);
         waterBody += vec3(0.001,0.011,0.014)*clamp(oceanLarge.a+oceanSmall.a,0.0,1.8);
-        diffuseColor.rgb = mix(waterBody,vec3(0.68,0.77,0.73),foam);
+        diffuseColor.rgb = mix(waterBody,vec3(0.84,0.88,0.86),foam);
         // Preserve unresolved angular energy in the microfacet lobe instead of aliasing
         // the filtered mean normal into repeated highlights. Nearby resolved waves stay crisp.
         // Differentiate the normal that actually shades the pixel: spectrum gains,
         // capillary detail and the geometric swell all contribute to solar aliasing.
         vec2 shadingSlopes = microSlopes*uSeaWeather;
         if(uOceanSpectrumEnabled>0.5) {
-          shadingSlopes = -(oceanLarge.rg*1.25+oceanSmall.rg*2.35)+microSlopes*0.85*microFilter;
+          shadingSlopes = -(oceanLarge.rg*1.10+oceanSmall.rg*1.45)+microSlopes*0.85*microFilter;
         }
-        shadingSlopes *= 1.0-foam*0.72;
+        shadingSlopes *= 1.0-foam*0.35;
         vec3 shadingNormal = normalize(normalize(vSeaNormal)+vec3(shadingSlopes.x,0.0,shadingSlopes.y));
         vec3 normalDx = dFdx(shadingNormal), normalDy = dFdy(shadingNormal);
         float resolvedVariance = max(dot(normalDx,normalDx),dot(normalDy,normalDy))/12.0;
         float lostVariance = smoothstep(0.8,18.0,seaFootprint)*0.00085
           +smoothstep(20.0,150.0,seaFootprint)*0.00075
           +min(microVariance*0.10,0.0015)+min(resolvedVariance,0.0045);
-        float baseRoughness = 0.078+breakup*0.028+uSeaCloudiness*0.025;
+        float baseRoughness = 0.095+breakup*0.025+uSeaCloudiness*0.030;
         float filteredRoughness = pow(pow(baseRoughness,4.0)+lostVariance,0.25);
         roughnessFactor = mix(clamp(filteredRoughness,0.075,0.32),0.55,foam);`);
       shader.fragmentShader = shader.fragmentShader.replace('#include <lights_physical_fragment>', `
@@ -497,8 +549,10 @@
         vec3 worldNormal = inverseTransformDirection(normal, viewMatrix);
         vec3 toCamera = normalize(cameraPosition-vSeaWorldPosition);
         vec3 reflected = reflect(-toCamera,worldNormal);
+        float reflectionFootprint = max(length(dFdx(reflected)),length(dFdy(reflected)));
         float fresnel = 0.0204+0.9796*pow(1.0-clamp(dot(worldNormal,toCamera),0.0,1.0),5.0);
-        vec3 skyReflection = worldCloudReflection(vSeaWorldPosition,reflected,seaSkyColor(reflected));
+        vec3 skyReflection = seaReflectedClouds(vSeaWorldPosition,reflected,
+          seaReflectedSky(reflected,roughnessFactor,reflectionFootprint),roughnessFactor,reflectionFootprint);
         float reflectedLandCoverage = 0.0;
         // A small cached coarse-terrain pass supplies actual coastal silhouettes; sky fills empty texels.
         if(uSeaReflectionEnabled>0.5) {
@@ -513,7 +567,7 @@
               reflectedLandCoverage = terrainReflection.a*reflectionEdge;
               // Transparent clear texels have zero RGB: filtering already weights RGB by coverage.
               vec3 reflectedLand = terrainReflection.rgb/max(terrainReflection.a,0.0001);
-              // Opaque reflected land also occludes the solar disk inside the shared environment.
+              // Opaque reflected land replaces the cloud/sky environment in the same region.
               skyReflection = mix(skyReflection,reflectedLand,reflectedLandCoverage);
             }
           }
@@ -522,10 +576,18 @@
         float forwardLight = pow(max(dot(toCamera,-uSeaSunDirection),0.0),4.0);
         float crestLight = clamp(oceanLarge.a*0.40+oceanSmall.a+0.15,0.0,1.0);
         vec3 scattering = vec3(0.004,0.055,0.062)*forwardLight*crestLight*uSeaSunIntensity*shadowVisibility*cloudSunTransmission;
-        // The shared sky atlas contains the sun and its cloud occlusion. Do not add a
-        // second screen-independent solar disk over reflected clouds and terrain.
+        // One filtered microfacet lobe supplies solar glint. Pointer-light highlights
+        // and directional shadow attenuation remain in Three.js's direct-light result.
         vec3 directHighlights = reflectedLight.directSpecular;
         vec3 bodyLighting = max(outgoingLight-directHighlights-reflectedLight.indirectSpecular,vec3(0.0));
+        // The submerged water column receives diffuse sky irradiance throughout its
+        // depth, rather than behaving like an opaque Lambert-painted surface. The
+        // Beer-Lambert body color already separates bottom transmission and deep-water
+        // scattering. Keep direct lighting (including the pointer light) and foam's
+        // diffuse response; replace only the water's surface-normal-dependent ambient.
+        vec3 volumeAmbient = waterBody*uSeaSky*(1.25*uSeaDaylight);
+        bodyLighting = max(bodyLighting-reflectedLight.indirectDiffuse*(1.0-foam),vec3(0.0))
+          +volumeAmbient*(1.0-foam);
         float reflectionWeight = fresnel*(1.0-foam*0.96);
         outgoingLight = bodyLighting*(1.0-reflectionWeight)
           +skyReflection*reflectionWeight+directHighlights+scattering*(1.0-foam);
@@ -660,7 +722,7 @@ Convert to pixel indices, clamp and interpolate four samples. Returns approximat
         scaleY: uniforms.uSeaScaleY.value,
         maxAmplitudeM: 3.55 * uniforms.uSeaWeather.value,
         shoreCellM: source.cellM,
-        shading: 'Fresnel reflection, spectral slopes, absorption and breaking foam',
+        shading: 'Roughness-filtered Fresnel reflection, spectral slopes, absorption and trailing surf foam',
         spectrum: spectrum?.getState() ?? { active: false, reason: 'No spectrum controller' }
       }),
       shoreAt,

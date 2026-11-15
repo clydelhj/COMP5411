@@ -31,8 +31,8 @@
   // Noncommensurate domains avoid an obvious shared repeat over the regional model.
   // Each cascade has a separate seed and directional spread, not a scrolled copy.
   const CASCADES = [
-    { lengthM: 1024, rmsM: 0.72, speedMps: 12, angle: 0.45, seed: 5411 },
-    { lengthM: 173, rmsM: 0.16, speedMps: 6.2, angle: 0.71, seed: 195411 }
+    { lengthM: 1024, rmsM: 0.72, speedMps: 12, angle: 0.45, spreadPower: 4, seed: 5411 },
+    { lengthM: 67, rmsM: 0.10, speedMps: 3.5, angle: 0.91, spreadPower: 2, seed: 195411 }
   ];
   const VERTEX = `
     precision highp float;
@@ -162,7 +162,9 @@
         const kz = 2 * Math.PI * nz / cascade.lengthM;
         const k = Math.hypot(kx, kz);
         const alignment = (kx * windX + kz * windZ) / k;
-        const spread = 0.08 + 0.92 * Math.pow(Math.abs(alignment), 4);
+        // Short wind waves have a broader directional distribution than the swell,
+        // retaining cross-wave slope variation at the smaller spatial scale.
+        const spread = 0.12 + 0.88 * Math.pow(Math.abs(alignment), cascade.spreadPower);
         const direction = alignment >= 0 ? 1 : 0.18;
         const longDamping = Math.exp(-1 / ((k * windLength) ** 2));
         const shortDamping = Math.exp(-((k * cellM * 0.35) ** 2));
