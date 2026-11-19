@@ -4,7 +4,7 @@ Baseline date: November 15, 2026. Project: **Noto Peninsula: An Interactive 3D L
 
 ## Entry and documentation
 
-- `index-1m.html`: current viewer, using the post-earthquake 1 m DEM and a default finest display spacing of 5 m.
+- `index.html`: current viewer, using the post-earthquake 1 m DEM and a default finest display spacing of 5 m.
 - `start-viewer.cmd` or `python scripts/serve.py`: optional local HTTP launch. The server uses loopback and an available port; Ctrl+C stops it.
 - `CODE_GUIDE.md`: current architecture, data flow, constraints and modification locations.
 - `REBUILD.md`: offline dependencies and regeneration commands.

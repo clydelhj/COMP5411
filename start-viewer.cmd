@@ -11,7 +11,7 @@ if not errorlevel 1 (
     python scripts\serve.py
     goto finished
 )
-echo Python 3 was not found. Install Python, or open index-1m.html directly.
+echo Python 3 was not found. Install Python, or open index.html directly.
 pause
 exit /b 1
 :finished

@@ -20,7 +20,7 @@ For offline installation, download the Release ZIP files on another connection a
 python scripts/fetch_assets.py --archives-dir /path/to/downloaded-zips
 ```
 
-Add `--sources` to install all source-input archives as well. Offline mode never attempts a download. Keep `index-1m.html`, `src/`, `data/`, `assets/` and `vendor/` together after installation.
+Add `--sources` to install all source-input archives as well. Offline mode never attempts a download. Keep `index.html`, `src/`, `data/`, `assets/` and `vendor/` together after installation.
 
 With Python 3 installed, run from the project root:
 
@@ -28,7 +28,7 @@ With Python 3 installed, run from the project root:
 python scripts/serve.py
 ```
 
-The server binds to `127.0.0.1` on an available port and opens `index-1m.html`. Keep its terminal open; press Ctrl+C to stop it. On Windows, `start-viewer.cmd` provides the same entry point. Directly opening `index-1m.html` is also supported.
+The server binds to `127.0.0.1` on an available port and opens `index.html`. Keep its terminal open; press Ctrl+C to stop it. On Windows, `start-viewer.cmd` provides the same entry point. Directly opening `index.html` is also supported.
 
 Viewing requires WebGL2, Gzip `DecompressionStream` and hardware acceleration. Runtime resources are local; there is no npm installation, compilation step or external runtime service. Shared texture arrays are substantial: roughly 580 MiB of CPU pixels and 773 MiB of theoretical GPU texture storage with mipmaps, before terrain and other resources. Actual usage depends on the browser.
 
@@ -73,7 +73,7 @@ The renderer requests `powerPreference: "high-performance"`. The browser, operat
 
 | Relative path | Purpose |
 | --- | --- |
-| `index-1m.html`, `src/` | Entry point, interface and hand-maintained runtime code |
+| `index.html`, `src/` | Entry point, interface and hand-maintained runtime code |
 | `data/terrain-1m/` | Terrain manifest and multiresolution input tiles |
 | `data/` | Generated shoreline, geology, vegetation and material configuration |
 | `assets/material-library/`, `assets/vegetation/` | Source assets, derived runtime assets and source records |

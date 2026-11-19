@@ -12,7 +12,7 @@ server = ThreadingHTTPServer(
     ("127.0.0.1", 0),
     partial(SimpleHTTPRequestHandler, directory=str(root)),
 )
-url = f"http://127.0.0.1:{server.server_port}/index-1m.html"
+url = f"http://127.0.0.1:{server.server_port}/index.html"
 print(
     f"Terrain viewer: {url}\nKeep this window open. Press Ctrl+C to stop.",
     flush=True,

@@ -1,12 +1,12 @@
 # Code guide
 
-Current runtime baseline: November 15, 2026. All paths below are relative to the directory containing `index-1m.html`.
+Current runtime baseline: November 15, 2026. All paths below are relative to the directory containing `index.html`.
 
 ## Structure
 
 ```text
 ./
-├── index-1m.html
+├── index.html
 ├── start-viewer.cmd
 ├── src/
 │   ├── terrain.js
@@ -230,7 +230,7 @@ Use two-space indentation for JavaScript/HTML/CSS and four spaces for Python. Ex
 
 | Change | Primary files |
 | --- | --- |
-| Interface text/layout | `index-1m.html`, `src/styles.css` |
+| Interface text/layout | `index.html`, `src/styles.css` |
 | Navigation, caches or performance feedback | `src/terrain.js` |
 | Image reconstruction and history validation | `src/temporal-reconstruction.js`, scheduler hooks in `src/terrain.js` |
 | Distance detail, coverage or input sampling | `src/terrain-lod.js` |
