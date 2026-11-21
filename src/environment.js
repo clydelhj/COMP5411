@@ -229,6 +229,12 @@ Parameter: verticalScale is the displayed terrain height multiplier.
 Detect camera/scale changes, centre shadows on terrain near the target, and adjust coverage. Small movements update at most once per 120 ms; geometry, lighting or large camera changes update immediately.
 Updates the rain anchor, light position and shadow flags in place. */
       rainUniforms.uRainAnchor.value.copy(camera.position);
+      // Preserve visibility of the terrain being inspected in high regional views.
+      // At ground level the weather preset retains its normal distance haze.
+      const fogRange = PRESETS[weather].fog;
+      const orbitDistance = camera.position.distanceTo(controls.target);
+      scene.fog.near = Math.max(fogRange * 0.15, orbitDistance * 0.85);
+      scene.fog.far = Math.max(fogRange, scene.fog.near + Math.max(fogRange * 0.85, orbitDistance));
       const moved = previousCamera.distanceToSquared(camera.position) > 0.01 || previousTarget.distanceToSquared(controls.target) > 0.01 || previousScale !== verticalScale;
       if (!shadowDirty && !moved) return;
       const now = performance.now();

@@ -538,7 +538,7 @@
         renderer.render(quadScene, quadCamera);
         quad.material = presentMaterial;
         // 3. Present linear history through the normal output color/tone conversion.
-        // World effects consume this frame's depth after history; moving clouds never enter static history.
+        // An optional post-processor receives the current scene depth after the resolve.
         camera.projectionMatrix.copy(savedProjection);
         camera.projectionMatrixInverse.copy(savedInverseProjection);
         presentMaterial.uniforms.uResolved.value = postProcess(write.textures[0], currentTarget.depthTexture, camera, resolveUniforms.uJitterUv.value);

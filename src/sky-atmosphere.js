@@ -1,11 +1,10 @@
-/* Clear atmospheric illumination and the analytic sun, shared by sky and water.
- * Elevated cloud volumes are composed separately in world space.
- */
+/* Directional sky, background clouds and analytic sun shared by the sky backdrop and water. */
 (function registerSkyAtmosphere(global) {
   'use strict';
 
   const WIDTH = 1024;
   const HEIGHT = 256;
+  const CLOUD_UPDATE_INTERVAL = 0.25;
   const shaderDeclarations = /* glsl */`
     uniform sampler2D uSkyAtmosphereMap;
     uniform float uSkyAtmosphereEnabled;
@@ -28,7 +27,8 @@
     }
     float atmosphereCloudTransmission(vec3 direction) {
       if(uSkyAtmosphereEnabled<0.5) return 1.0;
-      return atmosphereSkySample(direction).a;
+      // Directional sunlight is constant across fragments, so use the base mip.
+      return textureLod(uSkyAtmosphereMap,atmosphereSkyUv(direction),0.0).a;
     }
     vec3 atmosphereSkyColor(vec3 direction) {
       vec3 d = normalize(direction);
@@ -54,6 +54,8 @@
     uniform vec3 uSunColor;
     uniform float uElevation;
     uniform float uWeather;
+    uniform float uCloudTime;
+    #include <background_clouds>
     void main() {
       vec2 uv = gl_FragCoord.xy/uResolution;
       float azimuth = (uv.x-0.5)*6.28318530718;
@@ -80,7 +82,8 @@
       vec3 overcast = mix(vec3(0.005,0.009,0.018),vec3(0.27,0.34,0.41),daylight);
       sky = mix(sky,overcast,uWeather*0.42);
       sky += uSunColor*pow(solarAlignment,320.0)*0.32*daylight;
-      atmosphere = vec4(max(sky,vec3(0.0)),1.0);
+      vec4 cloud=skyBackgroundClouds(direction,uCloudTime,uWeather,daylight,sunset,uSunDirection);
+      atmosphere=vec4(max(mix(sky,cloud.rgb,cloud.a),vec3(0.0)),1.0-cloud.a);
     }
   `;
 
@@ -98,7 +101,8 @@
       uSunDirection: uniforms.uAtmosphereSunDirection,
       uSunColor: { value: new THREE.Color(1.0, 0.82, 0.64) },
       uElevation: { value: 30 },
-      uWeather: { value: 0 }
+      uWeather: { value: 0 },
+      uCloudTime: { value: 0 }
     };
     const gl = renderer.getContext();
     let target = null, geometry = null, material = null,
@@ -139,7 +143,7 @@
       type = gl.getExtension('EXT_color_buffer_float') ? THREE.HalfFloatType : THREE.UnsignedByteType;
       function allocate() {
         const next = new THREE.WebGLRenderTarget(WIDTH, HEIGHT, { ...options, type });
-        next.texture.name = 'Shared clear atmosphere';
+        next.texture.name = 'Directional sky and clouds';
         next.texture.wrapS = THREE.RepeatWrapping;
         next.texture.wrapT = THREE.ClampToEdgeWrapping;
         next.texture.colorSpace = THREE.LinearSRGBColorSpace;
@@ -157,10 +161,10 @@
         throw new Error('Atmosphere framebuffer is incomplete');
       }
       material = new THREE.RawShaderMaterial({
-        name: 'Clear atmospheric illumination',
+        name: 'Directional sky radiance',
         glslVersion: THREE.GLSL3,
         vertexShader: VERTEX,
-        fragmentShader: FRAGMENT,
+        fragmentShader: FRAGMENT.replace('#include <background_clouds>', global.NotoCloudLayers.backgroundShader),
         uniforms: values,
         depthTest: false,
         depthWrite: false,
@@ -179,7 +183,10 @@
     function update(timeSeconds) {
       if (disposed || failed || !Number.isFinite(timeSeconds)) return false;
       const time = Math.max(0, timeSeconds);
-      if (!dirty && target) return false;
+      // A fixed camera can reuse the atlas between wind updates. A lighting or weather
+      // change refreshes immediately, even if the sleep-aware clock has not advanced.
+      if (!dirty && lastTime !== null && time >= lastTime && time-lastTime < CLOUD_UPDATE_INTERVAL-1e-6) return false;
+      values.uCloudTime.value = time;
       const saved = {
         target: renderer.getRenderTarget(),
         cubeFace: renderer.getActiveCubeFace?.() ?? 0,
@@ -240,14 +247,15 @@
       getState: () => ({
         supported: !failed && !disposed,
         active: uniforms.uSkyAtmosphereEnabled.value === 1,
-        mode: 'lighting-driven-clear-atmosphere',
+        mode: 'directional-sky-with-clouds',
         reason,
         width: WIDTH,
         height: HEIGHT,
         time: lastTime,
         updates,
         weather,
-        updatePolicy: 'lighting-change',
+        updatePolicy: 'lighting-change-or-cloud-drift',
+        cloudUpdateHz: 1 / CLOUD_UPDATE_INTERVAL,
         estimatedTextureMiB: target
           ? (WIDTH * HEIGHT * (type === THREE.HalfFloatType ? 8 : 4) * 4 / 3) / 1048576
           : 0,

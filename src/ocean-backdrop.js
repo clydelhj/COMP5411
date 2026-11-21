@@ -32,7 +32,7 @@
           float alignment=dot(direction,uSeaSunDirection);
           float disk=smoothstep(0.99997,0.999992,alignment);
           float halo=pow(max(alignment,0.0),96.0)*0.025;
-          // The clear environment owns the angular sun; elevated clouds occlude it in the depth-aware pass.
+          // The shared sky atlas attenuates the analytic sun with its cloud coverage.
           if(uSkyAtmosphereEnabled<0.5) color += uSeaSunColor*uSeaSunIntensity*(disk*2.0+halo);
           gl_FragColor=vec4(color,1.0);
           #include <tonemapping_fragment>

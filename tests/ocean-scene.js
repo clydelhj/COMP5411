@@ -49,10 +49,8 @@
     materials.top.userData.temporalReactive = true;
     const spectrum = window.NotoOceanSpectrum?.create({ THREE, renderer }) || null;
     const atmosphere = window.NotoSkyAtmosphere?.create({ THREE, renderer }) || null;
-    const clouds = window.NotoCloudLayers?.create({ THREE, renderer }) || null;
     const motion = await window.NotoWaterMotion.create(THREE, source, materials, { distances: values }, spectrum);
     motion.setAtmosphere?.(atmosphere);
-    motion.setCloudLayers?.(clouds);
     // Generated shared resources exercise the production cover/grass shader branch,
     // including real grass declarations. The neutral fallback alone cannot validate it.
     const reflectionColor = new THREE.DataArrayTexture(Uint8Array.from([
@@ -796,30 +794,26 @@
         report.atmosphere.seam = checkLongitudeSeam();
         capture('atmosphere-west-longitude-seam');
       }
-      if (clouds) {
+      if (atmosphere) {
         temporal.setEnabled(false);
         setView(0);
         applyLighting('cloudy', true);
-        clouds.setLighting({ direction: [0.42, 0.39, -0.8], elevation: 23, weather: 'cloudy', sunColor: sun.color.toArray() });
+        skyTime = 20;
         frame();
-        const clearWater = snapshot();
-        const fixedWaveTime = motion.getState().time;
-        clouds.setTime(20); clouds.update(20);
+        const first = snapshot(), fixedWaveTime = motion.getState().time;
+        skyTime = 80;
         frame();
-        const reflectedClouds = snapshot();
-        capture('world-cloud-reflection');
-        clouds.setTime(80); clouds.update(80);
-        frame();
-        report.worldCloudReflection = {
-          state: clouds.getState(), effect: compare(clearWater, reflectedClouds), drift: compare(reflectedClouds, snapshot()),
-          waveTimeBefore: fixedWaveTime, waveTimeAfter: motion.getState().time
-        };
+        const second = snapshot();
+        capture('sky-cloud-reflection');
+        // WebGL readPixels starts at the bottom; the lower middle of the grazing view is open water.
+        report.skyCloudReflection = { drift: regionDifference(first,second,[0.35,0.05,0.75,0.24]),
+          waveTimeBefore: fixedWaveTime, waveTimeAfter: motion.getState().time };
       }
       window.oceanStressImages = images;
       window.oceanStressReport = report;
       return report;
     }
-    window.oceanStress = { THREE, renderer, scene, camera, motion, spectrum, reflection, atmosphere, clouds, backdrop, temporal, setView, setScale, applyLighting, frame, snapshot, checkLongitudeSeam, runChecks };
+    window.oceanStress = { THREE, renderer, scene, camera, motion, spectrum, reflection, atmosphere, backdrop, temporal, setView, setScale, applyLighting, frame, snapshot, checkLongitudeSeam, runChecks };
     applyLighting(); setScale(1); setView(0); frame();
     for (const button of document.querySelectorAll('button')) button.disabled = false;
     document.querySelector('#advance').onclick = () => frame(1);

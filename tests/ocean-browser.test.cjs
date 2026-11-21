@@ -146,8 +146,8 @@ test('ocean surface, atmosphere, sunset shading and idle behavior run in actual 
       assert(sky.state.updates > 0, 'sky atlas is actually rendered');
       assert(sky.state.width * sky.state.height <= 1536 * 384, 'sky lookup resolution is bounded');
       assert(sky.state.estimatedTextureMiB <= 8, 'sky lookup storage stays bounded');
-      assert.equal(sky.state.updatePolicy, 'lighting-change', 'clear atmosphere only regenerates when its lighting changes');
-      assert.equal(sky.timeOnly.after, sky.timeOnly.before, 'elapsed cloud time does not regenerate the clear atmosphere');
+      assert.equal(sky.state.cloudUpdateHz, 4, 'wind-driven sky updates are rate limited');
+      assert(sky.timeOnly.after > sky.timeOnly.before, 'elapsed cloud time refreshes the sky atlas');
       assert.equal(sky.sameTime.after, sky.sameTime.before, 'same-time frames do not regenerate the sky');
       assert.equal(sky.idle.after.updates, sky.idle.before.updates, 'sky GPU updates stop without requested frames');
       assert.equal(sky.idle.after.time, sky.idle.before.time, 'sky time freezes while idle');
@@ -169,11 +169,9 @@ test('ocean surface, atmosphere, sunset shading and idle behavior run in actual 
       assert(sky.seam.actualError < 0.005, 'actual sky and transmission sampling stay continuous across the longitude seam');
       assert(sky.seam.actualNeighborJump < 0.005, 'the longitude seam does not create a bright or colored column');
     }
-    if (process.env.REQUIRE_WORLD_CLOUDS === '1') {
-      assert(report.worldCloudReflection?.state.active, 'world cloud columns are active in the actual water shader');
-      assert(report.worldCloudReflection.effect.changedPixels > 200, 'world cloud columns visibly alter the water reflection');
-      assert(report.worldCloudReflection.drift.changedPixels > 200, 'drifting world clouds move the water reflection');
-      assert.equal(report.worldCloudReflection.waveTimeAfter, report.worldCloudReflection.waveTimeBefore, 'world cloud reflection drift does not advance the sea geometry clock');
+    if ((process.env.REQUIRE_SKY_CLOUDS || process.env.REQUIRE_WORLD_CLOUDS) === '1') {
+      assert(report.skyCloudReflection.drift.changedPixels > 200, 'drifting background clouds change the water reflection');
+      assert.equal(report.skyCloudReflection.waveTimeAfter, report.skyCloudReflection.waveTimeBefore, 'sky drift does not advance water geometry');
     }
   } finally {
     await browser?.close();

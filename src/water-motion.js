@@ -168,7 +168,7 @@
     vec3 seaReflectedSky(vec3 direction, float roughness, float angularFootprint) {
       ${global.NotoSkyAtmosphere ? /* glsl */`
       if(uSkyAtmosphereEnabled>0.5) {
-        // The directional GGX lobe already accounts for the sun. Sample the clear
+        // The directional GGX lobe already accounts for the sun. Sample the
         // sky atlas without adding a second, perfectly sharp reflected solar disk.
         vec2 uv = atmosphereSkyUv(direction);
         float cone = max(roughness*roughness,angularFootprint);
@@ -177,40 +177,6 @@
         return textureLod(uSkyAtmosphereMap,uv,lod).rgb;
       }` : ''}
       return seaSkyColor(direction);
-    }
-  `;
-  const CLOUD_GLSL = global.NotoCloudLayers?.shaderDeclarations || /* glsl */`
-    vec3 worldCloudReflection(vec3 origin,vec3 ray,vec3 background) { return background; }
-    float worldCloudSunTransmission(vec3 origin,vec3 ray) { return 1.0; }
-  `;
-  const CLOUD_REFLECTION_GLSL = global.NotoCloudLayers ? /* glsl */`
-    vec4 seaReflectedCloudColumn(vec3 origin,vec3 ray,int layer,float cone) {
-      if(ray.y<=0.0001)return vec4(0.0);
-      float height=layer==0?2500.0:5350.0;
-      float rise=height-origin.y;
-      if(rise<=0.0)return vec4(0.0);
-      vec2 uv=(origin.xz+ray.xz*(rise/ray.y))/80000.0+0.5;
-      if(any(lessThan(uv,vec2(0.0)))||any(greaterThan(uv,vec2(1.0))))return vec4(0.0);
-      // Project the rough reflection cone onto the horizontal cloud layer. Explicit
-      // LOD is well-defined at the horizon/volume bounds, where lanes can diverge.
-      float radius=cone*rise/(max(ray.y*ray.y,0.0001)*80000.0);
-      float width=float(textureSize(uCloudColumnLow,0).x);
-      float lod=log2(max(1.0,radius*width));
-      vec4 cloud=layer==0?textureLod(uCloudColumnLow,uv,lod):textureLod(uCloudColumnHigh,uv,lod);
-      float alpha=1.0-pow(max(0.0001,1.0-cloud.a),1.0/max(0.18,ray.y));
-      cloud.rgb*=alpha/max(0.0001,cloud.a);cloud.a=alpha;
-      return cloud;
-    }
-    vec3 seaReflectedClouds(vec3 origin,vec3 ray,vec3 background,float roughness,float angularFootprint) {
-      if(uWorldCloudsEnabled<0.5)return background;
-      float cone=max(roughness*roughness*0.65,angularFootprint);
-      vec4 low=seaReflectedCloudColumn(origin,ray,0,cone);
-      vec4 high=seaReflectedCloudColumn(origin,ray,1,cone);
-      return low.rgb+(high.rgb+background*(1.0-high.a))*(1.0-low.a);
-    }
-  ` : /* glsl */`
-    vec3 seaReflectedClouds(vec3 origin,vec3 ray,vec3 background,float roughness,float angularFootprint) {
-      return background;
     }
   `;
   const SURFACE_LAYER_GLSL = /* glsl */`
@@ -233,7 +199,7 @@
       return mix(waterRadiance,foamRadiance,foam);
     }
   `;
-  const SURFACE_GLSL = SKY_GLSL + CLOUD_GLSL + CLOUD_REFLECTION_GLSL + SURFACE_LAYER_GLSL + /* glsl */`
+  const SURFACE_GLSL = SKY_GLSL + SURFACE_LAYER_GLSL + /* glsl */`
     uniform vec3 uSeaSunColor;
     uniform float uSeaSunIntensity;
     uniform sampler2D uOceanSpectrumLarge;
@@ -388,9 +354,6 @@
       uSeaFoamDensity: { value: materials.textures?.foam || neutralSpectrum },
       uSkyAtmosphereMap: { value: neutralSpectrum },
       uSkyAtmosphereEnabled: { value: 0 },
-      uCloudColumnLow: { value: neutralSpectrum },
-      uCloudColumnHigh: { value: neutralSpectrum },
-      uWorldCloudsEnabled: { value: 0 },
       uSeaReflection: { value: neutralSpectrum },
       uSeaReflectionMatrix: { value: new THREE.Matrix4() },
       uSeaReflectionEnabled: { value: 0 },
@@ -481,7 +444,7 @@
         vec2 seaDx = dFdx(foamP), seaDy = dFdy(foamP);
         float seaFootprint = max(length(seaDx),length(seaDy));
         float shoreFootprint = fwidth(distanceToShore);
-        float cloudSunTransmission = worldCloudSunTransmission(vSeaWorldPosition,uSeaSunDirection);
+        float cloudSunTransmission = atmosphereCloudTransmission(uSeaSunDirection);
         vec4 oceanLarge = vec4(0.0), oceanSmall = vec4(0.0);
         if(uOceanSpectrumEnabled>0.5) {
           oceanLarge = seaWindField(uOceanSpectrumLarge,foamP,uOceanSpectrumSize.x,0,7.31,seaDx,seaDy);
@@ -592,8 +555,7 @@
         vec3 reflected = reflect(-toCamera,worldNormal);
         float reflectionFootprint = max(length(dFdx(reflected)),length(dFdy(reflected)));
         float fresnel = 0.0204+0.9796*pow(1.0-clamp(dot(worldNormal,toCamera),0.0,1.0),5.0);
-        vec3 skyReflection = seaReflectedClouds(vSeaWorldPosition,reflected,
-          seaReflectedSky(reflected,roughnessFactor,reflectionFootprint),roughnessFactor,reflectionFootprint);
+        vec3 skyReflection = seaReflectedSky(reflected,roughnessFactor,reflectionFootprint);
         float reflectedLandCoverage = 0.0;
         // A small cached coarse-terrain pass supplies actual coastal silhouettes; sky fills empty texels.
         if(uSeaReflectionEnabled>0.5) {
@@ -699,10 +661,6 @@
       shaderDeclarations: geometryGLSL,
       skyShaderDeclarations: SKY_GLSL,
       surfaceLayerShaderDeclarations: SURFACE_LAYER_GLSL,
-      setCloudLayers(controller) {
-        // Optical columns share the elevated cloud field, with world-position parallax on water.
-        if (controller?.uniforms) Object.assign(uniforms, controller.uniforms);
-      },
       setAtmosphere(controller) {
         // Sky and reflected clouds sample one shared linear environment atlas.
         if (controller?.uniforms) Object.assign(uniforms, controller.uniforms);
