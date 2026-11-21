@@ -98,8 +98,10 @@ Returns view, animation, diagnostics and cleanup interfaces. */
       const minutes = Number(timeInput.value);
       return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
     };
+    const center = metadata.geographicCenter;
+    const localSun = () => solarPosition(dateInput.value, clockTime(), center?.latitude, center?.longitude);
     let weather = 'clear',
-      solar = solarPosition(dateInput.value, clockTime()),
+      solar = localSun(),
       shadowDirty = true,
       shadowUpdates = 0,
       span = 0;
@@ -211,7 +213,7 @@ Returns view, animation, diagnostics and cleanup interfaces. */
        * Validate the calendar fields and apply settings. Invalid input preserves the last valid
        * scene; valid input updates lighting/weather and notifies the scheduler. Returns undefined.
        */
-      const next = solarPosition(dateInput.value, clockTime());
+      const next = localSun();
       if (!next) {
         label.textContent = 'Choose a valid date (2000–2100) and time.';
         return;

@@ -135,15 +135,15 @@ def quantize_source(
         height = min(batch_rows, rows - local_r)
         read_window = Window(window.col_off, window.row_off + local_r, cols, height)
         values = ds.read(1, window=read_window, out_dtype="float32")
-        valid = valid_source_values(values, nodata)
+        valid = valid_source_values(values, nodata) & (ds.read_masks(1, window=read_window) != 0)
         q_float = np.rint(
             (values.astype(np.float64) - BASE_ELEVATION_M) / QUANTIZATION_M
         )
         in_range = (q_float >= 0.0) & (q_float < 65535.0)
-        valid &= in_range
         stats["out_of_range_node_count"] = int(stats["out_of_range_node_count"]) + int(
-            np.count_nonzero(valid_source_values(values, nodata) & ~in_range)
+            np.count_nonzero(valid & ~in_range)
         )
+        valid &= in_range
         if np.any(valid):
             q = q_float[valid].astype("<u2")
             grid[local_r : local_r + height, :][valid] = q

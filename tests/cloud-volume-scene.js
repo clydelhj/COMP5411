@@ -27,6 +27,7 @@
 
     // Exercise the production sky triangle without adding the offshore water strips.
     const skyOnly = {
+      shoreAt: (_x,z) => z < 0 ? 512 : -512,
       uniforms: {
         ...sky.uniforms,
         uSeaSunDirection: sky.uniforms.uAtmosphereSunDirection,
@@ -35,7 +36,7 @@
       skyShaderDeclarations: window.NotoSkyAtmosphere.shaderDeclarations
         + '\nuniform vec3 uSeaSunDirection;\nvec3 seaSkyColor(vec3 d){return atmosphereSkyColor(d);}'
     };
-    window.NotoOceanBackdrop.create({
+    const backdrop = window.NotoOceanBackdrop.create({
       THREE, scene, terrain: new THREE.Group(), camera, controls: { target: new THREE.Vector3() },
       metadata: { width_m: 30000, height_m: 20000 }, motion: skyOnly,
       materials: { top: new THREE.MeshBasicMaterial() }
@@ -129,6 +130,43 @@
       report.temporal = { active: temporal.getState().active,
         sky: difference(temporalFirst,temporalSecond,background),
         foreground: difference(temporalFirst,temporalSecond,foreground) };
+      // The measured crop ends 10 km north of this camera. Water near the
+      // horizon must still be visible when the scene far plane is only 2 km.
+      temporal.setEnabled(false);
+      subject.visible = false;
+      camera.position.set(0, 1000, 0);
+      camera.lookAt(0, 1000, -20000);
+      camera.far = 2000;
+      camera.updateProjectionMatrix();
+      frame(80);
+      const skyAlone = snapshot();
+      backdrop.update();
+      frame(80);
+      const coastView = snapshot();
+      report.horizon = {
+        water: difference(skyAlone, coastView, [0.05, 0.45, 0.95, 0.49]),
+        sky: difference(skyAlone, coastView, [0.05, 0.51, 0.95, 0.55])
+      };
+      camera.position.set(0, 19000, 22000);
+      camera.lookAt(0, 0, 0);
+      backdrop.update();
+      report.horizon.overviewOpacity = backdrop.getState().horizonOpacity;
+      camera.position.set(0, 1000, 0);
+      camera.lookAt(0, 1000, 20000);
+      frame(80);
+      const landSky = snapshot();
+      backdrop.update();
+      frame(80);
+      report.horizon.inland = difference(landSky, snapshot(), [0.05, 0.45, 0.95, 0.49]);
+      const dryScene = new THREE.Scene();
+      const dryBackdrop = window.NotoOceanBackdrop.create({
+        THREE, scene: dryScene, terrain: new THREE.Group(), camera, hasOcean: false,
+        metadata: {width_m: 30000, height_m: 20000}, motion: skyOnly,
+        materials: {top: new THREE.MeshBasicMaterial()}
+      });
+      dryBackdrop.update();
+      report.horizon.landOnlyOpacity = dryBackdrop.getState().horizonOpacity;
+      dryBackdrop.dispose();
       report.final = sky.getState();
       document.querySelector('#state').textContent = JSON.stringify(report,null,2);
       return report;

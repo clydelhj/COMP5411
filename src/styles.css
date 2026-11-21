@@ -344,30 +344,28 @@ kbd {
   outline-offset: 3px;
 }
 
-.reconstruction-settings {
-  margin: 20px 0 0;
+.data-source-settings {
+  margin: 16px 0 0;
   padding: 0;
   border: 0;
 }
-
-.reconstruction-settings legend {
-  font-size: 13px;
-  color: #52696f;
+.data-source-settings legend {
+  margin-bottom: 8px;
+  font-size: 15px;
+  font-weight: 600;
 }
-
-#terrain-settings .reconstruction-settings label {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  margin-top: 10px;
+.data-source-settings button {
+  margin: 0 8px 4px 0;
+  padding: 6px 10px;
+  border: 1px solid #c8d7da;
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
   cursor: pointer;
 }
-
-.reconstruction-settings input {
-  margin: 0;
-  accent-color: #426f76;
-}
-
+.data-source-settings button:disabled { opacity: .6; cursor: default; }
+.data-source-settings p, .panel h1 { overflow-wrap: anywhere; }
 
 /* Use the existing scrollable settings dialog for environment controls without resizing the title panel. */
 .environment-settings {

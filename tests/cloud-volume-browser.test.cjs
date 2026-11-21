@@ -56,6 +56,11 @@ test('sky clouds stay behind opaque surfaces at all viewing altitudes', {
     assert(report.temporal.active, 'the temporal path is exercised');
     assert(report.temporal.sky.changedPixels > 500, 'background drift is visible with reconstruction enabled');
     assert(report.temporal.foreground.maximum <= 1, 'opaque foreground is stable with reconstruction enabled');
+    assert(report.horizon.water.changedPixels > 8000, 'distant coastal water extends beyond the far clip');
+    assert.equal(report.horizon.sky.maximum, 0, 'the sea background stays below the horizon');
+    assert.equal(report.horizon.overviewOpacity, 0, 'the regional view preserves the survey boundary');
+    assert.equal(report.horizon.inland.maximum, 0, 'a broad land edge does not become a distant sea');
+    assert.equal(report.horizon.landOnlyOpacity, 0, 'an inland-only dataset has no offshore horizon');
   } finally {
     await browser?.close();
     await new Promise(resolve => server.close(resolve));

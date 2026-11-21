@@ -9,7 +9,6 @@
   const slider = document.querySelector('#vertical-scale');
   const scaleLabel = document.querySelector('#scale-value');
   const resolutionLabel = document.querySelector('#grid-resolution');
-  const tileset = window.NOTO_TILESET;
   const zoomButtons = [...document.querySelectorAll('[data-zoom]')];
   const helpDialog = document.querySelector('#controls-help');
   const settingsDialog = document.querySelector('#terrain-settings');
@@ -20,8 +19,6 @@
   const treeVisibilityCheckbox = document.querySelector('#show-trees');
   const idleSleepSelect = document.querySelector('#idle-sleep-delay');
   const windowResolutionLabel = document.querySelector('#window-resolution-current');
-  const temporalCheckbox = document.querySelector('#temporal-reconstruction');
-  const temporalLabel = document.querySelector('#temporal-reconstruction-current');
   let navigationReady = false;
   const navigationPaused = () => !navigationReady || helpDialog.open || settingsDialog.open;
   document.querySelector('#settings-button').addEventListener('click', () => settingsDialog.showModal());
@@ -52,12 +49,13 @@
     // Once ready, sleep controls remain available even if a later tile fails.
     resolutionSelect.disabled = windowResolutionSelect.disabled = vegetationDetailSelect.disabled = true;
     grassVisibilityCheckbox.disabled = treeVisibilityCheckbox.disabled = true;
-    temporalCheckbox.disabled = true;
     status.hidden = false;
     status.className = 'error';
     status.textContent = `Unable to load terrain: ${error.message}`;
   }
   try {
+    const dataSource = await window.NotoDataSource.initialize();
+    const { tileset, shoreline } = dataSource;
     if (!tileset || !window.NotoCloudLayers || !window.NotoSkyAtmosphere || !window.NotoOceanReflection || !window.NotoOceanSpectrum || !window.NotoOceanBackdrop || !window.NotoTemporalReconstruction || !window.NotoTerrainRefinement || !window.NotoGeometryWorker || !window.NotoTileGeometry || !window.NotoInstanceBuffers || !window.NotoTerrainUploadQueue || !window.NotoRockMaterials || !window.NotoWaterMaterials || !window.NotoWaterMotion || !window.NotoEnvironment || !window.NotoVegetation) {
       throw new Error('Missing local terrain assets. Keep the data, src and vendor folders together.');
     }
@@ -77,8 +75,8 @@
     const displayLevels = [...tileset.levels].sort((a, b) => a.step - b.step);
     const maxLevel = displayLevels.length - 1;
     // minimumLevel: index of the finest allowed display level; defaults to the actual 5 m level.
-    let minimumLevel = displayLevels.findIndex(level => level.step * nativeSpacing === 5);
-    if (minimumLevel < 0) throw new Error('Missing default 5 m terrain display level');
+    let minimumLevel = displayLevels.reduce((best, level, index) =>
+      Math.abs(level.step * nativeSpacing - 5) < Math.abs(displayLevels[best].step * nativeSpacing - 5) ? index : best, 0);
     resolutionSelect.replaceChildren(...displayLevels.map((entry, level) => {
       const spacing = nativeSpacing * entry.step;
       return new Option(`${spacing} m${level === 0 ? ' (finest)' : ''}`, String(level));
@@ -120,7 +118,8 @@
       lastInteractionAt = 0;
     let autoPixelRatio = quality.pixelRatio;
     // Choose the first actual level at or above 16 m for regional residency; levels need not be powers of two.
-    const residentLevel = displayLevels.findIndex(level => level.step * nativeSpacing >= 16);
+    const firstResident = displayLevels.findIndex(level => level.step * nativeSpacing >= 16);
+    const residentLevel = firstResident < 0 ? maxLevel : firstResident;
     const descriptors = tileset.tiles;
     for (const [key, tile] of Object.entries(descriptors)) {
       const [levelKey, xKey, zKey] = key.split('/');
@@ -149,10 +148,10 @@
       return Boolean(oceanBits[i >> 3] >> (i & 7) & 1);
     }
     const strata = {
-      ...window.NOTO_STRATA,
-      ids: new Uint8Array(await decompress(window.NOTO_STRATA.ids))
+      ...dataSource.strata,
+      ids: new Uint8Array(await decompress(dataSource.strata.ids))
     };
-    const vegetationData = await window.NotoVegetation.prepareData(THREE, window.NOTO_VEGETATION);
+    const vegetationData = await window.NotoVegetation.prepareData(THREE, dataSource.vegetation);
     vegetationData.grass = await window.NotoGroundGrass.prepare(THREE, vegetationData, strata);
     let vegetation = null;
     // The material configuration separates asset loading from the rock-material factory.
@@ -253,12 +252,8 @@
     temporal = window.NotoTemporalReconstruction.create({ THREE, renderer });
     const oceanSpectrum = window.NotoOceanSpectrum.create({ THREE, renderer });
     const skyAtmosphere = window.NotoSkyAtmosphere.create({ THREE, renderer });
-    temporal.setEnabled(temporalCheckbox.checked);
-    temporalCheckbox.addEventListener('change', () => {
-      temporal.setEnabled(temporalCheckbox.checked);
-      wakeRendering();
-    });
-    renderer.domElement.setAttribute('aria-label', 'Noto Peninsula terrain: drag to rotate, right-drag to pan, scroll to zoom');
+    temporal.setEnabled(true);
+    renderer.domElement.setAttribute('aria-label', 'Interactive terrain: drag to rotate, right-drag to pan, scroll to zoom');
     renderer.domElement.tabIndex = 0;
     document.querySelector('#viewport').appendChild(renderer.domElement);
     const scene = new THREE.Scene();
@@ -269,12 +264,12 @@
     // Animated geometry and reflection never borrow static-surface history.
     waterMaterials.top.userData.temporalReactive = true;
     waterMaterials.cut.userData.temporalReactive = true;
-    const coastalField = await window.NotoCoastalGeometry.prepare(window.NOTO_SHORELINE);
+    const coastalField = await window.NotoCoastalGeometry.prepare(shoreline);
     oceanAt.coast = coastalField;
     const geometryBuilder = await window.NotoGeometryWorker.create({
-      THREE, coreURL, coreSource, tileset, oceanBits, shoreline: window.NOTO_SHORELINE, coastalField
+      THREE, coreURL, coreSource, tileset, oceanBits, shoreline, coastalField
     });
-    const waterMotion = await window.NotoWaterMotion.create(THREE, window.NOTO_SHORELINE, waterMaterials, coastalField, oceanSpectrum);
+    const waterMotion = await window.NotoWaterMotion.create(THREE, shoreline, waterMaterials, coastalField, oceanSpectrum);
     waterMotion.setAtmosphere(skyAtmosphere);
     materialFactory.shared.waterMotion = waterMotion;
     const waterTop = waterMaterials.top;
@@ -337,7 +332,8 @@
     waterMotion.setLighting(environment.getState());
     skyAtmosphere.setLighting(environment.getState());
     oceanReflection.setLighting(environment.getState());
-    const oceanBackdrop = window.NotoOceanBackdrop.create({ THREE, scene, terrain, camera, controls, metadata: m, motion: waterMotion, materials: waterMaterials });
+    const oceanBackdrop = window.NotoOceanBackdrop.create({ THREE, scene, terrain, camera, controls, metadata: m,
+      hasOcean: tileset.oceanMask.oceanCellCount > 0, motion: waterMotion, materials: waterMaterials });
 
     // 3. Bounded asynchronous script loading, shared by file and HTTP pages.
     const rawCache = new Map();
@@ -422,7 +418,7 @@
               if (!tile.file) {
                 values = new Uint16Array(4).fill(65535);
               } else {
-                const payload = await new Promise((done, fail) => {
+                const payload = dataSource.tilePayload ? await dataSource.tilePayload(tile) : await new Promise((done, fail) => {
                   const script = document.createElement('script');
                   const timeout = setTimeout(() => finish(new Error(`Tile timed out: ${tile.key}`)), 30000);
                   let received = false;
@@ -773,7 +769,6 @@
       vegetationDetailSelect.disabled = false;
       grassVisibilityCheckbox.disabled = treeVisibilityCheckbox.disabled = false;
       idleSleepSelect.disabled = false;
-      temporalCheckbox.disabled = false;
       flashlight.ready();
       zoomButtons.forEach(button => {
         button.disabled = false;
@@ -1488,11 +1483,6 @@
       oceanReflection.update({ now, waterVisible });
       temporal.render(scene, camera, { now });
       displayedFrames++;
-      const temporalState = temporal.getState();
-      const temporalText = temporalState.active
-        ? 'Temporal reconstruction enabled; incompatible history is rejected.'
-        : `Direct rendering${temporalState.reason ? `: ${temporalState.reason}` : ''}.`;
-      if (temporalLabel.textContent !== temporalText) temporalLabel.textContent = temporalText;
       if (gpuQuery) {
         graphicsContext.endQuery(gpuTimer.TIME_ELAPSED_EXT);
         gpuQueries.push({

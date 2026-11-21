@@ -432,7 +432,6 @@
           // slope gain turns the broad reflected sky into alternating metallic bands.
           slopes = -(oceanLarge.rg*1.10+oceanSmall.rg*1.45) + microSlopes*0.85*microFilter;
         }
-        vec3 nSea = normalize(vSeaNormal);
         // Filter subpixel facets while keeping their unresolved energy in roughness.
         slopes *= 1.0-foam*0.35;
         vec3 notoWaterTangent = normalize(vec3(nSea.x + slopes.x, nSea.z + slopes.y, nSea.y));`);
@@ -522,12 +521,32 @@
         // the filtered mean normal into repeated highlights. Nearby resolved waves stay crisp.
         // Differentiate the normal that actually shades the pixel: spectrum gains,
         // capillary detail and the geometric swell all contribute to solar aliasing.
+        vec3 nSea = normalize(vSeaNormal);
+        vec2 edgeDistances = uSeaSize*0.5 - abs(foamP);
+        float edgeBlend = 1.0-smoothstep(80.0,220.0,min(edgeDistances.x,edgeDistances.y));
+        float swellGuard = 96.0+3.0*uSeaGrid;
+        edgeBlend *= smoothstep(swellGuard,swellGuard+120.0,distanceToShore);
+        if(edgeBlend>0.0) {
+          // Crop-edge vertices stay level for watertight joins. Shade the same
+          // continuous, filtered swell on both sides, including coarse offshore strips.
+          vec2 gradient = vec2(0.0);
+          for(int i=0;i<3;i++) {
+            vec4 w = uSeaWaves[i];
+            vec2 d = vec2(cos(w.x),sin(w.x));
+            float k = 6.28318530718/w.y;
+            float footprint = max(abs(dot(d,seaDx)),abs(dot(d,seaDy)));
+            float resolved = 1.0-smoothstep(0.25*w.y,0.75*w.y,footprint);
+            float phase = k*dot(d,foamP)-sqrt(9.81*k)*uSeaTime+w.w;
+            gradient += d*(w.z*k*cos(phase)*resolved*uSeaWeather*smoothstep(1.5*uSeaGrid,4.0*uSeaGrid,w.y));
+          }
+          nSea = normalize(mix(nSea,normalize(vec3(-gradient.x,1.0,-gradient.y)),edgeBlend));
+        }
         vec2 shadingSlopes = microSlopes*uSeaWeather;
         if(uOceanSpectrumEnabled>0.5) {
           shadingSlopes = -(oceanLarge.rg*1.10+oceanSmall.rg*1.45)+microSlopes*0.85*microFilter;
         }
         shadingSlopes *= 1.0-foam*0.35;
-        vec3 shadingNormal = normalize(normalize(vSeaNormal)+vec3(shadingSlopes.x,0.0,shadingSlopes.y));
+        vec3 shadingNormal = normalize(nSea+vec3(shadingSlopes.x,0.0,shadingSlopes.y));
         vec3 normalDx = dFdx(shadingNormal), normalDy = dFdy(shadingNormal);
         float resolvedVariance = max(dot(normalDx,normalDx),dot(normalDy,normalDy))/12.0;
         float lostVariance = smoothstep(0.8,18.0,seaFootprint)*0.00085
@@ -592,6 +611,16 @@
         outgoingLight = seaLayerRadiance(waterBody,diffuseColor.rgb,
           reflectedLight.directDiffuse,reflectedLight.indirectDiffuse,volumeAmbient,
           skyReflection,scattering,foamSkyRadiance,fresnel,foam)+directHighlights;
+        // At grazing angles a single pixel can span many swell crests. Use the
+        // broad reflected horizon for that footprint on either side of the survey.
+        float unresolved = smoothstep(20.0,100.0,seaFootprint)
+          * smoothstep(4000.0,11000.0,vViewPosition.z) * smoothstep(40.0,160.0,distanceToShore)
+          * (1.0-reflectedLandCoverage);
+        if(unresolved>0.0) {
+          vec3 horizonRay = normalize(vec3(-toCamera.x,0.0001,-toCamera.z));
+          vec3 remoteWater = seaReflectedSky(horizonRay,0.08,0.01)*vec3(0.68,0.79,0.86);
+          outgoingLight = mix(outgoingLight,remoteWater+directHighlights,unresolved);
+        }
         #include <opaque_fragment>`);
       materials.top.userData.notoShader = shader;
     };

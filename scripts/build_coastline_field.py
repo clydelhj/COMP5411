@@ -61,7 +61,8 @@ def read_samples(data, cache, step, signature):
 def build(data, values, output, step):
     """Write a signed distance field and nearest coastal heights for every LOD."""
     from scipy import ndimage
-    valid = np.isfinite(values) & (values > -100) & (values < 555.35)
+    cell_m = step * data['metadata'].get('source_spacing_m', [1])[0]
+    valid = np.isfinite(values) & (values >= -100) & (values < 555.35)
     # Seed only missing regions known to touch the original ocean mask; enclosed
     # inland NoData remains distinct from the ocean.
     source = data['oceanMask']
@@ -71,7 +72,12 @@ def build(data, values, output, step):
     cc = np.minimum(source['cols'] - 1, (np.arange(values.shape[1]) * step + step / 2).astype(int) // source['step'])
     seed = ocean[np.ix_(rr, cc)] & ~valid
     sea = ndimage.binary_propagation(seed, mask=~valid)
-    distance = (ndimage.distance_transform_edt(sea) - ndimage.distance_transform_edt(~sea)) * step
+    if not np.any(valid):
+        raise ValueError('The shore grid contains no land samples')
+    if np.any(sea):
+        distance = (ndimage.distance_transform_edt(sea) - ndimage.distance_transform_edt(~sea)) * cell_m
+    else:
+        distance = np.full(values.shape, -512.0, dtype=np.float32)
     # Smooth the display contour in metres, independently of the selected LOD.
     distance = ndimage.gaussian_filter(distance.astype(np.float32), sigma=1.0, mode='nearest')
     nearest = ndimage.distance_transform_edt(~valid, return_distances=False, return_indices=True)
@@ -83,10 +89,13 @@ def build(data, values, output, step):
     packed_height[np.abs(distance) > 300] = 10002
     encode = lambda a: base64.b64encode(gzip.compress(a.tobytes(), mtime=0)).decode('ascii')
     meta = data['metadata']
-    result = dict(rows=values.shape[0], cols=values.shape[1], cellM=step, widthM=meta['width_m'], heightM=meta['height_m'],
-                  method=f'DEM validity; ocean-connected missing regions; {step} m Gaussian-smoothed display distance; ocean positive',
-                  source=meta['source'], smoothingM=step, contourToleranceM=0.03, maximumContourSegmentM=8,
+    result = dict(rows=values.shape[0], cols=values.shape[1], cellM=cell_m, widthM=meta['width_m'], heightM=meta['height_m'],
+                  method=f'DEM validity; ocean-connected missing regions; {cell_m:g} m Gaussian-smoothed display distance; ocean positive',
+                  source=meta['source'], smoothingM=cell_m, contourToleranceM=0.03, maximumContourSegmentM=8,
                   distances=encode(packed_distance), coastalHeights=encode(packed_height))
+    if 'crs' in meta and 'display_centers' in meta:
+        box = meta['display_centers']
+        result.update(crs=meta['crs'], bounds=[box['left'], box['bottom'], box['right'], box['top']])
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text('/* Generated display coastline. Source DEM is unchanged. */\nwindow.NOTO_SHORELINE = ' + json.dumps(result, separators=(',', ':')) + ';\n', encoding='utf-8')
     print(json.dumps(dict(rows=result['rows'], cols=result['cols'], bytes=output.stat().st_size, oceanCells=int(sea.sum()), inlandMissing=int((~valid & ~sea).sum()))), flush=True)

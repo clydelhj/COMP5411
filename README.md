@@ -32,6 +32,24 @@ The server binds to `127.0.0.1` on an available port and opens `index.html`. Kee
 
 Viewing requires WebGL2, Gzip `DecompressionStream` and hardware acceleration. Runtime resources are local; there is no npm installation, compilation step or external runtime service. Shared texture arrays are substantial: roughly 580 MiB of CPU pixels and 773 MiB of theoretical GPU texture storage with mipmaps, before terrain and other resources. Actual usage depends on the browser.
 
+## Use another dataset
+
+Prepare three georeferenced, single-band GeoTIFFs. The DEM must be north-up with square pixels in a projected metre-based CRS and unscaled elevations from −100.00 to 555.34 m. Set ocean cells to NoData where they connect to the outer edge of the raster. The other two bands contain integer classes: rock and soil use IDs 0–28, and vegetation uses IDs 0–30. Reclassify source legends to the project IDs before conversion. Run `python scripts/classification_grids.py --list-codes` to list both legends.
+
+From the project root, use Python with NumPy, Rasterio and SciPy to build a new local folder:
+
+```sh
+python scripts/prepare_data_folder.py --dem dem.tif --geology geology.tif --vegetation cover.tif --output my-data
+```
+
+Open `index.html` in Edge or Chrome. Under **Settings → Data source**, click **Choose data folder**, select `my-data` and grant read access. The viewer reloads with the new terrain, shoreline and distributions. **Use bundled data** restores the Noto dataset. To change one classification, copy a prepared folder and run the following command on the copy. Use `--geology geology.tif` for rock and soil.
+
+```sh
+python scripts/classification_grids.py --data my-data-copy --vegetation cover.tif
+```
+
+Select the updated folder in Settings. Both category maps are sampled by nearest neighbour in the DEM's CRS. A surface geology map supplies the same class down to the display base. The viewer uses the new location for solar position and displays time in UTC+9.
+
 ## Controls
 
 - Left drag: orbit; right drag: pan; mouse wheel or + / −: zoom.
@@ -53,7 +71,7 @@ Forest broadleaf trees are 12–22 m tall and conifers 18–30 m; orchard trees 
 
 After the last interaction, visible clouds, waves, rain and vegetation wind continue for **30 seconds** by default, then freeze. Settings offer immediate sleep, 15/30 seconds, 1/5 minutes or Never. Dialogs and hidden pages pause idle animation. Ordinary animation frames do not rebuild terrain or redistribute vegetation.
 
-The sea uses two GPU FFT wind-wave fields, geometric long swells and nearshore breakers. Spectral slopes, irregular whitecaps, shore foam, Fresnel reflection, absorption and sun glints provide its appearance. A 512 × 288 terrain-only reflection uses a capped coarse proxy and reuses stationary captures; the full detailed scene is not rendered twice. The visible sky and its water reflection share the same lighting. An illustrative offshore extension supplies a distant horizon in low coastal views. All effects use the existing sleep clock. Devices without the required float render targets retain analytic waves and optical shading.
+The sea uses two GPU FFT wind-wave fields, geometric long swells and nearshore breakers. Spectral slopes, irregular whitecaps, shore foam, Fresnel reflection, absorption and sun glints provide its appearance. A 512 × 288 terrain-only reflection uses a capped coarse proxy and reuses stationary captures; the full detailed scene is not rendered twice. The visible sky and its water reflection share the same lighting. At low coastal viewpoints, water continues beyond the ocean edge of the DEM to a horizon drawn in the sky background. The terrain crop remains visible from above. All effects use the existing sleep clock. Devices without the required float render targets retain analytic waves and optical shading.
 
 Clouds drift across the sky background. Clear, cloudy and rainy presets change their coverage and color, while the time of day controls their illumination. The sky and the sea surface use the same cloud pattern for reflections and for the sun's visibility. The landscape remains visible when the camera rises above the peninsula. Distance fog follows the weather at the coast and adjusts to longer viewing distances in regional views.
 
@@ -61,7 +79,7 @@ Water detail blends continuously rotated/offset sampling regions to reduce short
 
 Material shader detail follows the projected pixel footprint independently of terrain grid spacing. Distant geological textures blend toward their mipmap average, and unresolved normal maps stop sampling after their influence fades out. Water skips fine-normal sampling when it becomes unresolved and evaluates breaker-only shading inside the surf band. These paths reduce unnecessary shading while retaining nearby material detail and continuous transitions.
 
-Temporal reconstruction is enabled by default on supported WebGL2 devices and can be disabled in settings for a direct-render comparison. It shades the scene at 75% of the output width/height, then reuses validated static-surface history. Depth/normal checks reject newly exposed or incompatible surfaces; local color clamping limits stale shading. Lighting changes and committed geometry reset history. Moving water, coastal wetness, plants, rain and spray use current-frame samples. A bounded settling sequence can refine a still image without keeping the viewer awake. Unsupported devices and oversized buffers use direct rendering. This is a quality/performance tradeoff, not a guarantee of higher frame rate or native detail on every pixel.
+Temporal reconstruction runs automatically on supported WebGL2 devices. It shades the scene at 75% of the output width/height, then reuses validated static-surface history. Depth/normal checks reject newly exposed or incompatible surfaces; local color clamping limits stale shading. Lighting changes and committed geometry reset history. Moving water, coastal wetness, plants, rain and spray use current-frame samples. A bounded settling sequence can refine a still image without keeping the viewer awake. Unsupported devices and oversized buffers use direct rendering. This is a quality/performance tradeoff, not a guarantee of higher frame rate or native detail on every pixel.
 
 Terrain mesh generation, shoreline subdivision, mixed-detail stitching and boundary-normal averaging run in a dedicated Worker. The main thread retains interaction and rendering. Tree/grass placement is prepared in short cooperative slices, then committed as a complete set. Worker diagnostics are available through `terrainViewer.getState().geometryWorker`; a browser that cannot start the Worker uses an explicit compatibility fallback. These changes reduce CPU blocking; pixel shading, shadows and GPU uploads still have a rendering cost.
 

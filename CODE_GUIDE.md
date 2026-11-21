@@ -10,6 +10,7 @@ Current runtime baseline: November 15, 2026. All paths below are relative to the
 ├── start-viewer.cmd
 ├── src/
 │   ├── terrain.js
+│   ├── data-source.js
 │   ├── terrain-lod.js
 │   ├── terrain-refinement.js
 │   ├── terrain-upload-queue.js
@@ -57,6 +58,7 @@ Large runtime/source assets may be distributed separately; their paths after ins
 | Module | Responsibility |
 | --- | --- |
 | `terrain.js` | Scene setup, asynchronous loads, caches, camera safety, settings, performance feedback and frame scheduling |
+| `data-source.js` | Read-only selection, validation and loading of local data folders |
 | `terrain-lod.js` | Distance-based nested display patches, selection hysteresis, source resampling and display-patch lookup |
 | `terrain-refinement.js` | Progressive local split/merge transactions, near-region priority and displayed-topology validation |
 | `terrain-upload-queue.js` | Bounded preparation of new GPU buffers and patch textures before a local replacement |
@@ -72,7 +74,7 @@ Large runtime/source assets may be distributed separately; their paths after ins
 | `sky-atmosphere.js` | Clear atmospheric gradient, analytic sun and lighting-driven sky cache |
 | `cloud-layers.js` | Directional procedural cloud color and coverage used in the sky texture |
 | `ocean-reflection.js` | Cached low-resolution reflection of an owned coarse terrain proxy |
-| `ocean-backdrop.js` | Shared analytic sky and a small illustrative offshore horizon |
+| `ocean-backdrop.js` | Sky background, offshore water and the distant sea horizon |
 | `scene-effects.js` | Pointer flashlight and bounded GPU coastal spray |
 | `environment.js` | GMT+9 sun position, day/night lighting, weather, shadows and GPU rain |
 | `vegetation.js`, `ground-grass.js` | Stable plant locations, shape/detail variants, grass, surface attachment and shared wind animation |
@@ -91,6 +93,14 @@ Geometric and material resources are prepared off the active set. A local split/
 `prepareShaderPrograms()` prepares the direct-output and linear offscreen material variants through Three.js `compileAsync()` before new terrain is published. Startup preparation includes colored plant instancing. On devices with parallel shader compilation, completion is awaited without holding a temporary render target or viewport across the wait. Without that extension, explicit preparation is restricted to loading coarse coverage. This prepares main material programs; it does not guarantee precompilation of every shadow/depth variant. `terrainViewer.getState().shaderWarmup` exposes completion and pending state.
 
 `terrain-upload-queue.js` prepares patch GPU resources through public Three.js APIs. A shared simple material and a 1 × 1 target upload one mesh's buffers with a temporary one-triangle draw range; the range and caller render state are restored immediately. Patch height textures use separate `initTexture()` jobs. Preparation starts while subsequent Worker construction continues, and local replacement waits for the final seam-normal versions as well. A batch yields after a 4 ms target or four jobs, then resumes in a task after a browser frame. An individual driver call cannot be interrupted, so this is a cooperative budget rather than a hard frame-time guarantee. Spreading preparation can lengthen full-scene background convergence; existing near detail remains visible while the remaining work finishes. Hidden pages pause the queue; eviction cancels owned jobs before releasing resources. No queue work is scheduled once it is empty. `terrainViewer.getState().terrainUploads` exposes pending jobs, completion and measured batch/job durations.
+
+### Alternative terrain and classification sources
+
+`scripts/prepare_data_folder.py` derives the terrain manifest, tile pyramid and shoreline from the DEM and calls `scripts/classification_grids.py` to prepare the geology and vegetation. The DEM's outer sample centers define the displayed bounds [west, south, east, north]. The projected center maps to local (0, 0), with X increasing east and Z increasing south. The manifest also records a WGS84 center for solar position. Source elevations are quantized to centimetres and must fit the existing height encoding. Sea level is 0 m.
+
+Geology and vegetation are reprojected by nearest neighbour. Source NoData, masks and uncovered parts of an overlapping raster receive category zero. Material nodes sample the full extent, including its endpoints, while vegetation cells partition the extent. Source resolution is preserved approximately until the geology grid reaches 256 nodes per axis or the vegetation texture reaches 4096 cells per axis. Material IDs are packed in row, depth, column order. A surface map produces two identical depth slices and an empty borehole list. The original Noto layered-model workflow remains documented in `REBUILD.md`.
+
+The selected folder contains `terrain-1m/manifest.js`, its tile subdirectories, `shoreline-data.js`, `strata-data.js` and `vegetation-data.js`. The viewer reuses its installed material textures and plant models. `src/data-source.js` reads the selected folder with browser-granted read permission, validates grid compatibility and parses the generated data wrappers. Terrain tiles are read as needed. See the README for complete conversion and single-layer replacement commands.
 
 ## Background geometry and bounded plant updates
 
@@ -186,7 +196,7 @@ Owned render-target dimensions are physical pixels. Binding a target selects its
 
 `ocean-reflection.js` mirrors an owned camera across mean sea level into a 512 × 288 mipmapped linear-color target, approximately 1.31 MiB including estimated depth storage. Its owned front-facing terrain proxy reads original coarse `heights` and `landCells`, never the heavily subdivided coastal mesh, and is capped at 150,000 triangles. Proxy heights follow the shared coastal contact profile. Vertex colors use stratified, linear-RGB means of the source material photographs with the classification blend kernel; the small proxy pass also samples the shared ground cover and grass masks. Sun and hemisphere illumination match the main scene. This keeps a bright bare coast distinct from forest in its reflection. Empty texels retain the analytic sky. Projective sampling distorts the reflected silhouette with the water normal and filters it according to roughness. Filtered coverage composites the land once and attenuates the reflected sun. Captures occur only after camera, terrain-scale, lighting or ground-cover visibility changes, throttled to 10 Hz with at most eight settling attempts. Animated waves alone reuse the capture. Detailed plant silhouettes, geological normal maps and dynamic shadows are absent from this coarse reflection. Renderer state is restored after capture.
 
-`ocean-backdrop.js` draws the matching sky and four offshore strips totalling 2,304 triangles. The strips lie outside the DEM crop, extend only existing ocean edges, and fade out in regional/interior views. They are an illustrative distant horizon, not additional measured terrain or bathymetry. Sky and water remain reactive to temporal reconstruction. These water effects are parameterized visual animation, not a fluid solver or validated ocean prediction.
+`ocean-backdrop.js` continues water beyond the ocean edges of the DEM and blends it into a distant sea horizon drawn from the viewing direction. Visibility depends on camera height and pitch, preserving the cut edges in overhead views. The offshore water uses the shared sky lighting. Sky and water remain reactive to temporal reconstruction. These water effects are parameterized visual animation, not a fluid solver or validated ocean prediction.
 
 Nearshore breaker height uses a deterministic moving wave-group envelope in the range 0.25-1. The same envelope modulates foam formation and wet wash. Its analytic gradient contributes to water normals, and CPU height queries share the coefficient table used to generate GLSL. Spray samples wave strength at emission time and keeps it constant during flight. This varies successive crests without increasing the existing displacement bound or moving the exact shoreline contact; it is an illustrative surf treatment.
 
@@ -206,7 +216,7 @@ The closed land/water bases lie on the flat -100 m plane. Above that plane their
 
 ### Temporal reconstruction and history rejection
 
-The settings checkbox enables a local GPU reconstruction pass when float color targets and multiple render attachments are supported. The scene is shaded at 75% of the output width and height with a short subpixel jitter sequence. Two full-output ping-pong targets retain linear-light color and surface metadata. The final pass applies the renderer's output color conversion. UI text remains ordinary HTML. Direct rendering remains available through the checkbox and is the fallback for unsupported devices, excessive target sizes or setup failures.
+The viewer automatically uses a local GPU reconstruction pass when float color targets and multiple render attachments are supported. The scene is shaded at 75% of the output width and height with a short subpixel jitter sequence. Two full-output ping-pong targets retain linear-light color and surface metadata. The final pass applies the renderer's output color conversion. UI text remains ordinary HTML. The viewer falls back to direct rendering for unsupported devices, excessive target sizes or setup failures.
 
 For a static opaque surface, the current depth reconstructs its world position. The previous view-projection matrix finds its history location. History is rejected behind the camera, outside the previous image, or when previous depth or depth-derived world normal disagrees. All four metadata taps associated with the bilinear color lookup must pass, so a thin foreground edge cannot contaminate a newly revealed background through interpolation. Accepted history is clamped to the current 3 × 3 color neighborhood; luminance disagreement reduces its weight. This is geometric normal validation, not storage of PBR normal-map details.
 
@@ -218,7 +228,7 @@ Explicit resets cover time/date/weather changes, pointer-light changes, committe
 
 The sky backdrop is drawn before opaque terrain in both direct and temporal modes. It is marked reactive so moving sky pixels use the current frame. Water samples the same directional texture along its reflection rays. Distance fog retains the weather preset near the coast and shifts outward with orbit distance to keep the peninsula legible in regional views.
 
-`terrainViewer.getState().temporal` reports requested/active state, fallback reason, dimensions, history age and reset counters. `renderedFrames` counts presented viewer frames; draw/triangle counters include the scene and reconstruction passes. Lower input resolution is a deliberate shading-cost tradeoff: newly revealed and reactive surfaces cannot gain missing samples from old frames. Disable reconstruction when comparing native direct detail. This is a small WebGL reconstruction implementation, not DLSS/FSR or a promise of ghost-free output in every scene.
+`terrainViewer.getState().temporal` reports requested/active state, fallback reason, dimensions, history age and reset counters. `renderedFrames` counts presented viewer frames; draw/triangle counters include the scene and reconstruction passes. Lower input resolution is a deliberate shading-cost tradeoff: newly revealed and reactive surfaces cannot gain missing samples from old frames. This is a small WebGL reconstruction implementation, not DLSS/FSR or a promise of ghost-free output in every scene.
 
 Performance feedback uses consecutive rendered-frame intervals and asynchronous GPU timing where available. Loading/building intervals and the first wake-up frame are excluded. Sustained slow windows reduce local terrain budgets and automatic canvas/plant detail; sustained fast windows restore them gradually. Both adjustment directions have a 6-second cooldown. Manual canvas and vegetation settings are not overwritten. Hardware hints choose the initial tier, while measured load drives later adaptation.
 
