@@ -61,6 +61,11 @@ test('sky clouds stay behind opaque surfaces at all viewing altitudes', {
     assert.equal(report.horizon.overviewOpacity, 0, 'the regional view preserves the survey boundary');
     assert.equal(report.horizon.inland.maximum, 0, 'a broad land edge does not become a distant sea');
     assert.equal(report.horizon.landOnlyOpacity, 0, 'an inland-only dataset has no offshore horizon');
+    assert(report.moon.full.changedPixels > 100, 'an above-horizon full moon is visible');
+    assert(report.moon.rainy.mean < report.moon.full.mean * 0.6, 'dense cloud cover attenuates the lunar disk');
+    assert(report.moon.sunward.mean > report.moon.away.mean + 10, 'the illuminated half faces the Sun');
+    assert.equal(report.moon.occluded.maximum, 0, 'foreground geometry hides the lunar disk');
+    assert.equal(report.moon.below.maximum, 0, 'the lunar disk disappears below the horizon');
   } finally {
     await browser?.close();
     await new Promise(resolve => server.close(resolve));

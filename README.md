@@ -57,6 +57,7 @@ Select the updated folder in Settings. Both category maps are sampled by nearest
 - Q/E: turn; R/F: move vertically. Additional bindings appear in the ? dialog.
 - The bottom slider changes display height from 1:1 to 1:10; default 1:5.
 - The upper-right slider controls time in GMT+9. In settings, choose a date from the English calendar or enter it as YYYY-MM-DD. Today uses the date in Japan. The weather options are clear, cloudy and rainy.
+- The Moon follows the selected date, time and map location. For a view from the Noto coast, select Clear and set 24 November 2026 at 17:00 GMT+9. The nearly full Moon is about 11° above the east-northeastern horizon.
 - The flashlight button illuminates the surface under the pointer, including at night.
 
 ## Detail and animation settings

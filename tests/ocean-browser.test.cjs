@@ -157,6 +157,9 @@ test('ocean surface, atmosphere, sunset shading and idle behavior run in actual 
       }
       assert(sky.noonProbes[2].rgba[2] > sky.noonProbes[2].rgba[0], 'daytime zenith retains its blue color');
       assert(sky.reflectedSun.waterEnvironment.every(Number.isFinite), 'rough water environment lookup remains finite');
+      assert(sky.reflectedMoon.moonlitWater[1] > sky.reflectedMoon.darkWater[1] + 0.0001,
+        'rough water reflects light in the direction of the full moon');
+      assert.equal(sky.reflectedMoon.atlasUpdates, 0, 'a lunar-only change reuses the sky atlas');
       assert(Math.max(...sky.reflectedSun.visible.slice(0, 3).map((value, i) => value - sky.reflectedSun.waterEnvironment[i])) > 0.1,
         'water environment excludes the sharp solar disk supplied separately by directional GGX');
       const redBlue = rgb => rgb[0] / Math.max(1, rgb[2]);

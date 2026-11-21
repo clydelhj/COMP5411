@@ -1,4 +1,4 @@
-/* Directional sky, background clouds and analytic sun shared by the sky backdrop and water. */
+/* Directional sky, clouds and analytic Sun and Moon shared by the sky and water. */
 (function registerSkyAtmosphere(global) {
   'use strict';
 
@@ -10,6 +10,9 @@
     uniform float uSkyAtmosphereEnabled;
     uniform vec3 uAtmosphereSunDirection;
     uniform vec3 uAtmosphereSunRadiance;
+    uniform vec4 uMoonDisc;  // Unit direction and angular radius in radians.
+    uniform vec4 uMoonLight; // Sunward tangent vector and its component toward the observer.
+    uniform vec3 uMoonRadiance;
     vec2 atmosphereSkyUv(vec3 direction) {
       vec3 d = normalize(direction);
       return vec2(fract(atan(d.z,d.x)/6.28318530718+0.5),
@@ -30,6 +33,49 @@
       // Directional sunlight is constant across fragments, so use the base mip.
       return textureLod(uSkyAtmosphereMap,atmosphereSkyUv(direction),0.0).a;
     }
+    vec3 atmosphereMoon(vec3 d,float footprint) {
+      float radius=uMoonDisc.w;
+      if(radius<=0.0 || d.y<=0.0) return vec3(0.0);
+      vec3 offset=d-uMoonDisc.xyz;
+      float distance2=dot(offset,offset), radius2=radius*radius;
+      float kernel2=3.0*radius2+4.0*footprint*footprint;
+      if(distance2>=kernel2) return vec3(0.0);
+
+      // For rough reflections one sample can cover the entire Moon. Spread its
+      // illuminated area over a normalized angular kernel, conserving its flux.
+      float phase=0.5*(1.0+uMoonLight.w);
+      float kernel=1.0-distance2/kernel2;
+      const float meanAlbedo=0.70;
+      float unresolved=3.0*radius2/kernel2*kernel*kernel*phase*0.85*meanAlbedo
+                      *smoothstep(-radius,radius,uMoonDisc.y);
+      float relativeWidth=footprint/radius;
+      if(relativeWidth>=1.25) return uMoonRadiance*unresolved;
+
+      // Resolve the lit hemisphere on the apparent disc. Its bright limb
+      // points toward the Sun, regardless of latitude or camera roll.
+      vec3 p=(offset-uMoonDisc.xyz*dot(offset,uMoonDisc.xyz))/radius;
+      float radial2=dot(p,p), z=sqrt(max(1.0-radial2,0.0));
+      float incidence=dot(p,uMoonLight.xyz)+z*uMoonLight.w;
+      float aa=clamp(0.5*relativeWidth,0.002,0.48);
+      float disc=1.0-smoothstep(1.0-aa,1.0+aa,sqrt(radial2));
+      float lit=smoothstep(-aa,aa,incidence)*(0.55+0.45*sqrt(max(incidence,0.0)));
+      // A world-oriented tangent frame stays continuous from the horizon to the zenith.
+      // Broad, soft markings suggest lunar maria at the few pixels the disc subtends.
+      vec2 uv=p.xz-p.y*uMoonDisc.xz/(1.0+uMoonDisc.y);
+      vec2 west=(uv-vec2(-0.27,0.04))/vec2(0.48,0.61);
+      west.x+=0.46*west.y*west.y;
+      vec2 north=(uv-vec2(0.18,0.33))/vec2(0.44,0.26);
+      vec2 east=(uv-vec2(0.49,-0.07))/vec2(0.22,0.25);
+      float basin=min(dot(west,west),min(dot(north,north),dot(east,east)));
+      float albedo=mix(0.31,0.82,smoothstep(0.48-aa,1.20+aa,basin));
+      float resolved=disc*lit*albedo*smoothstep(0.0,0.012,phase);
+      return uMoonRadiance*mix(resolved,unresolved,smoothstep(0.45,1.25,relativeWidth));
+    }
+    vec3 atmosphereReflectedMoon(vec3 direction,float footprint) {
+      vec3 moon=atmosphereMoon(direction,footprint);
+      if(any(greaterThan(moon,vec3(0.0)))) moon*=atmosphereCloudTransmission(uMoonDisc.xyz);
+      return moon;
+    }
     vec3 atmosphereSkyColor(vec3 direction) {
       vec3 d = normalize(direction);
       vec4 sky = atmosphereSkySample(d);
@@ -38,7 +84,8 @@
       float edge = max(fwidth(alignment)*0.6,0.000002);
       float disk = smoothstep(cos(0.0062)-edge,cos(0.0062)+edge,alignment);
       disk *= smoothstep(-0.001,0.003,d.y);
-      return sky.rgb+uAtmosphereSunRadiance*disk*sky.a;
+      vec3 moon=atmosphereMoon(d,length(fwidth(d))*0.7);
+      return sky.rgb+(uAtmosphereSunRadiance*disk+moon)*sky.a;
     }
   `;
   const VERTEX = /* glsl */`
@@ -94,7 +141,10 @@
       uSkyAtmosphereMap: { value: empty },
       uSkyAtmosphereEnabled: { value: 0 },
       uAtmosphereSunDirection: { value: new THREE.Vector3(0.4, 0.6, -0.7).normalize() },
-      uAtmosphereSunRadiance: { value: new THREE.Color(3.0, 2.7, 2.3) }
+      uAtmosphereSunRadiance: { value: new THREE.Color(3.0, 2.7, 2.3) },
+      uMoonDisc: { value: new THREE.Vector4(0, -1, 0, 0) },
+      uMoonLight: { value: new THREE.Vector4() },
+      uMoonRadiance: { value: new THREE.Color(0, 0, 0) }
     };
     const values = {
       uResolution: { value: new THREE.Vector2(WIDTH, HEIGHT) },
@@ -108,14 +158,17 @@
     let target = null, geometry = null, material = null,
       quad = null, scene = null, camera = null;
     let disposed = false, failed = false, dirty = true, updates = 0,
-      lastTime = null, lightingKey = '';
+      lastTime = null, lightingKey = '', moonKey = '';
     let weather = 'clear', reason = null, type = null;
 
     function setLighting(state = {}) {
-      if (disposed || failed) return;
+      if (disposed) return;
       const key = JSON.stringify([state.direction, state.sunColor, state.sunIntensity, state.elevation, state.weather]);
-      if (key === lightingKey) return;
+      const lunarKey = JSON.stringify([state.moonDirection, state.moonIllumination, state.moonAngularRadius]);
+      const skyChanged = key !== lightingKey;
+      if (!skyChanged && lunarKey === moonKey) return;
       lightingKey = key;
+      moonKey = lunarKey;
       const elevation = Number.isFinite(state.elevation) ? state.elevation : 30;
       values.uElevation.value = elevation;
       if (state.direction?.length >= 3) uniforms.uAtmosphereSunDirection.value.fromArray(state.direction).normalize();
@@ -127,7 +180,23 @@
       const diskColor = new THREE.Color(1.0, 0.58, 0.23)
         .lerp(new THREE.Color(1.0, 0.95, 0.85), THREE.MathUtils.smoothstep(elevation, 0, 24));
       uniforms.uAtmosphereSunRadiance.value.copy(diskColor).multiplyScalar(3.0 * daylight * (weather === 'rainy' ? 0.55 : 1));
-      dirty = true;
+      uniforms.uMoonDisc.value.w = 0;
+      if (state.moonDirection?.length === 3 && Number.isFinite(state.moonIllumination) && state.moonAngularRadius > 0) {
+        const moon = new THREE.Vector3().fromArray(state.moonDirection).normalize();
+        if (moon.y > -state.moonAngularRadius) {
+          uniforms.uMoonDisc.value.set(moon.x, moon.y, moon.z, state.moonAngularRadius);
+          const facing = THREE.MathUtils.clamp(2 * state.moonIllumination - 1, -1, 1);
+          const sun = uniforms.uAtmosphereSunDirection.value;
+          const tangent = sun.clone().addScaledVector(moon, -sun.dot(moon)).normalize()
+            .multiplyScalar(Math.sqrt(1 - facing * facing));
+          uniforms.uMoonLight.value.set(tangent.x, tangent.y, tangent.z, facing);
+          const height = THREE.MathUtils.smoothstep(moon.y, 0, 0.24);
+          const skyDaylight = THREE.MathUtils.smoothstep(elevation, -6, 14);
+          uniforms.uMoonRadiance.value.setRGB(1.0, 0.61 + 0.34 * height, 0.38 + 0.51 * height)
+            .multiplyScalar((0.34 + 0.88 * height) * (1 - 0.64 * skyDaylight) * (1 - 0.22 * values.uWeather.value));
+        }
+      }
+      if (skyChanged) dirty = true;
     }
 
     function initialize() {

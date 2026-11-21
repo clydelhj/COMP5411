@@ -101,7 +101,8 @@
             float outside = length(max(abs(contact) - uBackdropSize * 0.5, vec2(0.0)));
             float offshore = smoothstep(0.0, uOffshoreBlendM, outside);
             float water = smoothstep(0.0, horizonAA, -direction.y);
-            vec3 distantWater = color * vec3(0.68, 0.79, 0.86);
+            vec3 flatReflection = vec3(direction.x, -direction.y, direction.z);
+            vec3 distantWater = (color + atmosphereReflectedMoon(flatReflection,0.018)) * vec3(0.68, 0.79, 0.86);
             color = mix(color, distantWater, offshore * distantOceanCoverage(contact) * water * uBackdropOpacity);
           }
           gl_FragColor=vec4(color,1.0);

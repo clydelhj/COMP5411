@@ -19,12 +19,12 @@ before(async () => {
   THREE = await import('data:text/javascript;base64,' + source.toString('base64'));
 });
 
-function fixture(capable = true) {
+function fixture(capable = true, geographicCenter) {
   const elements = new Map();
   const document = {
     querySelector(selector) {
       if (!elements.has(selector)) elements.set(selector, {
-        value: '', textContent: '', handlers: {},
+        value: selector === '#scene-weather' ? 'clear' : '', textContent: '', handlers: {},
         addEventListener(name, handler) { this.handlers[name] = handler; },
         setAttribute() {}
       });
@@ -40,13 +40,19 @@ function fixture(capable = true) {
   const environment = runtime.window.NotoEnvironment.create({
     THREE, scene, camera, renderer, capable,
     controls: { target: new THREE.Vector3() },
-    metadata: { width_m: 10000, height_m: 10000 },
+    metadata: { width_m: 10000, height_m: 10000, geographicCenter },
     sampleHeight: () => 0,
     onChange: weather => events.push(weather)
   });
   return {
     environment, camera, events,
     rain: scene.getObjectByName('Noto local rain'),
+    setDateTime(date, minutes) {
+      elements.get('#scene-date').value = date;
+      elements.get('#scene-time').value = String(minutes);
+      elements.get('#scene-time').handlers.input();
+      return environment.getState();
+    },
     weather(value) {
       const input = elements.get('#scene-weather');
       input.value = value;
@@ -75,6 +81,39 @@ test('rain uses deterministic varied trajectories with one shared parameter set 
   }
   assert(speeds.size > 100 && shutters.size > 100, 'streak speed and length are not uniform');
   a.environment.dispose(); b.environment.dispose();
+});
+
+test('lunar direction, phase and angular size follow the observer and Japanese date/time', () => {
+  const noto = fixture();
+  const sydney = fixture(true, { latitude: -33.8688, longitude: 151.2093 });
+  // JPL Horizons: target 301, sea-level geodetic sites, airless observer quantities 4,10,13.
+  // Reference dates below use JST; Horizons was queried at the equivalent UTC instant.
+  const references = [
+    [noto, '2026-11-09', 16, 239.540, 2.277, 0.00252, 1803.3],
+    [noto, '2026-11-17', 19, 200.859, 35.823, 0.49021, 1818.6],
+    [noto, '2026-11-21', 12, 58.991, -23.794, 0.84343, 1888.5],
+    [noto, '2026-11-21', 19, 133.719, 53.532, 0.86490, 1936.8],
+    [noto, '2026-11-24', 18, 75.372, 21.606, 0.99800, 1996.6],
+    [noto, '2026-12-01', 15, 308.677, -31.136, 0.50403, 1881.4],
+    [sydney, '2026-11-21', 19, 16.043, 44.272, 0.86610, 1933.3]
+  ];
+  const degrees = 180 / Math.PI;
+  for (const [viewer, date, hour, azimuth, altitude, fraction, diameterArcsec] of references) {
+    const state = viewer.setDateTime(date, hour * 60);
+    const [east, up, south] = state.moonDirection;
+    const bearing = (Math.atan2(east, -south) * degrees + 360) % 360;
+    assert(Math.abs(1 - Math.hypot(east, up, south)) < 1e-10);
+    assert(Math.abs(bearing - azimuth) < 0.3, `azimuth at ${date} ${hour}:00`);
+    assert(Math.abs(Math.asin(up) * degrees - altitude) < 0.2, `altitude at ${date} ${hour}:00`);
+    assert(Math.abs(state.moonIllumination - fraction) < 0.01, `illumination at ${date} ${hour}:00`);
+    assert(Math.abs(2 * state.moonAngularRadius * degrees * 3600 - diameterArcsec) < 10);
+  }
+  const previous = noto.environment.getState().moonDirection;
+  noto.weather('rainy');
+  assert.equal(noto.environment.getState().moonDirection, previous);
+  assert.equal(noto.setDateTime('2026-02-30', 720).moonDirection, previous);
+  noto.environment.dispose();
+  sydney.environment.dispose();
 });
 
 test('rain camera updates and clock ticks preserve buffers; zero, invalid and disabled ticks freeze', () => {

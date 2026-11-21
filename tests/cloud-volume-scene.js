@@ -86,6 +86,44 @@
     }
 
 
+    function checkMoon() {
+      const moon = new THREE.Vector3(0, 0.32, -1).normalize();
+      const opposite = moon.clone().negate();
+      camera.fov = 8;
+      camera.updateProjectionMatrix();
+      camera.position.set(0, 100, 0);
+      camera.lookAt(camera.position.clone().add(moon));
+      const center = [0.45, 0.44, 0.55, 0.56];
+      function pair(direction, sun, illuminated, weather = 'clear') {
+        const lighting = { direction: sun.toArray(), elevation: Math.asin(sun.y) * 180 / Math.PI, weather };
+        sky.setLighting(lighting);
+        frame(0);
+        const baseline = snapshot();
+        sky.setLighting({ ...lighting, moonDirection: direction.toArray(), moonIllumination: illuminated, moonAngularRadius: 0.00455 });
+        frame(0);
+        return [baseline, snapshot()];
+      }
+      const full = pair(moon, opposite, 1);
+      const rainy = pair(moon, opposite, 1, 'rainy');
+      const quarter = pair(moon, new THREE.Vector3(1, 0, 0), 0.5);
+      subject.visible = true;
+      subject.position.copy(camera.position).addScaledVector(moon, 1200);
+      subject.quaternion.copy(camera.quaternion);
+      const occluded = pair(moon, opposite, 1);
+      subject.visible = false;
+      const below = new THREE.Vector3(0, -0.08, -1).normalize();
+      camera.lookAt(camera.position.clone().add(below));
+      const set = pair(below, below.clone().negate(), 1);
+      return {
+        full: difference(...full, center),
+        rainy: difference(...rainy, center),
+        sunward: difference(...quarter, [0.503, 0.478, 0.519, 0.522]),
+        away: difference(...quarter, [0.481, 0.478, 0.497, 0.522]),
+        occluded: difference(...occluded, center),
+        below: difference(...set, center)
+      };
+    }
+
     function runChecks() {
       temporal.setEnabled(false);
       setAltitude(35);
@@ -168,6 +206,7 @@
       report.horizon.landOnlyOpacity = dryBackdrop.getState().horizonOpacity;
       dryBackdrop.dispose();
       report.final = sky.getState();
+      report.moon = checkMoon();
       document.querySelector('#state').textContent = JSON.stringify(report,null,2);
       return report;
     }

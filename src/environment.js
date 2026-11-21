@@ -1,4 +1,4 @@
-/* Approximate solar position, weather lighting, local shadows and GPU rain for Noto. Dates and times use JST. */
+/* Solar and lunar positions, weather lighting, local shadows and GPU rain. Dates and times use JST. */
 (function registerEnvironment(global) {
   'use strict';
 
@@ -61,6 +61,52 @@ Returns elevation and azimuth in degrees and a unit direction vector, or null fo
       direction: [east, up, -north]
     };
   }
+  // Leading periodic terms of Meeus, Astronomical Algorithms, Tables 47.A–B.
+  // The caller supplies a validated Japanese date/time and the scene's solar direction.
+  function lunarPosition(date, time, sunDirection, latitude = LATITUDE, longitude = LONGITUDE) {
+    const days = (Date.parse(`${date}T${time}:00+09:00`) - Date.UTC(2000, 0, 1, 12)) / 86400000;
+    const rad = Math.PI / 180;
+    const { sin, cos } = Math;
+    const meanLongitude = 218.31645 + 13.17639648 * days;
+    const elongation = (297.85019 + 12.19074912 * days) * rad;
+    const solarAnomaly = (357.52911 + 0.98560028 * days) * rad;
+    const anomaly = (134.96340 + 13.06499295 * days) * rad;
+    const argument = (93.27210 + 13.22935024 * days) * rad;
+    const twiceElongation = 2 * elongation;
+    const lon = rad * (meanLongitude + 6.289 * sin(anomaly) + 1.274 * sin(twiceElongation - anomaly)
+      + 0.658 * sin(twiceElongation) + 0.214 * sin(2 * anomaly) - 0.185 * sin(solarAnomaly)
+      - 0.114 * sin(2 * argument) + 0.059 * sin(twiceElongation - 2 * anomaly)
+      + 0.057 * sin(twiceElongation - solarAnomaly - anomaly) + 0.053 * sin(twiceElongation + anomaly)
+      + 0.046 * sin(twiceElongation - solarAnomaly) - 0.041 * sin(solarAnomaly - anomaly));
+    const lat = rad * (5.128 * sin(argument) + 0.281 * sin(anomaly + argument)
+      + 0.278 * sin(anomaly - argument) + 0.173 * sin(twiceElongation - argument)
+      + 0.055 * sin(twiceElongation - anomaly + argument) + 0.046 * sin(twiceElongation - anomaly - argument)
+      + 0.033 * sin(twiceElongation + argument) + 0.017 * sin(2 * anomaly + argument));
+    const distanceKm = 385001 - 20905 * cos(anomaly) - 3699 * cos(twiceElongation - anomaly)
+      - 2956 * cos(twiceElongation) - 570 * cos(2 * anomaly) + 246 * cos(twiceElongation - 2 * anomaly)
+      - 205 * cos(twiceElongation - solarAnomaly) - 171 * cos(twiceElongation + anomaly);
+
+    // Rotate ecliptic coordinates to equatorial, then into the observer's local frame.
+    const tilt = (23.43929 - 0.0000003563 * days) * rad;
+    const x = cos(lat) * cos(lon);
+    const y = cos(lat) * sin(lon) * cos(tilt) - sin(lat) * sin(tilt);
+    const z = cos(lat) * sin(lon) * sin(tilt) + sin(lat) * cos(tilt);
+    const sidereal = (280.46061837 + 360.98564736629 * days + longitude) * rad;
+    const observerLat = latitude * rad;
+    const meridian = x * cos(sidereal) + y * sin(sidereal);
+    const east = distanceKm * (y * cos(sidereal) - x * sin(sidereal));
+    const north = distanceKm * (z * cos(observerLat) - meridian * sin(observerLat));
+    // Subtract the spherical observer's offset for horizontal parallax.
+    const up = distanceKm * (z * sin(observerLat) + meridian * cos(observerLat)) - 6371;
+    const rangeKm = Math.hypot(east, up, north);
+    const direction = [east / rangeKm, up / rangeKm, -north / rangeKm];
+    const sunDot = direction[0] * sunDirection[0] + direction[1] * sunDirection[1] + direction[2] * sunDirection[2];
+    return {
+      moonDirection: direction,
+      moonIllumination: clamp((1 - sunDot) / 2, 0, 1),
+      moonAngularRadius: Math.asin(1737.4 / rangeKm)
+    };
+  }
   function create({
     THREE,
     renderer,
@@ -97,9 +143,19 @@ Returns view, animation, diagnostics and cleanup interfaces. */
       return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
     };
     const center = metadata.geographicCenter;
-    const localSun = () => solarPosition(dateInput.value, clockTime(), center?.latitude, center?.longitude);
+    let solar, moon, lastSkyTime;
+    function updateEphemeris() {
+      const date = dateInput.value, time = clockTime(), key = date + 'T' + time;
+      if (key === lastSkyTime) return true;
+      const nextSun = solarPosition(date, time, center?.latitude, center?.longitude);
+      if (!nextSun) return false;
+      solar = nextSun;
+      moon = lunarPosition(date, time, solar.direction, center?.latitude, center?.longitude);
+      lastSkyTime = key;
+      return true;
+    }
+    updateEphemeris();
     let weather = 'clear',
-      solar = localSun(),
       shadowDirty = true,
       shadowUpdates = 0,
       span = 0;
@@ -211,12 +267,10 @@ Returns view, animation, diagnostics and cleanup interfaces. */
        * Validate the calendar fields and apply settings. Invalid input preserves the last valid
        * scene; valid input updates lighting/weather and notifies the scheduler. Returns undefined.
        */
-      const next = localSun();
-      if (!next) {
+      if (!updateEphemeris()) {
         label.textContent = 'Choose a valid date (2000–2100) and time.';
         return;
       }
-      solar = next;
       weather = weatherInput.value;
       applyLighting();
       onChange(weather);
@@ -284,6 +338,7 @@ Updates the rain anchor, light position and shadow flags in place. */
         timeZone: 'Asia/Tokyo (UTC+09:00)',
         weather,
         ...solar,
+        ...moon,
         sunColor: sun.color.toArray(),
         sunIntensity: sun.intensity,
         hemisphereColor: hemisphere.color.toArray(),

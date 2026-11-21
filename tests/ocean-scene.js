@@ -408,7 +408,7 @@
       }
       return directions.map((direction, index) => ({ direction, rgba: [...result.slice(index * 4, index * 4 + 4)] }));
     }
-    function solarLighting(elevation, mode = 'clear', azimuth = 0) {
+    function solarLighting(elevation, mode = 'clear', azimuth = 0, moon = {}) {
       weather = mode;
       day = elevation > -6;
       const radians = elevation * Math.PI / 180;
@@ -419,7 +419,7 @@
       const sky = new THREE.Color(day ? 0xb8d9ed : 0x0b1222);
       ambient.color.set(day ? 0xffffff : 0x23334e);
       ambient.intensity = day ? 1.4 : 0.1;
-      const lighting = { direction: direction.toArray(), elevation, weather, sunColor: sun.color.toArray(), sunIntensity: sun.intensity, skyColor: sky.toArray() };
+      const lighting = { direction: direction.toArray(), elevation, weather, sunColor: sun.color.toArray(), sunIntensity: sun.intensity, skyColor: sky.toArray(), ...moon };
       motion.setWeather(weather); motion.setSky(sky); motion.setLighting?.(lighting);
       reflection?.setLighting(lighting); atmosphere?.setLighting(lighting);
       temporal.invalidate('lighting');
@@ -749,10 +749,16 @@
         const sunDirections = [sunsetDirection.toArray()];
         const reflectedSun = { visible: skyProbes(sunDirections)[0].rgba, waterEnvironment: skyProbes(sunDirections, true)[0].rgba };
         capture('atmosphere-sunset');
-        solarLighting(-20);
+        const moonDirection = solarLighting(-20).negate().toArray();
         frame();
         const nightSky = snapshot();
         capture('atmosphere-night');
+        const darkWater = skyProbes([moonDirection], true)[0].rgba;
+        const beforeMoon = atmosphere.getState().updates;
+        solarLighting(-20, 'clear', 0, { moonDirection, moonIllumination: 1, moonAngularRadius: 0.0045 });
+        frame();
+        const moonlitWater = skyProbes([moonDirection], true)[0].rgba;
+        const atlasUpdates = atmosphere.getState().updates - beforeMoon;
         const priorTarget = renderer.getRenderTarget(), originalState = rendererSnapshot();
         const sentinel = new THREE.WebGLRenderTarget(24, 24, { depthBuffer: false });
         let stateRestoration;
@@ -782,6 +788,7 @@
         }
         report.atmosphere = {
           state: atmosphere.getState(), backdrop: backdrop?.getState(), noonProbes, sunriseProbes, sunsetProbes, reflectedSun,
+          reflectedMoon: { darkWater, moonlitWater, atlasUpdates },
           timeOnly: { before: beforeTimeChange, after: afterTimeChange },
           sameTime: { before: beforeSameTime, after: afterSameTime },
           idle: { before: frozenState, after: idleSkyState, difference: regionDifference(frozenImage, idleSkyImage, skyRegion) },

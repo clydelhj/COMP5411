@@ -149,14 +149,15 @@
   const SKY_GLSL = (global.NotoSkyAtmosphere?.shaderDeclarations || /* glsl */`
     uniform float uSkyAtmosphereEnabled;
     vec3 atmosphereSkyColor(vec3 direction) { return vec3(0.0); }
+    vec3 atmosphereMoon(vec3 direction,float footprint) { return vec3(0.0); }
+    vec3 atmosphereReflectedMoon(vec3 direction,float footprint) { return vec3(0.0); }
     float atmosphereCloudTransmission(vec3 direction) { return 1.0; }
   `) + /* glsl */`
     uniform vec3 uSeaSky;
     uniform vec3 uSeaSunDirection;
     uniform float uSeaDaylight;
     uniform float uSeaCloudiness;
-    vec3 seaSkyColor(vec3 direction) {
-      if(uSkyAtmosphereEnabled>0.5) return atmosphereSkyColor(direction);
+    vec3 seaAnalyticSky(vec3 direction) {
       float skyHeight = sqrt(clamp(direction.y,0.0,1.0));
       vec3 horizonSky = uSeaSky*vec3(1.02,1.05,1.06);
       vec3 zenithSky = uSeaSky*vec3(0.34,0.57,0.86);
@@ -165,18 +166,25 @@
       float warmth = (1.0-smoothstep(0.08,0.4,uSeaSunDirection.y))*uSeaDaylight;
       return mix(sky,sky*vec3(1.16,0.94,0.78),warmth*(1.0-skyHeight)*0.45);
     }
-    vec3 seaReflectedSky(vec3 direction, float roughness, float angularFootprint) {
+    vec3 seaSkyColor(vec3 direction) {
+      if(uSkyAtmosphereEnabled>0.5) return atmosphereSkyColor(direction);
+      return seaAnalyticSky(direction)+atmosphereMoon(direction,0.7*length(fwidth(direction)));
+    }
+    vec3 seaReflectedBackground(vec3 direction,float cone) {
       ${global.NotoSkyAtmosphere ? /* glsl */`
       if(uSkyAtmosphereEnabled>0.5) {
         // The directional GGX lobe already accounts for the sun. Sample the
         // sky atlas without adding a second, perfectly sharp reflected solar disk.
         vec2 uv = atmosphereSkyUv(direction);
-        float cone = max(roughness*roughness,angularFootprint);
         vec2 size = vec2(textureSize(uSkyAtmosphereMap,0));
         float lod = log2(max(1.0,cone*max(size.x/6.28318530718,size.y/1.57079632679)));
         return textureLod(uSkyAtmosphereMap,uv,lod).rgb;
       }` : ''}
-      return seaSkyColor(direction);
+      return seaAnalyticSky(direction);
+    }
+    vec3 seaReflectedSky(vec3 direction,float roughness,float angularFootprint) {
+      float cone=max(roughness*roughness,angularFootprint);
+      return seaReflectedBackground(direction,cone)+atmosphereReflectedMoon(direction,cone);
     }
   `;
   const SURFACE_LAYER_GLSL = /* glsl */`
@@ -399,7 +407,7 @@
     const original = materials.top.onBeforeCompile;
     materials.top.name = 'Noto spectral wind sea and long swell';
     materials.top.userData.temporalReactive = true;
-    materials.top.customProgramCacheKey = () => 'noto-water-wavelet-surf-v19';
+    materials.top.customProgramCacheKey = () => 'noto-water-wavelet-surf-v20';
     materials.top.defaultAttributeValues = {
       ...materials.top.defaultAttributeValues,
       notoSeaEdge: [0, 0, 0, 0]
@@ -618,7 +626,9 @@
           * (1.0-reflectedLandCoverage);
         if(unresolved>0.0) {
           vec3 horizonRay = normalize(vec3(-toCamera.x,0.0001,-toCamera.z));
-          vec3 remoteWater = seaReflectedSky(horizonRay,0.08,0.01)*vec3(0.68,0.79,0.86);
+          vec3 flatReflection=vec3(-toCamera.x,toCamera.y,-toCamera.z);
+          vec3 remoteWater = (seaReflectedBackground(horizonRay,0.01)
+            +atmosphereReflectedMoon(flatReflection,0.018))*vec3(0.68,0.79,0.86);
           outgoingLight = mix(outgoingLight,remoteWater+directHighlights,unresolved);
         }
         #include <opaque_fragment>`);

@@ -71,12 +71,12 @@ Large runtime/source assets may be distributed separately; their paths after ins
 | `rock-materials.js` | Geological queries, triplanar PBR, categorical blending and ground cover |
 | `water-materials.js`, `water-motion.js` | Filtered micro normals, geometric waves, spectral shading, Fresnel/absorption and foam |
 | `ocean-spectrum.js` | Two bounded GPU FFT wind-wave fields, gradients and crest/compression data |
-| `sky-atmosphere.js` | Clear atmospheric gradient, analytic sun and lighting-driven sky cache |
+| `sky-atmosphere.js` | Atmospheric gradient, sun and moon disks, and the directional sky cache |
 | `cloud-layers.js` | Directional procedural cloud color and coverage used in the sky texture |
 | `ocean-reflection.js` | Cached low-resolution reflection of an owned coarse terrain proxy |
 | `ocean-backdrop.js` | Sky background, offshore water and the distant sea horizon |
 | `scene-effects.js` | Pointer flashlight and bounded GPU coastal spray |
-| `environment.js` | GMT+9 sun position, day/night lighting, weather, shadows and GPU rain |
+| `environment.js` | Sun and moon positions for the selected date, JST and map location, lunar phase, lighting, weather, shadows and GPU rain |
 | `vegetation.js`, `ground-grass.js` | Stable plant locations, shape/detail variants, grass, surface attachment and shared wind animation |
 | `styles.css` | Panels, controls, dialogs and narrow-window layout |
 
@@ -180,7 +180,7 @@ The shorter spectral field has a broader directional distribution than the longe
 
 `water-materials.js` bakes 24 deterministic directional wavelets into a 512-square RGBA16F normal/roughness texture once at startup. Integer Fourier modes are periodic; analytic gradients and a weak second harmonic retain continuous fine-wave slopes. Row/column trigonometry is precomputed, and normal variance is retained before encoding for distant roughness filtering. Compared with RGBA8, the half-float field costs approximately 1.33 MiB more including mipmaps; its shader sample count is unchanged. The water body uses a daylight/sky-driven Beer-Lambert scattering approximation while retaining direct light and flashlight contributions. Foam concentrates on a narrow breaking front, with filtered submeter pores, continuous opacity and faint decaying residue. Its partial normal attenuation preserves ripples under thinning foam. Smaller variable spray particles fade by projected pixel coverage instead of becoming uniformly bright distant dots.
 
-`sky-atmosphere.js` caches sky radiance in a 1024 × 256 mipmapped directional texture. RGB stores the atmosphere and cloud color. Alpha stores the fraction of sunlight transmitted through the clouds. The sky shader uses this value for its analytic solar disk, and the sea shader samples the same direction for solar glint. The texture takes approximately 2.67 MiB in RGBA16F.
+`sky-atmosphere.js` caches sky radiance in a 1024 × 256 mipmapped directional texture. RGB stores the atmosphere and cloud color. Alpha stores cloud transmittance in each direction. The sky shader uses it for the solar disk and the illuminated portion of the lunar disk. The sea shader samples it for solar glint and filters the reflected Moon according to wave roughness. The texture takes approximately 2.67 MiB in RGBA16F.
 
 `cloud-layers.js` samples a two-dimensional noise field using sky direction and the animation clock. Weather changes coverage and color. Color also responds to daylight and twilight. The cloud contribution fades toward the horizon, and translating the camera leaves the pattern fixed for any given viewing direction.
 
