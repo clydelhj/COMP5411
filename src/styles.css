@@ -380,28 +380,57 @@ kbd {
   font-weight: 600;
 }
 
-.date-time-fields {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-}
-
-.date-time-fields > div {
-  min-width: 0;
-}
-
-#terrain-settings input[type="date"] {
-  width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
+.scene-date-field {
+  display: flex;
   margin-top: 8px;
-  padding: 10px 8px;
   border: 1px solid #c8d7da;
   border-radius: 6px;
   background: white;
+}
+.scene-date-field input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 8px;
+  background: transparent;
+  border: 0;
+  border-radius: inherit;
   color: #263c41;
   font: 14px Arial, sans-serif;
 }
+.scene-date-picker button {
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #35545e;
+  font: inherit;
+  cursor: pointer;
+}
+#scene-date-trigger { display: grid; place-items: center; width: 38px; }
+.scene-date-picker button:hover:not(:disabled) { background: #e7eff1; }
+.scene-date-picker :is(input, button):focus-visible { outline: 2px solid #426f76; outline-offset: -2px; }
+#scene-date-calendar {
+  width: min(100%, 300px);
+  margin-top: 5px;
+  padding: 10px;
+  border: 1px solid #c8d7da;
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 4px 14px #253b411a;
+  font-size: 14px;
+}
+.calendar-month { display: flex; justify-content: space-between; align-items: center; gap: 3px; }
+#scene-date-calendar select { width: auto; max-width: 42%; margin: 0; padding: 4px; }
+.calendar-month button { width: 28px; height: 32px; font-size: 20px; }
+#scene-date-calendar table { width: 100%; margin: 6px 0; table-layout: fixed; text-align: center; }
+#scene-date-calendar th { height: 25px; font-size: 12px; font-weight: 500; color: #52696f; }
+#scene-date-calendar td { padding: 0; }
+#scene-date-calendar td button { width: 100%; min-height: 30px; padding: 0; }
+#scene-date-calendar .adjacent-month { color: #738388; }
+#scene-date-calendar button[aria-current="date"] { box-shadow: inset 0 0 0 1px #426f76; }
+#scene-date-calendar button[aria-pressed="true"] { background: #426f76; color: white; }
+#scene-date-calendar button:disabled { opacity: 0.35; cursor: default; }
+.calendar-actions { display: flex; justify-content: space-between; }
+.calendar-actions button { padding: 5px 8px; }
 
 /* Persistent clock and pointer light; neither control captures camera drags. */
 .time-control {

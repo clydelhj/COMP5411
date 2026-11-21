@@ -31,6 +31,9 @@
     }
   };
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  function todayInJapan() {
+    return new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+  }
   function solarPosition(date, time, latitude = LATITUDE, longitude = LONGITUDE) {
     /* Compute the solar direction using NOAA's fractional-year approximation, without refraction or terrain occlusion.
 Parameters: date is YYYY-MM-DD (2000-2100); time is HH:mm in JST (UTC+9, no DST); latitude and east longitude are degrees.
@@ -86,12 +89,7 @@ Returns view, animation, diagnostics and cleanup interfaces. */
       timeInput = document.querySelector('#scene-time');
     const weatherInput = document.querySelector('#scene-weather'),
       label = document.querySelector('#sun-position');
-    dateInput.value = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Tokyo',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).format(new Date());
+    dateInput.value = solarPosition(dateInput.value, '12:00') ? dateInput.value : todayInJapan();
     timeInput.value = '720';
     const timeOutput = document.querySelector('#scene-time-value');
     const clockTime = () => {
@@ -311,6 +309,7 @@ Updates the rain anchor, light position and shadow flags in place. */
     };
   }
   global.NotoEnvironment = {
+    todayInJapan,
     solarPosition,
     create
   };

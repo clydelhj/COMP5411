@@ -56,7 +56,7 @@ Select the updated folder in Settings. Both category maps are sampled by nearest
 - W/S or up/down arrows: forward/backward; A/D or left/right arrows: strafe.
 - Q/E: turn; R/F: move vertically. Additional bindings appear in the ? dialog.
 - The bottom slider changes display height from 1:1 to 1:10; default 1:5.
-- The upper-right slider controls time in GMT+9. Date and clear/cloudy/rainy weather are in settings.
+- The upper-right slider controls time in GMT+9. In settings, choose a date from the English calendar or enter it as YYYY-MM-DD. Today uses the date in Japan. The weather options are clear, cloudy and rainy.
 - The flashlight button illuminates the surface under the pointer, including at night.
 
 ## Detail and animation settings

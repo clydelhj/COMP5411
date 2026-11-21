@@ -28,6 +28,7 @@
     <script src="./src/ocean-reflection.js" defer></script>
     <script src="./src/ocean-backdrop.js" defer></script>
     <script src="./src/environment.js" defer></script>
+    <script src="./src/scene-calendar.js" defer></script>
     <script src="./src/scene-effects.js" defer></script>
     <script src="./src/tile-geometry.js" defer></script>
     <script src="./src/coastal-geometry.js" defer></script>
@@ -134,10 +135,29 @@
       </fieldset>
       <fieldset class="environment-settings">
         <legend>Date and weather</legend>
-        <div class="date-time-fields">
-          <div>
-            <label for="scene-date">Date</label>
-            <input id="scene-date" type="date" min="2000-01-01" max="2100-12-31" required>
+        <div class="scene-date-picker">
+          <label for="scene-date">Date</label>
+          <div class="scene-date-field">
+            <input id="scene-date" type="text" placeholder="YYYY-MM-DD" aria-label="Date (YYYY-MM-DD)" maxlength="10" autocomplete="off" spellcheck="false" required>
+            <button id="scene-date-trigger" type="button" aria-label="Choose date" title="Choose date" aria-haspopup="dialog" aria-controls="scene-date-calendar" aria-expanded="false">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/></svg>
+            </button>
+          </div>
+          <div id="scene-date-calendar" role="dialog" aria-label="Choose date" hidden>
+            <div class="calendar-month">
+              <button type="button" aria-label="Previous month" data-month-step="-1">‹</button>
+              <select aria-label="Month"></select>
+              <select aria-label="Year"></select>
+              <button type="button" aria-label="Next month" data-month-step="1">›</button>
+            </div>
+            <table aria-label="Calendar days">
+              <thead><tr><th scope="col">Mon</th><th scope="col">Tue</th><th scope="col">Wed</th><th scope="col">Thu</th><th scope="col">Fri</th><th scope="col">Sat</th><th scope="col">Sun</th></tr></thead>
+              <tbody></tbody>
+            </table>
+            <div class="calendar-actions">
+              <button type="button" data-action="clear">Clear</button>
+              <button type="button" data-action="today">Today</button>
+            </div>
           </div>
         </div>
         <label for="scene-weather">Weather</label>
