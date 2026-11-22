@@ -31,7 +31,8 @@ function fixture(capable = true, geographicCenter) {
       return elements.get(selector);
     }
   };
-  const runtime = vm.createContext({ window: {}, document, performance });
+  let now = 0;
+  const runtime = vm.createContext({ window: {}, document, performance: { now: () => now } });
   vm.runInContext(fs.readFileSync(path.join(root, 'src/environment.js'), 'utf8'), runtime);
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera();
   camera.position.set(50, 100, 50);
@@ -47,6 +48,8 @@ function fixture(capable = true, geographicCenter) {
   return {
     environment, camera, events,
     rain: scene.getObjectByName('Noto local rain'),
+    clickCycle() { elements.get('#day-cycle').handlers.click(); },
+    frameAt(ms) { now = ms; return environment.advanceDayCycle(ms); },
     setDateTime(date, minutes) {
       elements.get('#scene-date').value = date;
       elements.get('#scene-time').value = String(minutes);
@@ -60,6 +63,37 @@ function fixture(capable = true, geographicCenter) {
     }
   };
 }
+
+test('day-night playback follows elapsed time, rolls over at midnight, and yields to manual controls', () => {
+  const viewer = fixture();
+  const { environment, clickCycle, frameAt } = viewer;
+  const state = () => environment.getState();
+  viewer.setDateTime('2028-02-28', 1080);
+  assert.equal(frameAt(100), false);
+  clickCycle();
+  assert.equal(frameAt(2600), true);
+  assert.deepEqual([state().date, state().time, state().shadowEnabled], ['2028-02-29', '00:00', false]);
+  viewer.weather('cloudy');
+  assert.equal(environment.isDayCyclePlaying(), true);
+  frameAt(7600);
+  assert.deepEqual([state().time, state().shadowEnabled], ['12:00', true]);
+  frameAt(10100);
+  assert.deepEqual([state().date, state().time], ['2028-02-29', '18:00']);
+  clickCycle();
+  assert.equal(frameAt(30100), false);
+  assert.equal(state().time, '18:00');
+  clickCycle();
+  frameAt(32600);
+  assert.deepEqual([state().date, state().time], ['2028-03-01', '00:00']);
+  viewer.setDateTime('2028-03-01', 540);
+  assert.equal(frameAt(35100), false);
+  assert.equal(state().time, '09:00');
+  viewer.setDateTime('2100-12-31', 1438);
+  clickCycle();
+  frameAt(40100);
+  assert.deepEqual([state().date, state().time, environment.isDayCyclePlaying()], ['2100-12-31', '23:59', false]);
+  environment.dispose();
+});
 
 test('rain uses deterministic varied trajectories with one shared parameter set per streak', () => {
   const a = fixture(), b = fixture();

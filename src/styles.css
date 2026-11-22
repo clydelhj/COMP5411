@@ -447,14 +447,29 @@ kbd {
 }
 .time-heading {
   display: flex;
-  justify-content: space-between;
-  gap: 16px;
+  align-items: center;
+  gap: 10px;
 }
 
 #scene-time-value {
+  margin-left: auto;
   font-variant-numeric: tabular-nums;
   color: #263c41;
 }
+
+#day-cycle {
+  min-width: 4.4em;
+  padding: 3px 8px;
+  border: 1px solid #b8cdd0;
+  border-radius: 5px;
+  background: white;
+  color: #30585e;
+  font: inherit;
+  cursor: pointer;
+}
+#day-cycle:hover:enabled { background: #e7eff1; }
+#day-cycle:focus-visible { outline: 2px solid #426f76; }
+#day-cycle:disabled { opacity: 0.55; cursor: default; }
 
 #scene-time {
   width: 100%;

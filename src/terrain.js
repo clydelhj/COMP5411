@@ -297,15 +297,16 @@
       metadata: m,
       sampleHeight: surfaceHeight,
       capable,
-      onChange: weather => {
+      onChange: (weather, playbackTick) => {
+        const lighting = environment.getState();
         temporal.invalidate('lighting');
         waterMotion.setWeather(weather);
         waterMotion.setSky(scene.fog.color);
-        waterMotion.setLighting(environment.getState());
-        skyAtmosphere.setLighting(environment.getState());
-        oceanReflection.setLighting(environment.getState());
-        vegetation?.setLighting(environment.getState().cardBrightness);
-        wakeRendering();
+        waterMotion.setLighting(lighting);
+        skyAtmosphere.setLighting(lighting);
+        oceanReflection.setLighting(lighting);
+        vegetation?.setLighting(lighting.cardBrightness);
+        if (!playbackTick) wakeRendering();
       }
     });
     const flashlight = window.NotoSceneEffects.createFlashlight({
@@ -1269,8 +1270,10 @@
       pendingZoom = 0;
       zoomTime = 0;
     };
-    helpDialog.addEventListener('focusin', releaseNavigation);
-    settingsDialog.addEventListener('focusin', releaseNavigation);
+    for (const dialog of [helpDialog, settingsDialog]) {
+      dialog.addEventListener('focusin', releaseNavigation);
+      dialog.addEventListener('focusin', environment.pauseDayCycle);
+    }
     window.addEventListener('blur', releaseNavigation);
     document.addEventListener('focusin', event => {
       if (editable(event.target)) releaseKeys();
@@ -1407,6 +1410,7 @@
       framePending = null;
       if (document.hidden) return;
       collectGpuTime(now);
+      const clockChanged = environment.advanceDayCycle(now);
       const updateScene = sceneUpdatePending;
       sceneUpdatePending = false;
       let pendingPlants = false;
@@ -1447,7 +1451,6 @@
           vegetationRevision = nextPlantRevision;
         }
         waterVisible = [...live.values()].some(item => item.geometry.water && frustum.intersectsBox(tileBox(item.tile)));
-        environment.updateView(terrain.scale.y);
         oceanBackdrop.update();
         waterVisible ||= oceanBackdrop.getState().horizonInView;
         camera.getWorldDirection(skyDirection);
@@ -1455,10 +1458,13 @@
         // Conservatively include the top of the frustum; no synchronous occlusion/readback test.
         skyInView = skyDirection.y * Math.cos(halfFov)
           + Math.sqrt(Math.max(0, 1 - skyDirection.y * skyDirection.y)) * Math.sin(halfFov) > -0.04;
-        surf.update(live, environment.getState().cardBrightness);
       } else {
         // Idle animation frames advance clocks without repeating LOD, collision, frustum or instance-placement work.
         vegetation?.animate(now, !navigationPaused() && stayAwake(now));
+      }
+      if (updateScene || clockChanged) {
+        environment.updateView(terrain.scale.y);
+        surf.update(live, environment.getState().cardBrightness);
       }
       flashlight.update(terrain.scale.y, live);
       const lightState = flashlight.getState();
@@ -1494,7 +1500,7 @@
       if (updateScene) updateResolution();
       if (pressed.size || pendingZoom || pendingPlants) {
         requestRender();
-      } else if (!navigationPaused() && stayAwake(now) && (skyInView || waterVisible || environment.hasAnimation() || vegetation?.hasAnimation())) {
+      } else if (environment.isDayCyclePlaying() || !navigationPaused() && stayAwake(now) && (skyInView || waterVisible || environment.hasAnimation() || vegetation?.hasAnimation())) {
         requestRender(false);
       } else if (!navigationPaused() && (temporal.needsFrame() || oceanReflection.needsFrame())) {
         // A bounded settling sequence improves a still image without an independent animation loop.
@@ -1522,7 +1528,7 @@
        * sleeps immediately, otherwise compare elapsed time with the configured delay.
        */
       // A requestAnimationFrame timestamp can precede input handled in that frame; explicitly reject zero delay.
-      return idleSleepDelay === 'never' || idleSleepDelay !== '0' && now - lastInteractionAt < Number(idleSleepDelay) * 1000;
+      return environment.isDayCyclePlaying() || idleSleepDelay === 'never' || idleSleepDelay !== '0' && now - lastInteractionAt < Number(idleSleepDelay) * 1000;
     }
     for (const dialog of [helpDialog, settingsDialog]) dialog.addEventListener('close', wakeRendering);
     controls.addEventListener('start', wakeRendering);
@@ -1534,6 +1540,7 @@
       frameSamples = [];
       sampleStart = 0;
       if (document.hidden) {
+        environment.pauseDayCycle();
         temporal.invalidate('visibility');
         if (framePending !== null) cancelAnimationFrame(framePending);
         framePending = null;
@@ -1670,6 +1677,7 @@
     // Enable navigation after coarse inputs are ready; local LOD selection always keeps full-map coverage.
     await warmResident();
     navigationReady = true;
+    document.querySelector('#day-cycle').disabled = false;
     controls.enabled = true;
     wakeRendering();
     await updateLOD();

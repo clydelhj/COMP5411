@@ -4,6 +4,9 @@
 
   const LATITUDE = 37.4375;
   const LONGITUDE = 137.1875;
+  const MINUTES_PER_DAY = 1440;
+  const DAY_PLAYBACK_MS = 10000;
+  const LAST_SCENE_MINUTE = Date.UTC(2101, 0, 1) / 60000 - 1;
   const PRESETS = {
     clear: {
       sky: 0xb8d9ed,
@@ -138,6 +141,8 @@ Returns view, animation, diagnostics and cleanup interfaces. */
     dateInput.value = solarPosition(dateInput.value, '12:00') ? dateInput.value : todayInJapan();
     timeInput.value = '720';
     const timeOutput = document.querySelector('#scene-time-value');
+    const cycleButton = document.querySelector('#day-cycle');
+    let cycle = null;
     const clockTime = () => {
       const minutes = Number(timeInput.value);
       return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
@@ -262,21 +267,60 @@ Returns view, animation, diagnostics and cleanup interfaces. */
       label.textContent = `Sun: ${solar.elevation.toFixed(1)}° elevation · ${solar.azimuth.toFixed(1)}° azimuth${solar.elevation <= 0 ? ' · Night' : ''}`;
       shadowDirty = true;
     }
-    function changed() {
+    function changed(playbackTick = false) {
       /*
        * Validate the calendar fields and apply settings. Invalid input preserves the last valid
-       * scene; valid input updates lighting/weather and notifies the scheduler. Returns undefined.
+       * scene; valid input updates lighting/weather and notifies the scheduler.
        */
       if (!updateEphemeris()) {
         label.textContent = 'Choose a valid date (2000–2100) and time.';
-        return;
+        return false;
       }
       weather = weatherInput.value;
       applyLighting();
-      onChange(weather);
+      onChange(weather, playbackTick);
+      return true;
     }
-    for (const input of [dateInput, weatherInput]) input.addEventListener('change', changed);
-    timeInput.addEventListener('input', changed);
+    function pauseDayCycle() {
+      if (!cycle) return;
+      cycle = null;
+      cycleButton.textContent = 'Play';
+      cycleButton.title = 'Play one day every 10 seconds';
+      cycleButton.setAttribute('aria-label', 'Play day-night cycle');
+    }
+    cycleButton.addEventListener('click', () => {
+      if (cycle) {
+        pauseDayCycle();
+        return;
+      }
+      if (!changed()) return;
+      const now = performance.now();
+      // Count the displayed JST calendar minutes on a UTC grid, independent of the browser's time zone.
+      const startMinute = Date.parse(dateInput.value + 'T00:00:00Z') / 60000 + Number(timeInput.value);
+      cycle = { startMinute, startMs: now, lastUpdateMs: now };
+      cycleButton.textContent = 'Pause';
+      cycleButton.title = 'Pause day-night cycle';
+      cycleButton.setAttribute('aria-label', 'Pause day-night cycle');
+    });
+    function advanceDayCycle(now) {
+      // Limit lighting and shadow updates to 20 Hz while keeping the clock tied to elapsed real time.
+      if (!cycle || now - cycle.lastUpdateMs < 50) return false;
+      cycle.lastUpdateMs = now;
+      const elapsedMinutes = Math.floor((now - cycle.startMs) * MINUTES_PER_DAY / DAY_PLAYBACK_MS);
+      const minute = Math.min(cycle.startMinute + elapsedMinutes, LAST_SCENE_MINUTE);
+      dateInput.value = new Date(minute * 60000).toISOString().slice(0, 10);
+      timeInput.value = String(minute % MINUTES_PER_DAY);
+      if (minute === LAST_SCENE_MINUTE) pauseDayCycle();
+      changed(true);
+      return true;
+    }
+    function manualTimeChange() {
+      pauseDayCycle();
+      changed();
+    }
+    dateInput.addEventListener('change', manualTimeChange);
+    timeInput.addEventListener('input', manualTimeChange);
+    weatherInput.addEventListener('change', () => changed());
     function updateView(verticalScale) {
       /* Update the shadow projection for the current view and reuse it while stationary.
 Parameter: verticalScale is the displayed terrain height multiplier.
@@ -325,6 +369,9 @@ Updates the rain anchor, light position and shadow flags in place. */
     applyLighting();
     return {
       updateView,
+      advanceDayCycle,
+      pauseDayCycle,
+      isDayCyclePlaying: () => cycle !== null,
       markDirty: () => {
         shadowDirty = true;
       },
