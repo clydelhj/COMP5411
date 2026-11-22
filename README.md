@@ -53,7 +53,7 @@ Select the updated folder in Settings. Both category maps are sampled by nearest
 ## Controls
 
 - Left drag: orbit; right drag: pan; mouse wheel or + / −: zoom.
-- W/S or up/down arrows: forward/backward; A/D or left/right arrows: strafe.
+- W/S or up/down arrows: move forward/backward. A/D or left/right arrows: strafe. Horizontal speed scales with height above the ground, from 10 to 5,000 m/s.
 - Q/E: turn; R/F: move vertically. Additional bindings appear in the ? dialog.
 - The bottom slider changes display height from 1:1 to 1:10; default 1:5.
 - The upper-right slider controls time in GMT+9. In settings, choose a date from the English calendar or enter it as YYYY-MM-DD. Today uses the date in Japan. The weather options are clear, cloudy and rainy.

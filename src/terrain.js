@@ -1242,6 +1242,7 @@
       right = new THREE.Vector3(),
       movement = new THREE.Vector3();
     const upAxis = new THREE.Vector3(0, 1, 0);
+    const keyboardSpeedScale = new THREE.Vector3(1.25, 1, 1.25);
     let keyTime = 0;
     function editable(target) {
       /* Return whether an event target is editable or is an input, textarea, select or button. */
@@ -1300,7 +1301,7 @@
       movement.y = Number(actions.has('up')) - Number(actions.has('down'));
       const altitude = Math.max(0, camera.position.y - cameraFloor(camera.position.x, camera.position.z));
       const speed = THREE.MathUtils.clamp(altitude * 0.6, 8, 4000);
-      if (movement.lengthSq()) movement.normalize().multiplyScalar(speed * dt);
+      if (movement.lengthSq()) movement.normalize().multiply(keyboardSpeedScale).multiplyScalar(speed * dt);
       camera.position.add(movement);
       controls.target.add(movement);
     }
