@@ -87,6 +87,38 @@ test('left and right turn in place; aliases share a turn rate and opposite input
   assert(camera.position.equals(start));
 });
 
+test('the driving flashlight stays ahead during pointer movement and free look, then follows steering', () => {
+  const { camera, view } = fixture();
+  assert(view.enter());
+  const button = new EventTarget(), canvas = new EventTarget();
+  button.setAttribute = () => {};
+  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600 });
+  const runtime = vm.createContext({ window: {}, document: { querySelector: () => button } });
+  vm.runInContext(fs.readFileSync(path.join(root, 'src/scene-effects.js'), 'utf8'), runtime);
+  const flashlight = runtime.window.NotoSceneEffects.createFlashlight({
+    THREE, scene: new THREE.Scene(), camera, renderer: { domElement: canvas },
+    metadata: { width_m: 10000, height_m: 10000 }, sampleHeight: () => 10,
+    shore: { distance: () => -1 }, wake() {}, paused: () => false,
+    firstPersonHeading: () => view.active ? view.heading : null
+  });
+  const tiles = new Map();
+  button.dispatchEvent(new Event('click'));
+  flashlight.update(1, tiles);
+  const ahead = flashlight.getState().target;
+  close(ahead[0], camera.position.x);
+  assert(ahead[2] < camera.position.z);
+  canvas.dispatchEvent(Object.assign(new Event('pointermove'), { clientX: 790, clientY: 10 }));
+  camera.rotateY(1.1);
+  camera.rotateX(0.4);
+  assert.equal(flashlight.update(1, tiles), false);
+  assert.deepEqual(flashlight.getState().target, ahead);
+  view.move(new Set(['right']), Math.PI / 2);
+  assert.equal(flashlight.update(1, tiles), true);
+  const turned = flashlight.getState().target;
+  close(turned[2], camera.position.z);
+  assert(turned[0] > camera.position.x);
+});
+
 test('steering while driving curves the path and follows the displayed slope', () => {
   const sampleLand = (x, z) => 20 + x / 8 - z / 16;
   const { camera, view } = fixture({ sampleLand });

@@ -62,7 +62,7 @@ Select the updated folder in Settings. Both category maps are sampled by nearest
 - The upper-right slider controls time in GMT+9. Select **Play** to advance one day every 30 seconds, starting at the displayed time. The date advances at midnight. Select **Pause** to hold the current view. Dragging the slider, opening a dialog, or hiding the tab also pauses playback.
 - In settings, choose a date from the English calendar or enter it as YYYY-MM-DD. Today uses the date in Japan. The weather options are clear, cloudy and rainy.
 - The Moon follows the selected date, time and map location. For a view from the Noto coast, select Clear and set 24 November 2026 at 17:00 GMT+9. The nearly full Moon is about 11° above the east-northeastern horizon.
-- In first-person view, switch on the flashlight and move the pointer across the scene to aim the beam. You can aim while parked or driving. In orbit view, the flashlight illuminates the surface under the pointer.
+- In first-person view, the flashlight lights the ground ahead of the vehicle and follows its steering. You can look around independently. In orbit view, the flashlight illuminates the surface under the pointer.
 
 ## Detail and animation settings
 

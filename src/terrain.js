@@ -322,7 +322,7 @@
       shore: coastalField,
       wake: wakeRendering,
       paused: navigationPaused,
-      firstPersonActive: () => firstPerson.active
+      firstPersonHeading: () => firstPerson.active ? firstPerson.heading : null
     });
     const surf = window.NotoSceneEffects.createSurf({
       THREE,

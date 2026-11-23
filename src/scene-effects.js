@@ -1,9 +1,9 @@
-/* Local pointer light and bounded GPU surf spray; no independent animation loop. */
+/* Local flashlight and bounded GPU surf spray; no independent animation loop. */
 (function registerSceneEffects(global) {
   'use strict';
 
   // Inputs are the shared scene, displayed height sampler and render scheduler.
-  // Orbit inspection lights a terrain hit. At eye level the pointer steers a handheld beam.
+  // Orbit inspection lights a terrain hit. The driving beam turns with the vehicle.
   function createFlashlight({
     THREE,
     scene,
@@ -14,13 +14,14 @@
     shore,
     wake,
     paused,
-    firstPersonActive
+    firstPersonHeading
   }) {
     const button = document.querySelector('#flashlight-button');
     const light = new THREE.PointLight(0xfff1d2, 0, 1000, 2);
     light.name = 'Pointer flashlight';
     light.castShadow = false;
-    const beam = new THREE.SpotLight(0xfff1d2, 480, 90, THREE.MathUtils.degToRad(8), 0.5, 2);
+    const beam = new THREE.SpotLight(0xfff1d2, 720, 90, THREE.MathUtils.degToRad(27), 0.7, 2);
+    const beamDrop = Math.tan(THREE.MathUtils.degToRad(9));
     beam.name = 'First-person flashlight';
     beam.visible = false;
     scene.add(light, beam, beam.target);
@@ -38,7 +39,7 @@
     renderer.domElement.addEventListener('pointermove', event => {
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, 1 - (event.clientY - rect.top) / rect.height * 2);
-      if (enabled && !paused()) {
+      if (enabled && !paused() && firstPersonHeading() === null) {
         dirty = true;
         wake();
       }
@@ -46,7 +47,7 @@
     button.addEventListener('click', event => {
       enabled = !enabled;
       button.setAttribute('aria-pressed', String(enabled));
-      if (firstPersonActive() && event.detail > 0) renderer.domElement.focus({ preventScroll: true });
+      if (firstPersonHeading() !== null && event.detail > 0) renderer.domElement.focus({ preventScroll: true });
       dirty = true;
       wake();
     });
@@ -92,10 +93,23 @@
           hasHit = false;
           return wasLit;
         }
-        const handheld = firstPersonActive();
-        const modeChanged = beam.visible !== handheld;
+        const heading = firstPersonHeading();
+        const wasDriving = beam.visible;
+        beam.visible = heading !== null;
+        light.visible = !beam.visible;
+        if (beam.visible) {
+          const yaw = THREE.MathUtils.degToRad(heading);
+          ray.ray.origin.copy(camera.position);
+          ray.ray.direction.set(Math.sin(yaw), -beamDrop, -Math.cos(yaw)).normalize();
+          candidate.copy(ray.ray.origin).add(ray.ray.direction);
+          const moved = !beam.position.equals(ray.ray.origin) || !beam.target.position.equals(candidate);
+          beam.position.copy(ray.ray.origin);
+          beam.target.position.copy(candidate);
+          light.intensity = 0;
+          return !wasDriving || moved;
+        }
         camera.updateMatrixWorld();
-        if (!dirty && !modeChanged && oldScale === scale && oldTiles === tiles &&
+        if (!dirty && !wasDriving && oldScale === scale && oldTiles === tiles &&
             oldCamera.equals(camera.matrixWorld) && oldProjection.equals(camera.projectionMatrix)) return false;
         dirty = false;
         oldScale = scale;
@@ -103,22 +117,11 @@
         oldCamera.copy(camera.matrixWorld);
         oldProjection.copy(camera.projectionMatrix);
         ray.setFromCamera(pointer, camera);
-        light.visible = !handheld;
-        beam.visible = handheld;
-        if (handheld) {
-          // The beam follows the pointer ray, including when its centre passes above the horizon.
-          candidate.copy(ray.ray.origin).add(ray.ray.direction);
-          const moved = !beam.position.equals(ray.ray.origin) || !beam.target.position.equals(candidate);
-          beam.position.copy(ray.ray.origin);
-          beam.target.position.copy(candidate);
-          light.intensity = 0;
-          return modeChanged || moved;
-        }
         const wasLit = light.intensity > 0;
         hasHit = intersect(Math.min(camera.far, 200000));
         if (!hasHit) {
           light.intensity = 0;
-          return modeChanged || wasLit;
+          return wasDriving || wasLit;
         }
         const nextRadius = THREE.MathUtils.clamp(camera.position.distanceTo(hit) * 0.12, 24, 360);
         candidate.copy(hit);
@@ -128,13 +131,13 @@
         light.position.copy(candidate);
         light.distance = radius * 2.6;
         light.intensity = radius * radius * 2.4;
-        return modeChanged || !wasLit || moved;
+        return wasDriving || !wasLit || moved;
       },
       ready() {
         button.disabled = false;
       },
       getState() {
-        // A handheld beam lights rendered geometry directly. Only diagnostics need a terrain hit.
+        // The driving beam lights rendered geometry directly. Only diagnostics need a terrain hit.
         const surfaceHit = beam.visible ? intersect(beam.distance) : hasHit;
         const radiusM = beam.visible && surfaceHit ? ray.ray.origin.distanceTo(hit) * Math.tan(beam.angle) : radius;
         return { enabled, hasHit: surfaceHit, target: surfaceHit ? hit.toArray() : null, radiusM: surfaceHit ? radiusM : 0 };

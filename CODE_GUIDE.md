@@ -79,7 +79,7 @@ Large runtime/source assets may be distributed separately; their paths after ins
 | `cloud-layers.js` | Directional procedural cloud color and coverage used in the sky texture |
 | `ocean-reflection.js` | Cached low-resolution reflection of an owned coarse terrain proxy |
 | `ocean-backdrop.js` | Sky background, offshore water and the distant sea horizon |
-| `scene-effects.js` | Pointer flashlight and bounded GPU coastal spray |
+| `scene-effects.js` | Flashlight for orbit and driving views, and bounded GPU coastal spray |
 | `environment.js` | Sun and moon positions for the selected date, JST and map location, lunar phase, lighting, weather, shadows and GPU rain |
 | `vegetation.js`, `ground-grass.js` | Stable plant locations, shape/detail variants, grass, surface attachment and shared wind animation |
 | `styles.css` | Panels, controls, dialogs and narrow-window layout |
@@ -208,7 +208,7 @@ The narrow foam front has a soft, advected metre-scale envelope and leaves a sho
 
 Clear water and aerated foam resolve their radiance separately, applying coverage once. Fresnel weights the water's reflected and transmitted light. Foam retains actual direct illumination, terrain/cloud attenuation and pointer lighting, while its ambient response takes the larger of the scene's indirect diffuse light and the existing daylight-scaled water-column sky approximation. This supplies scattered environment light when clouds block the sun without doubling the ambient terms. The sky contribution fades out at night. It is an illustrative scattering approximation, not a multiple-scattering fluid simulation.
 
-The environment uses a NOAA-style solar approximation at the model center, selected date and fixed GMT+9 time. Clear/cloudy/rainy presets affect sky, fog, lights, waves and rain. Local PCF shadows follow the view and reuse their map when possible. In orbit view, the flashlight ray-tests the displayed height field and lights the hit point. In first-person view, a spotlight at eye level follows the camera ray through the pointer. Rain, spray and wind use GPU animation and the shared scene clock.
+The environment uses a NOAA-style solar approximation at the model center, selected date and fixed GMT+9 time. Clear/cloudy/rainy presets affect sky, fog, lights, waves and rain. Local PCF shadows follow the view and reuse their map when possible. In orbit view, the flashlight ray-tests the displayed height field and lights the hit point. In first-person view, a spotlight at eye level uses the vehicle heading and a fixed downward angle to illuminate the ground ahead. Rain, spray and wind use GPU animation and the shared scene clock.
 
 Rain has a fixed 1200/2200-drop population. World-space trajectories wrap into a 180 by 130 by 180 m volume centered on the camera: subtract the anchor before modulo and add it afterward, so camera motion does not translate an existing drop between wraps. Stable per-drop attributes vary fall speed (9-15 m/s), exposure (0.035-0.055 s) and wind response. Radial and vertical fades hide wrap boundaries; streak tails taper. Camera/clock updates change uniforms without rewriting particle buffers. Weather presets remain immediate, and rain does not simulate terrain/water impacts.
 
