@@ -2,20 +2,26 @@
 (function registerFirstPerson(global) {
   'use strict';
 
-  function create({ THREE, camera, controls, canvas, metadata, sampleLand, shore, water, changed }) {
+  // Illustrative drivetrain and resistance coefficients for land travel and marine propulsion.
+  const massKg = 7800, gravity = 9.81;
+  const road = { powerW: 210000, tractionN: 27000, rolling: 0.025, linearDrag: 0, quadraticDrag: 3.8 };
+  const sea = { powerW: 135000, tractionN: 15200, rolling: 0.004, linearDrag: 160, quadraticDrag: 54 };
+
+  function create({ THREE, camera, controls, canvas, metadata, sampleLand, shore, water, verticalScale = () => 1, changed }) {
     const eyeHeight = 1.8;
-    const speed = 24;
     // Stay inside the last renderable DEM cell, including at the positive map edges.
     const halfWidth = metadata.width_m / 2, halfDepth = metadata.height_m / 2;
     const inset = Math.min(metadata.source_spacing_m[0] / 2, halfWidth / 2, halfDepth / 2);
     const savedEye = new THREE.Vector3(), savedTarget = new THREE.Vector3();
-    let active = false, onWater = false, yaw = 0, pitch = 0;
+    let active = false, onWater = false, yaw = 0, lookYaw = 0, pitch = 0;
+    let velocity = 0, reverseDelay = 0;
     let drag = null;
 
     function aim() {
       const horizontal = 24 * Math.cos(pitch);
-      controls.target.set(camera.position.x + Math.sin(yaw) * horizontal,
-        camera.position.y + 24 * Math.sin(pitch), camera.position.z - Math.cos(yaw) * horizontal);
+      const bearing = yaw + lookYaw;
+      controls.target.set(camera.position.x + Math.sin(bearing) * horizontal,
+        camera.position.y + 24 * Math.sin(pitch), camera.position.z - Math.cos(bearing) * horizontal);
       camera.lookAt(controls.target);
     }
     function follow(x, z) {
@@ -32,7 +38,9 @@
       savedEye.copy(camera.position);
       savedTarget.copy(controls.target);
       yaw = Math.atan2(savedTarget.x - savedEye.x, savedEye.z - savedTarget.z);
+      lookYaw = 0;
       pitch = 0;
+      park();
       if (!follow(savedTarget.x, savedTarget.z)) return false;
       controls.enabled = false;
       active = true;
@@ -46,6 +54,7 @@
     }
     function exit() {
       cancelDrag();
+      park();
       active = false;
       onWater = false;
       // Flush any orbit damping left over from before entry, then restore the saved pose.
@@ -60,20 +69,68 @@
       controls.enabled = true;
       controls.update();
     }
+    function park() {
+      velocity = 0;
+      reverseDelay = 0;
+    }
+    function roadGrade(east, south) {
+      if (onWater) return 0;
+      // A four-metre wheelbase samples slope along the vehicle, in physical DEM metres.
+      const { x, z, y } = camera.position;
+      const front = sampleLand(x + 2 * east, z + 2 * south);
+      const rear = sampleLand(x - 2 * east, z - 2 * south);
+      if (front === null && rear === null) return 0;
+      const span = front === null || rear === null ? 2 : 4;
+      return ((front ?? (y - eyeHeight)) - (rear ?? (y - eyeHeight))) / (span * verticalScale());
+    }
+    function driveStep(input, brake, dt) {
+      if (reverseDelay > 0) {
+        reverseDelay = Math.max(0, reverseDelay - dt);
+        return;
+      }
+      if (velocity === 0 && (!input || brake)) return;
+      const east = Math.sin(yaw), south = -Math.cos(yaw);
+      const grade = roadGrade(east, south);
+      const cosSlope = 1 / Math.hypot(1, grade);
+      const normalLoad = massKg * gravity * cosSlope;
+      const profile = onWater ? sea : road;
+      const speed = Math.abs(velocity);
+      const braking = brake || input * velocity < 0;
+      const gripN = onWater ? profile.tractionN : 0.65 * normalLoad;
+      const thrustN = braking ? 0 : input * Math.min(profile.tractionN, gripN, profile.powerW / Math.max(speed, 0.1));
+      const brakeN = braking ? (onWater ? 19500 : Math.min(52000, gripN)) : 0;
+      const resistanceN = profile.rolling * normalLoad + profile.linearDrag * speed + profile.quadraticDrag * speed * speed;
+      const direction = Math.sign(velocity) || input;
+      const netN = thrustN - normalLoad * grade - direction * (resistanceN + brakeN);
+      let next = THREE.MathUtils.clamp(velocity + netN / massKg * dt, -7, 160 / 3.6);
+      if (velocity === 0 && next * input <= 0) next = 0; // Hill hold if drive force cannot start the climb.
+      if (velocity * next <= 0 && velocity !== 0) {
+        next = 0;
+        if (braking && input) reverseDelay = 0.3;
+      }
+      const distance = 0.5 * (velocity + next) * dt * cosSlope;
+      velocity = next;
+      if (!distance) return;
+      const x = camera.position.x + east * distance, z = camera.position.z + south * distance;
+      if (!follow(x, z) || camera.position.x !== x || camera.position.z !== z) park();
+    }
     function move(actions, dt) {
-      const forward = Number(actions.has('forward')) - Number(actions.has('back'));
+      if (!active || !Number.isFinite(dt) || dt <= 0) return;
+      const forward = actions.has('forward'), back = actions.has('back');
+      const input = Number(forward) - Number(back);
+      const brake = actions.has('brake') || (forward && back);
       const left = actions.has('left') || actions.has('turnLeft');
       const right = actions.has('right') || actions.has('turnRight');
       const turn = Number(right) - Number(left);
-      if (turn) {
-        yaw += turn * dt;
-        aim();
+      const wasMoving = velocity !== 0;
+      // Bound each integration step so steering and shore crossings behave consistently at low frame rates.
+      const steps = Math.ceil(dt / 0.025), step = dt / steps;
+      for (let i = 0; i < steps; i++) {
+        yaw += turn * step / (1 + Math.abs(velocity) / 18);
+        driveStep(input, brake, step);
       }
-      if (forward) {
-        const step = forward * speed * dt;
-        follow(camera.position.x + Math.sin(yaw) * step, camera.position.z - Math.cos(yaw) * step);
-      }
-      if (forward || turn) changed();
+      if (turn) aim();
+      if (turn || wasMoving || velocity !== 0) changed();
     }
     canvas.addEventListener('pointerdown', event => {
       if (!active || drag || event.button !== 0 || !event.isPrimary) return;
@@ -83,7 +140,7 @@
     });
     canvas.addEventListener('pointermove', event => {
       if (event.pointerId !== drag?.id) return;
-      yaw += (event.clientX - drag.x) * 0.004;
+      lookYaw += (event.clientX - drag.x) * 0.004;
       pitch = THREE.MathUtils.clamp(pitch - (event.clientY - drag.y) * 0.004, -1.4, 1.4);
       drag.x = event.clientX;
       drag.y = event.clientY;
@@ -95,7 +152,10 @@
     }
     return {
       get active() { return active; },
-      enter, exit, move, cancelDrag,
+      get needsMotion() { return velocity !== 0 || reverseDelay > 0; },
+      get speedMps() { return Math.abs(velocity); },
+      get heading() { return yaw * 180 / Math.PI; },
+      enter, exit, move, park, cancelDrag,
       refresh: () => follow(camera.position.x, camera.position.z),
       followWaves() {
         if (!onWater) return;
@@ -105,7 +165,9 @@
     };
   }
   function createDashboard(metadata) {
+    const cluster = document.querySelector('#first-person-hud');
     const speed = document.querySelector('#fp-speed');
+    const heading = document.querySelector('#fp-heading');
     const date = document.querySelector('#fp-date');
     const time = document.querySelector('#fp-time');
     const position = document.querySelector('#fp-position');
@@ -113,8 +175,8 @@
     const metres = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
     position.title = metadata.crs || metadata.sourceDatum || 'Projected easting and northing in metres';
     let visible = false, conditions;
-    let lastX, lastZ, lastFrameMs, lastEast, lastNorth;
-    let distanceM = 0, elapsedMs = 0;
+    const bearings = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    let lastEast, lastNorth, lastSpeedAngle, lastHeadingAngle;
 
     function write(element, value) {
       if (element.textContent !== value) element.textContent = value;
@@ -132,37 +194,29 @@
       if (east === lastEast && north === lastNorth) return;
       lastEast = east;
       lastNorth = north;
-      position.textContent = `E ${metres.format(east)} · N ${metres.format(north)} m`;
+      position.textContent = `E ${metres.format(east)} m\nN ${metres.format(north)} m`;
     }
-    function show(active, point, now) {
+    function show(active, point, headingDegrees) {
       visible = active;
       document.body.classList.toggle('first-person-view', active);
       if (!visible) return;
-      lastX = point.x;
-      lastZ = point.z;
-      lastFrameMs = now;
-      distanceM = elapsedMs = 0;
-      write(speed, '0');
-      locate(point);
+      updateMotion(point, 0, headingDegrees);
       setConditions(conditions);
     }
-    function updateMotion(point, now) {
-      // Only horizontal travel contributes to ground speed, including while riding waves.
-      const step = Math.hypot(point.x - lastX, point.z - lastZ);
-      if (step > 0) {
-        distanceM += step;
-        elapsedMs += Math.max(0, now - lastFrameMs);
-        if (elapsedMs >= 120) {
-          write(speed, String(Math.round(3600 * distanceM / elapsedMs)));
-          distanceM = elapsedMs = 0;
-        }
-      } else {
-        distanceM = elapsedMs = 0;
-        write(speed, '0');
+    function updateMotion(point, speedMps, headingDegrees) {
+      const kmh = speedMps * 3.6;
+      write(speed, String(Math.round(kmh)));
+      const speedAngle = Math.round((-135 + Math.min(kmh, 160) * 270 / 160) * 10) / 10;
+      if (speedAngle !== lastSpeedAngle) {
+        cluster.style.setProperty('--speed-angle', speedAngle + 'deg');
+        lastSpeedAngle = speedAngle;
       }
-      lastFrameMs = now;
-      lastX = point.x;
-      lastZ = point.z;
+      const bearing = ((Math.round(headingDegrees) % 360) + 360) % 360;
+      if (bearing !== lastHeadingAngle) {
+        cluster.style.setProperty('--heading-angle', bearing + 'deg');
+        write(heading, String(bearing).padStart(3, '0') + '° ' + bearings[Math.round(bearing / 45) % 8]);
+        lastHeadingAngle = bearing;
+      }
       locate(point);
     }
     return { show, setConditions, updateMotion };

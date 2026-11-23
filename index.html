@@ -91,24 +91,51 @@
       <div id="grid-resolution" aria-live="polite">Source 1 m · Loading grid…</div>
     </div>
 
-    <dl id="first-person-hud" aria-label="First-person instruments">
-      <div class="hud-speed">
-        <dt>Speed</dt>
-        <dd><span id="fp-speed">0</span> <span class="hud-unit">km/h</span></dd>
+    <section id="first-person-hud" aria-label="Driving instruments">
+      <div class="instrument-dial speed-dial" role="group" aria-label="Speedometer and clock">
+        <svg class="instrument-scale" viewBox="0 0 200 200" aria-hidden="true">
+          <path class="dial-ticks" d="M26.1,154.8L30.1,151.8 M18.9,143.4L25.9,139.6 M13.4,131L18.1,129.3 M8.1,104.5L13.1,104.3 M8.4,91L16.4,91.8 M10.8,77.6L15.6,78.9 M21.1,52.7L25.4,55.3 M28.9,41.6L35.1,46.7 M38.2,31.8L41.6,35.5 M60.7,16.8L62.8,21.4 M73.3,12L75.6,19.6 M86.5,9L87.2,13.9 M113.5,9L112.8,13.9 M126.7,12L124.4,19.6 M139.3,16.8L137.2,21.4 M161.8,31.8L158.4,35.5 M171.1,41.6L164.9,46.7 M178.9,52.7L174.6,55.3 M189.2,77.6L184.4,78.9 M191.6,91L183.6,91.8 M191.9,104.5L186.9,104.3 M186.6,131L181.9,129.3 M181.1,143.4L174.1,139.6 M173.9,154.8L169.9,151.8"/>
+          <path class="dial-ticks major" d="M34.9,165.1L43.4,156.6 M9.8,117.9L21.5,115.6 M15,64.8L26.1,69.4 M48.9,23.5L55.6,33.5 M100,8L100,20 M151.1,23.5L144.4,33.5 M185,64.8L173.9,69.4 M190.2,117.9L178.5,115.6 M165.1,165.1L156.6,156.6"/>
+          <g class="scale-numerals">
+            <text x="51.2" y="148.8">0</text>
+            <text x="32.3" y="113.5">20</text>
+            <text x="36.3" y="73.6">40</text>
+            <text x="61.7" y="42.6">60</text>
+            <text x="100" y="31">80</text>
+            <text x="138.3" y="42.6">100</text>
+            <text x="163.7" y="73.6">120</text>
+            <text x="167.7" y="113.5">140</text>
+            <text x="148.8" y="148.8">160</text>
+          </g>
+          <g class="speed-needle">
+            <path d="M97.3 107 98.4 33 100 12 101.6 33 102.7 107Z"/>
+            <circle class="needle-hub" cx="100" cy="100" r="5.8"/>
+          </g>
+        </svg>
+        <div class="dial-speed"><strong id="fp-speed">0</strong><span>km/h</span></div>
+        <div class="dial-clock">
+          <span id="fp-date"></span>
+          <span><b id="fp-time"></b> JST</span>
+        </div>
       </div>
-      <div>
-        <dt>Date &amp; time · JST</dt>
-        <dd><span id="fp-date"></span> <span id="fp-time"></span></dd>
+      <div class="instrument-dial compass-dial" role="group" aria-label="Heading, weather and location">
+        <svg class="instrument-scale" viewBox="0 0 200 200" aria-hidden="true">
+          <path class="dial-ticks" d="M100,8L100,17 M108,8.4L107.8,11.3 M116,9.4L115.5,12.4 M123.8,11.1L122,17.9 M131.5,13.5L130.4,16.4 M138.9,16.6L137.6,19.3 M146,20.3L142.5,26.4 M152.8,24.6L151,27.1 M159.1,29.5L157.2,31.8 M165.1,34.9L158.7,41.3 M170.5,40.9L168.2,42.8 M175.4,47.2L172.9,49 M179.7,54L173.6,57.5 M183.4,61.1L180.7,62.4 M186.5,68.5L183.6,69.6 M188.9,76.2L182.1,78 M190.6,84L187.6,84.5 M191.6,92L188.7,92.2 M192,100L183,100 M191.6,108L188.7,107.8 M190.6,116L187.6,115.5 M188.9,123.8L182.1,122 M186.5,131.5L183.6,130.4 M183.4,138.9L180.7,137.6 M179.7,146L173.6,142.5 M175.4,152.8L172.9,151 M170.5,159.1L168.2,157.2 M165.1,165.1L158.7,158.7 M159.1,170.5L157.2,168.2 M152.8,175.4L151,172.9 M146,179.7L142.5,173.6 M138.9,183.4L137.6,180.7 M131.5,186.5L130.4,183.6 M123.8,188.9L122,182.1 M116,190.6L115.5,187.6 M108,191.6L107.8,188.7 M100,192L100,183 M92,191.6L92.2,188.7 M84,190.6L84.5,187.6 M76.2,188.9L78,182.1 M68.5,186.5L69.6,183.6 M61.1,183.4L62.4,180.7 M54,179.7L57.5,173.6 M47.2,175.4L49,172.9 M40.9,170.5L42.8,168.2 M34.9,165.1L41.3,158.7 M29.5,159.1L31.8,157.2 M24.6,152.8L27.1,151 M20.3,146L26.4,142.5 M16.6,138.9L19.3,137.6 M13.5,131.5L16.4,130.4 M11.1,123.8L17.9,122 M9.4,116L12.4,115.5 M8.4,108L11.3,107.8 M8,100L17,100 M8.4,92L11.3,92.2 M9.4,84L12.4,84.5 M11.1,76.2L17.9,78 M13.5,68.5L16.4,69.6 M16.6,61.1L19.3,62.4 M20.3,54L26.4,57.5 M24.6,47.2L27.1,49 M29.5,40.9L31.8,42.8 M34.9,34.9L41.3,41.3 M40.9,29.5L42.8,31.8 M47.2,24.6L49,27.1 M54,20.3L57.5,26.4 M61.1,16.6L62.4,19.3 M68.5,13.5L69.6,16.4 M76.2,11.1L78,17.9 M84,9.4L84.5,12.4 M92,8.4L92.2,11.3"/>
+          <g class="compass-letters">
+            <text x="100" y="26">N</text>
+            <text x="174" y="100">E</text>
+            <text x="100" y="174">S</text>
+            <text x="26" y="100">W</text>
+          </g>
+          <g class="heading-needle"><path d="M98.3 101 98.3 34 96.8 37 100 6.5 103.2 37 101.7 34 101.7 101Z"/></g>
+        </svg>
+        <div class="dial-navigation">
+          <span id="fp-weather"></span>
+          <strong id="fp-heading"></strong>
+          <span id="fp-position"></span>
+        </div>
       </div>
-      <div>
-        <dt>Position</dt>
-        <dd id="fp-position"></dd>
-      </div>
-      <div>
-        <dt>Weather</dt>
-        <dd id="fp-weather"></dd>
-      </div>
-    </dl>
+    </section>
 
     <!-- Right-side navigation controls; zoom is enabled after terrain becomes ready. -->
     <nav class="view-tools" aria-label="View controls">
@@ -144,10 +171,11 @@
           <tr><td><kbd>D</kbd> / <kbd>→</kbd></td><td>Turn right in first person, move right in orbit view</td></tr>
           <tr><td><kbd>Q</kbd> / <kbd>E</kbd></td><td>Turn left / right</td></tr>
           <tr><td><kbd>R</kbd> / <kbd>F</kbd></td><td>Move up / down in orbit view</td></tr>
+          <tr><td><kbd>Space</kbd></td><td>Brake and hold in first-person view</td></tr>
         </tbody>
       </table>
       <p class="mouse-help">In orbit view, drag to rotate, right-drag to pan or scroll to zoom.</p>
-      <p class="mouse-help">Select the eye button for first-person view. Use WASD to travel over land or water and drag to look around. Select the eye again to return to orbit.</p>
+      <p class="mouse-help">Select the eye button to drive. Hold W to accelerate and release it to coast. Hold S to brake and then reverse. Steer with A/D and drag to look around. Select the eye again to return to orbit.</p>
       <p class="mouse-help">Press <kbd>Esc</kbd> or × to close.</p>
     </dialog>
 

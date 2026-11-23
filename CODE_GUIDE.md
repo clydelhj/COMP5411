@@ -60,7 +60,7 @@ Large runtime/source assets may be distributed separately; their paths after ins
 | Module | Responsibility |
 | --- | --- |
 | `terrain.js` | Scene setup, asynchronous loads, caches, camera safety, settings, performance feedback and frame scheduling |
-| `first-person.js` | Ground-level travel and steering, drag-to-look, orbit pose restoration and the first-person instrument display |
+| `first-person.js` | Surface-following driving, steering, independent camera look, orbit pose restoration and instrument dials. Land acceleration combines traction and power limits with braking, resistance and the gravity component along the physical terrain slope. Marine propulsion and drag apply offshore. |
 | `view-fullscreen.js` | Fullscreen API control for the canvas and viewer interface |
 | `data-source.js` | Read-only selection, validation and loading of local data folders |
 | `terrain-lod.js` | Distance-based nested display patches, selection hysteresis, source resampling and display-patch lookup |

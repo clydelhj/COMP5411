@@ -1241,7 +1241,8 @@
       KeyQ: 'turnLeft',
       KeyE: 'turnRight',
       KeyR: 'up',
-      KeyF: 'down'
+      KeyF: 'down',
+      Space: 'brake'
     };
     const pressed = new Set();
     const direction = new THREE.Vector3(),
@@ -1252,7 +1253,7 @@
     let keyTime = 0;
     const firstPerson = window.NotoFirstPerson.create({
       THREE, camera, controls, canvas: renderer.domElement, metadata: m,
-      sampleLand: surfaceHeight, shore: coastalField, water: waterMotion,
+      sampleLand: surfaceHeight, shore: coastalField, water: waterMotion, verticalScale: () => terrain.scale.y,
       changed() { wakeRendering(); scheduleLOD(); }
     });
     function toggleFirstPerson() {
@@ -1269,10 +1270,10 @@
       }
       hasSafePose = false;
       firstPersonButton.setAttribute('aria-pressed', String(firstPerson.active));
-      dashboard.show(firstPerson.active, camera.position, performance.now());
+      dashboard.show(firstPerson.active, camera.position, firstPerson.heading);
       firstPersonButton.title = firstPerson.active ? 'Return to orbit view' : 'Enter first-person view';
       renderer.domElement.setAttribute('aria-label', firstPerson.active
-        ? 'First-person terrain view: W or S to travel, A or D to steer, drag to look around'
+        ? 'First-person driving: W to accelerate, S to brake or reverse, A or D to steer, Space to brake'
         : 'Interactive terrain: drag to rotate, right-drag to pan, scroll to zoom');
       for (const button of zoomButtons) button.disabled = firstPerson.active;
       renderer.domElement.focus({ preventScroll: true });
@@ -1294,6 +1295,7 @@
       }
       if (navigationPaused() || !keyActions[event.code] || editable(event.target) || event.ctrlKey || event.altKey || event.metaKey) return;
       if (firstPerson.active && (event.code === 'KeyR' || event.code === 'KeyF')) return;
+      if (!firstPerson.active && event.code === 'Space') return;
       event.preventDefault();
       pressed.add(event.code);
       wakeRendering();
@@ -1309,6 +1311,7 @@
     // Modal, blur and hidden-page transitions clear all input; form focus clears only keyboard navigation.
     const releaseNavigation = () => {
       releaseKeys();
+      firstPerson.park();
       firstPerson.cancelDrag();
       pendingZoom = 0;
       zoomTime = 0;
@@ -1322,17 +1325,13 @@
       if (editable(event.target)) releaseKeys();
     });
     function moveKeyboard(now) {
-      /*
-       * Advance keyboard navigation with a bounded time step. Build forward/right/yaw motion,
-       * choose speed from clearance above ground, and move camera and target together. Reset the
-       * clock when no keys are held.
-       */
-      if (navigationPaused()) releaseKeys();
-      if (!pressed.size) {
+      // Keep integrating a coasting vehicle after key release. Orbit speed depends on camera clearance.
+      if (navigationPaused()) { releaseKeys(); firstPerson.park(); }
+      if (!pressed.size && !firstPerson.needsMotion) {
         keyTime = 0;
         return;
       }
-      const dt = keyTime ? Math.min((now - keyTime) / 1000, 0.05) : 1 / 60;
+      const dt = keyTime ? Math.min((now - keyTime) / 1000, firstPerson.active ? 0.25 : 0.05) : 1 / 60;
       keyTime = now;
       const actions = new Set([...pressed].map(code => keyActions[code]));
       if (firstPerson.active) {
@@ -1517,7 +1516,7 @@
         environment.updateView(terrain.scale.y);
         surf.update(live, environment.getState().cardBrightness);
       }
-      if (firstPerson.active) dashboard.updateMotion(camera.position, now);
+      if (firstPerson.active) dashboard.updateMotion(camera.position, firstPerson.speedMps, firstPerson.heading);
       flashlight.update(terrain.scale.y, live);
       const lightState = flashlight.getState();
       if (previousFlashlight && (lightState.enabled !== previousFlashlight.enabled || lightState.hasHit !== previousFlashlight.hasHit || lightState.radiusM !== previousFlashlight.radiusM || lightState.target?.some((value, index) => value !== previousFlashlight.target?.[index]))) {
@@ -1553,7 +1552,7 @@
         });
       }
       if (updateScene) updateResolution();
-      if (pressed.size || pendingZoom || pendingPlants) {
+      if (pressed.size || firstPerson.needsMotion || pendingZoom || pendingPlants) {
         requestRender();
       } else if (environment.isDayCyclePlaying() || !navigationPaused() && stayAwake(now) && (skyInView || waterVisible || environment.hasAnimation() || vegetation?.hasAnimation())) {
         requestRender(false);
