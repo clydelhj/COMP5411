@@ -3,7 +3,7 @@
   'use strict';
 
   // Inputs are the shared scene, displayed height sampler and render scheduler.
-  // The returned controller caches its hit and owns one non-shadow-casting light.
+  // Orbit inspection lights a terrain hit. At eye level the pointer steers a handheld beam.
   function createFlashlight({
     THREE,
     scene,
@@ -13,18 +13,22 @@
     sampleHeight,
     shore,
     wake,
-    paused
+    paused,
+    firstPersonActive
   }) {
     const button = document.querySelector('#flashlight-button');
     const light = new THREE.PointLight(0xfff1d2, 0, 1000, 2);
     light.name = 'Pointer flashlight';
     light.castShadow = false;
-    scene.add(light);
+    const beam = new THREE.SpotLight(0xfff1d2, 480, 90, THREE.MathUtils.degToRad(8), 0.5, 2);
+    beam.name = 'First-person flashlight';
+    beam.visible = false;
+    scene.add(light, beam, beam.target);
     const pointer = new THREE.Vector2(),
       ray = new THREE.Raycaster();
     const hit = new THREE.Vector3(),
       candidate = new THREE.Vector3();
-    const oldCamera = new THREE.Matrix4();
+    const oldCamera = new THREE.Matrix4(), oldProjection = new THREE.Matrix4();
     let enabled = false,
       dirty = true,
       oldScale = 0,
@@ -39,9 +43,10 @@
         wake();
       }
     });
-    button.addEventListener('click', () => {
+    button.addEventListener('click', event => {
       enabled = !enabled;
       button.setAttribute('aria-pressed', String(enabled));
+      if (firstPersonActive() && event.detail > 0) renderer.domElement.focus({ preventScroll: true });
       dirty = true;
       wake();
     });
@@ -52,11 +57,9 @@
       const y = sampleHeight(x, z);
       return y ?? (shore.distance(x, z) >= 0 ? 0 : null);
     }
-    function intersect() {
-      ray.setFromCamera(pointer, camera);
+    function intersect(limit) {
       let previousT = 0,
         previousGap = null;
-      const limit = Math.min(camera.far, 200000);
       for (let i = 0; i <= 144; i++) {
         const t = Math.expm1(i / 144 * Math.log1p(limit));
         ray.ray.at(t, candidate);
@@ -82,37 +85,62 @@
     return {
       update(scale, tiles) {
         if (!enabled) {
+          const wasLit = light.intensity > 0 || beam.visible;
           light.intensity = 0;
+          light.visible = true;
+          beam.visible = false;
           hasHit = false;
-          return;
+          return wasLit;
         }
+        const handheld = firstPersonActive();
+        const modeChanged = beam.visible !== handheld;
         camera.updateMatrixWorld();
-        if (!dirty && oldScale === scale && oldTiles === tiles && oldCamera.equals(camera.matrixWorld)) return;
+        if (!dirty && !modeChanged && oldScale === scale && oldTiles === tiles &&
+            oldCamera.equals(camera.matrixWorld) && oldProjection.equals(camera.projectionMatrix)) return false;
         dirty = false;
         oldScale = scale;
         oldTiles = tiles;
         oldCamera.copy(camera.matrixWorld);
-        hasHit = intersect();
+        oldProjection.copy(camera.projectionMatrix);
+        ray.setFromCamera(pointer, camera);
+        light.visible = !handheld;
+        beam.visible = handheld;
+        if (handheld) {
+          // The beam follows the pointer ray, including when its centre passes above the horizon.
+          candidate.copy(ray.ray.origin).add(ray.ray.direction);
+          const moved = !beam.position.equals(ray.ray.origin) || !beam.target.position.equals(candidate);
+          beam.position.copy(ray.ray.origin);
+          beam.target.position.copy(candidate);
+          light.intensity = 0;
+          return modeChanged || moved;
+        }
+        const wasLit = light.intensity > 0;
+        hasHit = intersect(Math.min(camera.far, 200000));
         if (!hasHit) {
           light.intensity = 0;
-          return;
+          return modeChanged || wasLit;
         }
-        radius = THREE.MathUtils.clamp(camera.position.distanceTo(hit) * 0.12, 24, 360);
-        light.position.copy(hit).add(new THREE.Vector3(0, radius * 0.7, 0));
+        const nextRadius = THREE.MathUtils.clamp(camera.position.distanceTo(hit) * 0.12, 24, 360);
+        candidate.copy(hit);
+        candidate.y += nextRadius * 0.7;
+        const moved = !light.position.equals(candidate) || nextRadius !== radius;
+        radius = nextRadius;
+        light.position.copy(candidate);
         light.distance = radius * 2.6;
         light.intensity = radius * radius * 2.4;
+        return modeChanged || !wasLit || moved;
       },
       ready() {
         button.disabled = false;
       },
-      getState: () => ({
-        enabled,
-        hasHit,
-        target: hasHit ? hit.toArray() : null,
-        radiusM: radius
-      }),
+      getState() {
+        // A handheld beam lights rendered geometry directly. Only diagnostics need a terrain hit.
+        const surfaceHit = beam.visible ? intersect(beam.distance) : hasHit;
+        const radiusM = beam.visible && surfaceHit ? ray.ray.origin.distanceTo(hit) * Math.tan(beam.angle) : radius;
+        return { enabled, hasHit: surfaceHit, target: surfaceHit ? hit.toArray() : null, radiusM: surfaceHit ? radiusM : 0 };
+      },
       dispose() {
-        scene.remove(light);
+        scene.remove(light, beam, beam.target);
       }
     };
   }

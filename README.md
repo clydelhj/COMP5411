@@ -55,14 +55,14 @@ Select the updated folder in Settings. Both category maps are sampled by nearest
 - Drag with the left mouse button to orbit or the right button to pan. Scroll up to zoom in quickly, or click + for a finer step. Scroll down or click − to zoom out.
 - W/S or the up/down arrows move forward and backward. In orbit view, A/D or the left/right arrows move sideways. Horizontal speed in orbit view scales with height above the ground, from 10 to 5,000 m/s.
 - Select the eye button to drive in **first-person view** at the orbit target. Hold W to accelerate, release it to coast, hold Space to brake, or hold S to brake and then reverse. Steer with A/D or the left/right arrows and drag to look around. Hills affect acceleration and coasting. Offshore, the camera rides the waves and water resistance slows the vehicle. Select the eye again to restore the orbit view.
-- The first-person instrument cluster shows speed in km/h and a compass bearing relative to grid north. The inset displays show the simulated date and time in Japan, selected weather, and projected easting and northing in metres. The vertical scale control sits at the bottom left in this view.
+- The first-person instrument cluster shows speed in km/h and a compass bearing relative to grid north. The inset displays show the simulated date and time in Japan, selected weather, and projected easting and northing in metres. Driving uses the terrain at 1:1 scale with the vertical scale control hidden. Returning to orbit restores the previous scale and camera view.
 - Select **Enter full screen** in the right toolbar to expand the entire viewer. Select the button again or press Esc to return to the window.
 - Q/E turns the view. R/F moves vertically in orbit view. Additional bindings appear in the ? dialog.
 - The bottom slider changes display height from 1:1 to 1:10; default 1:5.
 - The upper-right slider controls time in GMT+9. Select **Play** to advance one day every 30 seconds, starting at the displayed time. The date advances at midnight. Select **Pause** to hold the current view. Dragging the slider, opening a dialog, or hiding the tab also pauses playback.
 - In settings, choose a date from the English calendar or enter it as YYYY-MM-DD. Today uses the date in Japan. The weather options are clear, cloudy and rainy.
 - The Moon follows the selected date, time and map location. For a view from the Noto coast, select Clear and set 24 November 2026 at 17:00 GMT+9. The nearly full Moon is about 11° above the east-northeastern horizon.
-- The flashlight button illuminates the surface under the pointer, including at night.
+- In first-person view, switch on the flashlight and move the pointer across the scene to aim the beam. You can aim while parked or driving. In orbit view, the flashlight illuminates the surface under the pointer.
 
 ## Detail and animation settings
 

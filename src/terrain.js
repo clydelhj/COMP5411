@@ -321,7 +321,8 @@
       sampleHeight: surfaceHeight,
       shore: coastalField,
       wake: wakeRendering,
-      paused: navigationPaused
+      paused: navigationPaused,
+      firstPersonActive: () => firstPerson.active
     });
     const surf = window.NotoSceneEffects.createSurf({
       THREE,
@@ -1256,12 +1257,18 @@
       sampleLand: surfaceHeight, shore: coastalField, water: waterMotion, verticalScale: () => terrain.scale.y,
       changed() { wakeRendering(); scheduleLOD(); }
     });
+    let orbitVerticalScale;
     function toggleFirstPerson() {
       if (navigationPaused()) return;
       releaseNavigation();
       if (firstPerson.active) {
         firstPerson.exit();
-      } else if (!firstPerson.enter()) {
+        setVerticalScale(orbitVerticalScale);
+      } else if (firstPerson.enter()) {
+        orbitVerticalScale = terrain.scale.y;
+        setVerticalScale(1);
+        firstPerson.refresh();
+      } else {
         const message = 'Aim at mapped land or water to enter first-person view.';
         status.textContent = message;
         status.hidden = false;
@@ -1269,6 +1276,7 @@
         return;
       }
       hasSafePose = false;
+      slider.disabled = firstPerson.active;
       firstPersonButton.setAttribute('aria-pressed', String(firstPerson.active));
       dashboard.show(firstPerson.active, camera.position, firstPerson.heading);
       firstPersonButton.title = firstPerson.active ? 'Return to orbit view' : 'Enter first-person view';
@@ -1435,7 +1443,6 @@
       skyInView = false,
       skyTime = 0,
       vegetationRevision = -1;
-    let previousFlashlight = null;
     let displayedFrames = 0;
     const bounds = new THREE.Box3(),
       center = new THREE.Vector3(),
@@ -1517,12 +1524,6 @@
         surf.update(live, environment.getState().cardBrightness);
       }
       if (firstPerson.active) dashboard.updateMotion(camera.position, firstPerson.speedMps, firstPerson.heading);
-      flashlight.update(terrain.scale.y, live);
-      const lightState = flashlight.getState();
-      if (previousFlashlight && (lightState.enabled !== previousFlashlight.enabled || lightState.hasHit !== previousFlashlight.hasHit || lightState.radiusM !== previousFlashlight.radiusM || lightState.target?.some((value, index) => value !== previousFlashlight.target?.[index]))) {
-        temporal.invalidate('flashlight');
-      }
-      previousFlashlight = lightState;
       // Reconstruction may settle for a few frames after sleep; effect clocks must stay frozen.
       const animate = !navigationPaused() && stayAwake(now);
       const animationDelta = animate && lastAnimationFrame !== null ? Math.min(0.05, Math.max(0, (now - lastAnimationFrame) / 1000)) : 0;
@@ -1535,6 +1536,8 @@
         environment.animate(animationDelta);
       }
       lastAnimationFrame = animate ? now : null;
+      // Follow the final eye position, including the current offshore wave displacement.
+      if (flashlight.update(terrain.scale.y, live)) temporal.invalidate('flashlight');
       const measureGpu = gpuTimer && navigationReady && !navigationPaused() && !foregroundBusy && !warmingResident && !buildTasks.size && now - lastBuildAt >= 250 && gpuQueries.length < 3 && ++gpuSampleFrame % 4 === 0;
       const gpuQuery = measureGpu ? graphicsContext.createQuery() : null;
       if (gpuQuery) graphicsContext.beginQuery(gpuTimer.TIME_ELAPSED_EXT, gpuQuery);
@@ -1606,23 +1609,21 @@
         scheduleLOD();
       }
     });
-    function updateScale() {
-      /*
-       * The vertical slider changes display Y scale only. Update its label/accessibility text and
-       * request rendering/LOD; leave the DEM unchanged.
-       */
-      terrain.scale.y = Number(slider.value);
+    function setVerticalScale(scale) {
+      slider.value = String(scale);
+      scaleLabel.textContent = `1:${slider.value}`;
+      slider.setAttribute('aria-valuetext', `${slider.value} times vertical exaggeration`);
+      if (terrain.scale.y === scale) return;
+      terrain.scale.y = scale;
       temporal.invalidate('vertical-scale');
       oceanReflection.invalidate('vertical-scale');
       waterMotion.setView(displayLevels[minimumLevel].step * nativeSpacing, terrain.scale.y);
       environment.markDirty();
       vegetation?.markDirty();
-      scaleLabel.textContent = `1:${slider.value}`;
-      slider.setAttribute('aria-valuetext', `${slider.value} times vertical exaggeration`);
       wakeRendering();
       scheduleLOD();
     }
-    slider.addEventListener('input', updateScale);
+    slider.addEventListener('input', () => setVerticalScale(firstPerson.active ? 1 : Number(slider.value)));
     // Control changes record interaction and request a frame and LOD update.
     controls.addEventListener('change', () => {
       wakeRendering();
@@ -1710,7 +1711,7 @@
         target: controls.target.toArray()
       })
     };
-    updateScale();
+    setVerticalScale(Number(slider.value));
     const extent = Math.max(m.width_m, m.height_m);
     controls.target.set(0, (-100 + m.elevation_max_m) * terrain.scale.y / 2, 0);
     camera.position.copy(controls.target).add(new THREE.Vector3(extent * 0.12, extent * 0.72, extent * 0.87).multiplyScalar(Math.max(1, 1 / camera.aspect) * 1.2));
