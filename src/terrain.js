@@ -1139,9 +1139,9 @@
       camera.lookAt(controls.target);
     }
     // A minimum zoom distance in metres prevents proportional zoom from stalling near the target.
-    // ZOOM_MIN_STEP_M: minimum movement per wheel notch, in metres.
+    // ZOOM_MIN_STEP_M: minimum movement per zoom unit, in metres.
     const ZOOM_MIN_STEP_M = 12;
-    // ZOOM_DISTANCE_FACTOR: distance fraction moved per wheel notch.
+    // ZOOM_DISTANCE_FACTOR: distance fraction moved per zoom unit.
     const ZOOM_DISTANCE_FACTOR = 0.12;
     // ZOOM_SMOOTHING_MS: pending-input decay time constant, in milliseconds.
     const ZOOM_SMOOTHING_MS = 50;
@@ -1205,7 +1205,8 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       const pixels = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1);
-      requestZoom(THREE.MathUtils.clamp(-pixels / 100, -3, 3));
+      const units = THREE.MathUtils.clamp(-pixels / 100, -3, 3);
+      requestZoom(units > 0 ? units * 2 : units);
     }, {
       capture: true,
       passive: false

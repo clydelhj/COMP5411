@@ -52,7 +52,7 @@ Select the updated folder in Settings. Both category maps are sampled by nearest
 
 ## Controls
 
-- Left drag: orbit; right drag: pan; mouse wheel or + / −: zoom.
+- Drag with the left mouse button to orbit or the right button to pan. Scroll up to zoom in quickly, or click + for a finer step. Scroll down or click − to zoom out.
 - W/S or up/down arrows: move forward/backward. A/D or left/right arrows: strafe. Horizontal speed scales with height above the ground, from 10 to 5,000 m/s.
 - Q/E: turn; R/F: move vertically. Additional bindings appear in the ? dialog.
 - The bottom slider changes display height from 1:1 to 1:10; default 1:5.
