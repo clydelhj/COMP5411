@@ -20,8 +20,9 @@
     const light = new THREE.PointLight(0xfff1d2, 0, 1000, 2);
     light.name = 'Pointer flashlight';
     light.castShadow = false;
-    const beam = new THREE.SpotLight(0xfff1d2, 720, 90, THREE.MathUtils.degToRad(27), 0.7, 2);
-    const beamDrop = Math.tan(THREE.MathUtils.degToRad(9));
+    // A softer distance falloff keeps distant ground visible without overlighting the foreground.
+    const beam = new THREE.SpotLight(0xfff1d2, 440, 180, THREE.MathUtils.degToRad(40), 0.7, 1.5);
+    const beamDrop = Math.tan(THREE.MathUtils.degToRad(4));
     beam.name = 'First-person flashlight';
     beam.visible = false;
     scene.add(light, beam, beam.target);
