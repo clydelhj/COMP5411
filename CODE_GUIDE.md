@@ -10,6 +10,8 @@ Current runtime baseline: November 15, 2026. All paths below are relative to the
 ├── start-viewer.cmd
 ├── src/
 │   ├── terrain.js
+│   ├── first-person.js
+│   ├── view-fullscreen.js
 │   ├── data-source.js
 │   ├── terrain-lod.js
 │   ├── terrain-refinement.js
@@ -58,6 +60,8 @@ Large runtime/source assets may be distributed separately; their paths after ins
 | Module | Responsibility |
 | --- | --- |
 | `terrain.js` | Scene setup, asynchronous loads, caches, camera safety, settings, performance feedback and frame scheduling |
+| `first-person.js` | Ground-level travel on the displayed land mesh or animated sea, drag-to-look and orbit pose restoration |
+| `view-fullscreen.js` | Fullscreen API control for the canvas and viewer interface |
 | `data-source.js` | Read-only selection, validation and loading of local data folders |
 | `terrain-lod.js` | Distance-based nested display patches, selection hysteresis, source resampling and display-patch lookup |
 | `terrain-refinement.js` | Progressive local split/merge transactions, near-region priority and displayed-topology validation |

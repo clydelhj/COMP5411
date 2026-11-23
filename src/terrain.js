@@ -10,6 +10,7 @@
   const scaleLabel = document.querySelector('#scale-value');
   const resolutionLabel = document.querySelector('#grid-resolution');
   const zoomButtons = [...document.querySelectorAll('[data-zoom]')];
+  const firstPersonButton = document.querySelector('#first-person-button');
   const helpDialog = document.querySelector('#controls-help');
   const settingsDialog = document.querySelector('#terrain-settings');
   const resolutionSelect = document.querySelector('#maximum-resolution');
@@ -772,7 +773,7 @@
       idleSleepSelect.disabled = false;
       flashlight.ready();
       zoomButtons.forEach(button => {
-        button.disabled = false;
+        button.disabled = firstPerson.active;
       });
       status.hidden = true;
       requestRender();
@@ -1155,7 +1156,7 @@
        * loading/modal states, clear opposing pending motion, apply distance/minimum step limits and
        * request a frame.
        */
-      if (!initialized || navigationPaused() || !Number.isFinite(units) || !units) return;
+      if (!initialized || navigationPaused() || firstPerson.active || !Number.isFinite(units) || !units) return;
       const distance = camera.position.distanceTo(controls.target);
       if (pendingZoom * units < 0) pendingZoom = 0;
       pendingZoom += units * Math.max(ZOOM_MIN_STEP_M, distance * ZOOM_DISTANCE_FACTOR);
@@ -1246,13 +1247,49 @@
     const upAxis = new THREE.Vector3(0, 1, 0);
     const keyboardSpeedScale = new THREE.Vector3(1.25, 1, 1.25);
     let keyTime = 0;
+    const firstPerson = window.NotoFirstPerson.create({
+      THREE, camera, controls, canvas: renderer.domElement, metadata: m,
+      sampleLand: surfaceHeight, shore: coastalField, water: waterMotion,
+      changed() { wakeRendering(); scheduleLOD(); }
+    });
+    function toggleFirstPerson() {
+      if (navigationPaused()) return;
+      releaseNavigation();
+      if (firstPerson.active) {
+        firstPerson.exit();
+      } else if (!firstPerson.enter()) {
+        const message = 'Aim at mapped land or water to enter first-person view.';
+        status.textContent = message;
+        status.hidden = false;
+        setTimeout(() => { if (status.textContent === message) status.hidden = true; }, 3000);
+        return;
+      }
+      hasSafePose = false;
+      firstPersonButton.setAttribute('aria-pressed', String(firstPerson.active));
+      firstPersonButton.title = firstPerson.active ? 'Return to orbit view' : 'Enter first-person view';
+      renderer.domElement.setAttribute('aria-label', firstPerson.active
+        ? 'First-person terrain view: use WASD to move and drag to look around'
+        : 'Interactive terrain: drag to rotate, right-drag to pan, scroll to zoom');
+      for (const button of zoomButtons) button.disabled = firstPerson.active;
+      renderer.domElement.focus({ preventScroll: true });
+      temporal.invalidate('navigation-mode');
+      environment.markDirty();
+      wakeRendering();
+      scheduleLOD();
+    }
+    firstPersonButton.addEventListener('click', toggleFirstPerson);
     function editable(target) {
       /* Return whether an event target is editable or is an input, textarea, select or button. */
       return target?.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target?.tagName);
     }
     // Handle navigation only for page key events, preserving form input and modifier shortcuts.
     window.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && firstPerson.active && !document.fullscreenElement && !navigationPaused()) {
+        toggleFirstPerson();
+        return;
+      }
       if (navigationPaused() || !keyActions[event.code] || editable(event.target) || event.ctrlKey || event.altKey || event.metaKey) return;
+      if (firstPerson.active && (event.code === 'KeyR' || event.code === 'KeyF')) return;
       event.preventDefault();
       pressed.add(event.code);
       wakeRendering();
@@ -1268,6 +1305,7 @@
     // Modal, blur and hidden-page transitions clear all input; form focus clears only keyboard navigation.
     const releaseNavigation = () => {
       releaseKeys();
+      firstPerson.cancelDrag();
       pendingZoom = 0;
       zoomTime = 0;
     };
@@ -1293,6 +1331,10 @@
       const dt = keyTime ? Math.min((now - keyTime) / 1000, 0.05) : 1 / 60;
       keyTime = now;
       const actions = new Set([...pressed].map(code => keyActions[code]));
+      if (firstPerson.active) {
+        firstPerson.move(actions, dt);
+        return;
+      }
       const yaw = (Number(actions.has('turnLeft')) - Number(actions.has('turnRight'))) * dt;
       direction.subVectors(controls.target, camera.position);
       if (yaw) controls.target.copy(camera.position).add(direction.applyAxisAngle(upAxis, yaw));
@@ -1424,15 +1466,19 @@
       }
       if (updateScene) {
         moveKeyboard(now);
-        controls.update();
-        constrainCamera();
-        moveZoom(now);
+        if (firstPerson.active) {
+          if (!firstPerson.refresh()) toggleFirstPerson();
+        } else {
+          controls.update();
+          constrainCamera();
+          moveZoom(now);
+        }
         bounds.min.set(-m.width_m / 2, -100 * terrain.scale.y, -m.height_m / 2);
         bounds.max.set(m.width_m / 2, m.elevation_max_m * terrain.scale.y, m.height_m / 2);
         // Keep close navigation intact, but improve depth precision in regional views.
         // Outside the expanded model bounds, no terrain/tree/wave is near this clipping plane.
         const modelClearance = Math.max(0, bounds.distanceToPoint(camera.position) - 64);
-        camera.near = Math.max(0.5, Math.min(16, modelClearance / 512));
+        camera.near = firstPerson.active ? 0.15 : Math.max(0.5, Math.min(16, modelClearance / 512));
         camera.far = Math.max(camera.near + 1, camera.position.distanceTo(bounds.getCenter(center)) + bounds.getSize(size).length() * 0.55);
         camera.updateProjectionMatrix();
         // Reflection captures happen before the scene render, including immediate-sleep views.
@@ -1478,7 +1524,10 @@
       const animationDelta = animate && lastAnimationFrame !== null ? Math.min(0.05, Math.max(0, (now - lastAnimationFrame) / 1000)) : 0;
       if (animate) {
         if (waterVisible || skyInView) skyTime += animationDelta;
-        if (waterVisible) waterMotion.advance(animationDelta);
+        if (waterVisible) {
+          waterMotion.advance(animationDelta);
+          if (firstPerson.active) firstPerson.followWaves();
+        }
         environment.animate(animationDelta);
       }
       lastAnimationFrame = animate ? now : null;
@@ -1603,6 +1652,7 @@
     window.terrainViewer = {
       getState: () => ({
         ready: initialized && navigationReady,
+        navigationMode: firstPerson.active ? 'first-person' : 'orbit',
         graphics: {
           ...graphics
         },
@@ -1678,6 +1728,7 @@
     // Enable navigation after coarse inputs are ready; local LOD selection always keeps full-map coverage.
     await warmResident();
     navigationReady = true;
+    firstPersonButton.disabled = false;
     document.querySelector('#day-cycle').disabled = false;
     controls.enabled = true;
     wakeRendering();

@@ -183,6 +183,15 @@ h1 {
   cursor: default;
 }
 
+#first-person-button[aria-pressed="true"] {
+  color: white;
+  background: #42646c;
+  border-color: #42646c;
+}
+@media (max-height: 650px) {
+  .view-tools { grid-template-columns: repeat(2, 44px); }
+}
+
 .view-tools button:focus-visible,
 :is(#help-close, #settings-close):focus-visible {
   outline: 2px solid #426f76;
@@ -193,6 +202,21 @@ h1 {
   outline: 2px solid #426f76;
   outline-offset: -2px;
 }
+
+#fullscreen-message:not(:empty) {
+  position: absolute;
+  right: calc(100% + 8px);
+  bottom: 0;
+  width: max-content;
+  max-width: min(240px, calc(100vw - 90px));
+  padding: 8px 12px;
+  border: 1px solid #c8d7da;
+  border-radius: 7px;
+  background: #fff;
+  color: #263c41;
+  font-size: 13px;
+}
+#fullscreen-message:empty { display: none; }
 
 /* Native dialog handles modal focus; content scrolls in narrow or short windows. */
 :is(#controls-help, #terrain-settings) {
