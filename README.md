@@ -53,8 +53,9 @@ Select the updated folder in Settings. Both category maps are sampled by nearest
 ## Controls
 
 - Drag with the left mouse button to orbit or the right button to pan. Scroll up to zoom in quickly, or click + for a finer step. Scroll down or click − to zoom out.
-- W/S or up/down arrows move forward and backward. A/D or left/right arrows move sideways. In orbit view, horizontal speed scales with height above the ground, from 10 to 5,000 m/s.
-- Select the eye button for **first-person view** at the current orbit target. Use WASD to travel at 24 m/s and drag to look around. The camera follows slopes at a height of 1.8 m and rides the waves offshore. Select the eye again to restore your orbit view.
+- W/S or the up/down arrows move forward and backward. In orbit view, A/D or the left/right arrows move sideways. Horizontal speed in orbit view scales with height above the ground, from 10 to 5,000 m/s.
+- Select the eye button for **first-person view** at the current orbit target. Use A/D or the left/right arrows to turn in place. Hold W or S while turning to steer as you travel at 24 m/s. Drag to look around. The camera follows slopes at a height of 1.8 m and rides the waves offshore. Select the eye again to restore your orbit view.
+- The first-person dashboard shows ground speed in km/h, scene date and time in Japan, projected easting and northing in metres, and the selected weather.
 - Select **Enter full screen** in the right toolbar to expand the entire viewer. Select the button again or press Esc to return to the window.
 - Q/E turns the view. R/F moves vertically in orbit view. Additional bindings appear in the ? dialog.
 - The bottom slider changes display height from 1:1 to 1:10; default 1:5.

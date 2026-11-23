@@ -91,6 +91,25 @@
       <div id="grid-resolution" aria-live="polite">Source 1 m · Loading grid…</div>
     </div>
 
+    <dl id="first-person-hud" aria-label="First-person instruments">
+      <div class="hud-speed">
+        <dt>Speed</dt>
+        <dd><span id="fp-speed">0</span> <span class="hud-unit">km/h</span></dd>
+      </div>
+      <div>
+        <dt>Date &amp; time · JST</dt>
+        <dd><span id="fp-date"></span> <span id="fp-time"></span></dd>
+      </div>
+      <div>
+        <dt>Position</dt>
+        <dd id="fp-position"></dd>
+      </div>
+      <div>
+        <dt>Weather</dt>
+        <dd id="fp-weather"></dd>
+      </div>
+    </dl>
+
     <!-- Right-side navigation controls; zoom is enabled after terrain becomes ready. -->
     <nav class="view-tools" aria-label="View controls">
       <button type="button" data-zoom="1" aria-label="Zoom in" title="Zoom in" disabled>+</button>
@@ -121,8 +140,8 @@
         <tbody>
           <tr><td><kbd>W</kbd> / <kbd>↑</kbd> / <kbd>Page Up</kbd></td><td>Move forward</td></tr>
           <tr><td><kbd>S</kbd> / <kbd>↓</kbd> / <kbd>Page Down</kbd></td><td>Move backward</td></tr>
-          <tr><td><kbd>A</kbd> / <kbd>←</kbd></td><td>Move left</td></tr>
-          <tr><td><kbd>D</kbd> / <kbd>→</kbd></td><td>Move right</td></tr>
+          <tr><td><kbd>A</kbd> / <kbd>←</kbd></td><td>Turn left in first person, move left in orbit view</td></tr>
+          <tr><td><kbd>D</kbd> / <kbd>→</kbd></td><td>Turn right in first person, move right in orbit view</td></tr>
           <tr><td><kbd>Q</kbd> / <kbd>E</kbd></td><td>Turn left / right</td></tr>
           <tr><td><kbd>R</kbd> / <kbd>F</kbd></td><td>Move up / down in orbit view</td></tr>
         </tbody>

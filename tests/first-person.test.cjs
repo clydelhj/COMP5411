@@ -35,19 +35,58 @@ function close(value, expected) {
   assert(Math.abs(value - expected) < 1e-9, `expected ${value} to be within 1e-9 of ${expected}`);
 }
 
-test('diagonal travel matches straight-line speed and follows the displayed slope', () => {
+test('dashboard reports horizontal speed, projected position and the current scene conditions', () => {
+  const fields = new Map();
+  const document = {
+    body: { classList: { toggle() {} } },
+    querySelector(id) { const field = { textContent: '' }; fields.set(id, field); return field; }
+  };
+  const runtime = vm.createContext({ window: {}, document });
+  vm.runInContext(fs.readFileSync(path.join(root, 'src/first-person.js'), 'utf8'), runtime);
+  const dashboard = runtime.window.NotoFirstPerson.createDashboard({ origin_easting: 1000, origin_northing: 2000 });
+  const text = key => fields.get('#fp-' + key).textContent;
+  dashboard.setConditions({ date: '2028-02-28', time: '23:59', weather: 'clear' });
+  dashboard.show(true, { x: 0, y: 10, z: 0 }, 0);
+  dashboard.updateMotion({ x: 3, y: 12, z: 4 }, 200);
+  assert.equal(text('speed'), '90');
+  assert.equal(text('position'), 'E 1,003 · N 1,996 m');
+  dashboard.updateMotion({ x: 3, y: 13, z: 4 }, 220);
+  assert.equal(text('speed'), '0');
+  dashboard.setConditions({ date: '2028-02-29', time: '00:00', weather: 'rainy' });
+  assert.deepEqual(['date', 'time', 'weather'].map(text), ['2028-02-29', '00:00', 'Rainy']);
+});
+
+test('left and right turn in place; aliases share a turn rate and opposite inputs cancel', () => {
+  const { camera, controls, view } = fixture();
+  assert(view.enter());
+  const start = camera.position.clone();
+  const yaw = () => Math.atan2(controls.target.x - camera.position.x, camera.position.z - controls.target.z);
+  view.move(new Set(['left']), 0.25);
+  close(yaw(), -0.25);
+  view.move(new Set(['right', 'turnRight']), 0.5);
+  close(yaw(), 0.25);
+  view.move(new Set(['left', 'turnRight']), 0.5);
+  close(yaw(), 0.25);
+  view.move(new Set(['turnLeft']), 0.25);
+  close(yaw(), 0);
+  assert(camera.position.equals(start));
+});
+
+test('steering while driving curves the path and follows the displayed slope', () => {
   const sampleLand = (x, z) => 20 + x / 2 - z / 4;
-  const straight = fixture({ sampleLand }), diagonal = fixture({ sampleLand });
-  for (const run of [straight, diagonal]) assert.equal(run.view.enter(), true);
-  const start = straight.camera.position.clone();
-  straight.view.move(new Set(['forward']), 0.5);
-  diagonal.view.move(new Set(['forward', 'right']), 0.5);
-  for (const { camera } of [straight, diagonal]) {
-    const { x, y, z } = camera.position;
-    close(Math.hypot(x - start.x, z - start.z), 12);
-    close(y - sampleLand(x, z), 1.8);
+  const { camera, view } = fixture({ sampleLand });
+  assert(view.enter());
+  let previousBearing = -Infinity;
+  for (let frame = 0; frame < 10; frame++) {
+    const { x, z } = camera.position;
+    view.move(new Set(['forward', 'right']), 0.05);
+    const dx = camera.position.x - x, dz = camera.position.z - z;
+    const bearing = Math.atan2(dx, -dz);
+    assert(dz < 0 && bearing > previousBearing, 'successive steps turn right');
+    assert(Math.abs(Math.hypot(dx, dz) - 24 * 0.05) < 0.001);
+    close(camera.position.y - sampleLand(camera.position.x, camera.position.z), 1.8);
+    previousBearing = bearing;
   }
-  assert(diagonal.camera.position.x > start.x && diagonal.camera.position.z < start.z);
 });
 
 test('travel crosses the shore, follows changing wave height at rest and restores the saved orbit', () => {
@@ -61,7 +100,8 @@ test('travel crosses the shore, follows changing wave height at rest and restore
   assert(view.enter());
   assert.equal(controls.enabled, false);
   close(camera.position.y, 3 + 1.8);
-  view.move(new Set(['right']), 0.5);
+  view.move(new Set(['right']), Math.PI / 2);
+  view.move(new Set(['forward']), 0.5);
   close(camera.position.x, 6);
   close(camera.position.y, wave + 1.8);
   const heading = controls.target.clone().sub(camera.position);
@@ -71,7 +111,7 @@ test('travel crosses the shore, follows changing wave height at rest and restore
   close(camera.position.z, 0);
   close(camera.position.y, wave + 1.8);
   close(controls.target.clone().sub(camera.position).distanceTo(heading), 0);
-  view.move(new Set(['left']), 0.5);
+  view.move(new Set(['back']), 0.5);
   close(camera.position.y, 3 + 1.8);
   view.followWaves();
   close(camera.position.y, 3 + 1.8);
@@ -92,15 +132,17 @@ test('missing inland elevations block entry or movement and valid travel stays i
   const inland = fixture({ sampleLand: x => x < 0 ? 10 : null });
   assert(inland.view.enter());
   const before = inland.camera.position.clone();
-  inland.view.move(new Set(['right']), 0.5);
+  inland.view.move(new Set(['right']), Math.PI / 2);
+  inland.view.move(new Set(['forward']), 0.5);
   assert(inland.camera.position.equals(before));
 
   const edge = fixture();
   assert(edge.view.enter());
-  edge.view.move(new Set(['right', 'back']), 10);
+  edge.view.move(new Set(['right']), 3 * Math.PI / 4);
+  edge.view.move(new Set(['forward']), 10);
   close(edge.camera.position.x, 49.5);
   close(edge.camera.position.z, 59.5);
-  edge.view.move(new Set(['left', 'forward']), 10);
+  edge.view.move(new Set(['back']), 10);
   close(edge.camera.position.x, -49.5);
   close(edge.camera.position.z, -59.5);
 });

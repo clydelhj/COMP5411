@@ -276,6 +276,7 @@
     const waterTop = waterMaterials.top;
     const waterCut = waterMaterials.cut;
     const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 1, 700000);
+    const dashboard = window.NotoFirstPerson.createDashboard(m);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enabled = false;
     controls.enableDamping = true;
@@ -300,6 +301,7 @@
       capable,
       onChange: (weather, playbackTick) => {
         const lighting = environment.getState();
+        dashboard.setConditions(lighting);
         temporal.invalidate('lighting');
         waterMotion.setWeather(weather);
         waterMotion.setSky(scene.fog.color);
@@ -329,6 +331,7 @@
       field: coastalField,
       motion: waterMotion
     });
+    dashboard.setConditions(environment.getState());
     waterMotion.setWeather(environment.getState().weather);
     waterMotion.setSky(scene.fog.color);
     waterMotion.setLighting(environment.getState());
@@ -1266,9 +1269,10 @@
       }
       hasSafePose = false;
       firstPersonButton.setAttribute('aria-pressed', String(firstPerson.active));
+      dashboard.show(firstPerson.active, camera.position, performance.now());
       firstPersonButton.title = firstPerson.active ? 'Return to orbit view' : 'Enter first-person view';
       renderer.domElement.setAttribute('aria-label', firstPerson.active
-        ? 'First-person terrain view: use WASD to move and drag to look around'
+        ? 'First-person terrain view: W or S to travel, A or D to steer, drag to look around'
         : 'Interactive terrain: drag to rotate, right-drag to pan, scroll to zoom');
       for (const button of zoomButtons) button.disabled = firstPerson.active;
       renderer.domElement.focus({ preventScroll: true });
@@ -1513,6 +1517,7 @@
         environment.updateView(terrain.scale.y);
         surf.update(live, environment.getState().cardBrightness);
       }
+      if (firstPerson.active) dashboard.updateMotion(camera.position, now);
       flashlight.update(terrain.scale.y, live);
       const lightState = flashlight.getState();
       if (previousFlashlight && (lightState.enabled !== previousFlashlight.enabled || lightState.hasHit !== previousFlashlight.hasHit || lightState.radiusM !== previousFlashlight.radiusM || lightState.target?.some((value, index) => value !== previousFlashlight.target?.[index]))) {

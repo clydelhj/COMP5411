@@ -62,18 +62,18 @@
     }
     function move(actions, dt) {
       const forward = Number(actions.has('forward')) - Number(actions.has('back'));
-      const side = Number(actions.has('right')) - Number(actions.has('left'));
-      const turn = Number(actions.has('turnRight')) - Number(actions.has('turnLeft'));
-      yaw += turn * dt;
-      const length = Math.hypot(forward, side);
-      if (length) {
-        const step = speed * dt / length;
-        const dx = (Math.sin(yaw) * forward + Math.cos(yaw) * side) * step;
-        const dz = (-Math.cos(yaw) * forward + Math.sin(yaw) * side) * step;
-        follow(camera.position.x + dx, camera.position.z + dz);
+      const left = actions.has('left') || actions.has('turnLeft');
+      const right = actions.has('right') || actions.has('turnRight');
+      const turn = Number(right) - Number(left);
+      if (turn) {
+        yaw += turn * dt;
+        aim();
       }
-      if (turn) aim();
-      if (length || turn) changed();
+      if (forward) {
+        const step = forward * speed * dt;
+        follow(camera.position.x + Math.sin(yaw) * step, camera.position.z - Math.cos(yaw) * step);
+      }
+      if (forward || turn) changed();
     }
     canvas.addEventListener('pointerdown', event => {
       if (!active || drag || event.button !== 0 || !event.isPrimary) return;
@@ -104,5 +104,68 @@
       }
     };
   }
-  global.NotoFirstPerson = { create };
+  function createDashboard(metadata) {
+    const speed = document.querySelector('#fp-speed');
+    const date = document.querySelector('#fp-date');
+    const time = document.querySelector('#fp-time');
+    const position = document.querySelector('#fp-position');
+    const weather = document.querySelector('#fp-weather');
+    const metres = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
+    position.title = metadata.crs || metadata.sourceDatum || 'Projected easting and northing in metres';
+    let visible = false, conditions;
+    let lastX, lastZ, lastFrameMs, lastEast, lastNorth;
+    let distanceM = 0, elapsedMs = 0;
+
+    function write(element, value) {
+      if (element.textContent !== value) element.textContent = value;
+    }
+    function setConditions(state) {
+      conditions = state;
+      if (!visible) return;
+      write(date, state.date);
+      write(time, state.time);
+      write(weather, state.weather[0].toUpperCase() + state.weather.slice(1));
+    }
+    function locate(point) {
+      const east = Math.round(metadata.origin_easting + point.x);
+      const north = Math.round(metadata.origin_northing - point.z);
+      if (east === lastEast && north === lastNorth) return;
+      lastEast = east;
+      lastNorth = north;
+      position.textContent = `E ${metres.format(east)} · N ${metres.format(north)} m`;
+    }
+    function show(active, point, now) {
+      visible = active;
+      document.body.classList.toggle('first-person-view', active);
+      if (!visible) return;
+      lastX = point.x;
+      lastZ = point.z;
+      lastFrameMs = now;
+      distanceM = elapsedMs = 0;
+      write(speed, '0');
+      locate(point);
+      setConditions(conditions);
+    }
+    function updateMotion(point, now) {
+      // Only horizontal travel contributes to ground speed, including while riding waves.
+      const step = Math.hypot(point.x - lastX, point.z - lastZ);
+      if (step > 0) {
+        distanceM += step;
+        elapsedMs += Math.max(0, now - lastFrameMs);
+        if (elapsedMs >= 120) {
+          write(speed, String(Math.round(3600 * distanceM / elapsedMs)));
+          distanceM = elapsedMs = 0;
+        }
+      } else {
+        distanceM = elapsedMs = 0;
+        write(speed, '0');
+      }
+      lastFrameMs = now;
+      lastX = point.x;
+      lastZ = point.z;
+      locate(point);
+    }
+    return { show, setConditions, updateMotion };
+  }
+  global.NotoFirstPerson = { create, createDashboard };
 })(window);
