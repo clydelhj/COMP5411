@@ -5,7 +5,7 @@
   const LATITUDE = 37.4375;
   const LONGITUDE = 137.1875;
   const MINUTES_PER_DAY = 1440;
-  const DAY_PLAYBACK_MS = 10000;
+  const DAY_PLAYBACK_MS = 30000;
   const LAST_SCENE_MINUTE = Date.UTC(2101, 0, 1) / 60000 - 1;
   const PRESETS = {
     clear: {
@@ -285,7 +285,7 @@ Returns view, animation, diagnostics and cleanup interfaces. */
       if (!cycle) return;
       cycle = null;
       cycleButton.textContent = 'Play';
-      cycleButton.title = 'Play one day every 10 seconds';
+      cycleButton.title = `Play one day every ${DAY_PLAYBACK_MS / 1000} seconds`;
       cycleButton.setAttribute('aria-label', 'Play day-night cycle');
     }
     cycleButton.addEventListener('click', () => {

@@ -64,33 +64,33 @@ function fixture(capable = true, geographicCenter) {
   };
 }
 
-test('day-night playback follows elapsed time, rolls over at midnight, and yields to manual controls', () => {
+test('day-night playback advances one day in 30 seconds, rolls over at midnight, and yields to manual controls', () => {
   const viewer = fixture();
   const { environment, clickCycle, frameAt } = viewer;
   const state = () => environment.getState();
   viewer.setDateTime('2028-02-28', 1080);
-  assert.equal(frameAt(100), false);
+  assert.equal(frameAt(0), false);
   clickCycle();
-  assert.equal(frameAt(2600), true);
+  assert.equal(frameAt(7500), true);
   assert.deepEqual([state().date, state().time, state().shadowEnabled], ['2028-02-29', '00:00', false]);
   viewer.weather('cloudy');
   assert.equal(environment.isDayCyclePlaying(), true);
-  frameAt(7600);
+  frameAt(22500);
   assert.deepEqual([state().time, state().shadowEnabled], ['12:00', true]);
-  frameAt(10100);
+  frameAt(30000);
   assert.deepEqual([state().date, state().time], ['2028-02-29', '18:00']);
   clickCycle();
-  assert.equal(frameAt(30100), false);
+  assert.equal(frameAt(50000), false);
   assert.equal(state().time, '18:00');
   clickCycle();
-  frameAt(32600);
+  frameAt(57500);
   assert.deepEqual([state().date, state().time], ['2028-03-01', '00:00']);
   viewer.setDateTime('2028-03-01', 540);
-  assert.equal(frameAt(35100), false);
+  assert.equal(frameAt(60000), false);
   assert.equal(state().time, '09:00');
   viewer.setDateTime('2100-12-31', 1438);
   clickCycle();
-  frameAt(40100);
+  frameAt(65000);
   assert.deepEqual([state().date, state().time, environment.isDayCyclePlaying()], ['2100-12-31', '23:59', false]);
   environment.dispose();
 });
